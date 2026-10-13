@@ -18,7 +18,14 @@ detection:
   queue_max_size: 10000
 
 database:
-  type: "sqlite"
+  # Doi type thanh "mysql" de dung MySQL, "sqlite" cho dev nhanh
+  type: "mysql"
+  host: "localhost"
+  port: 3306
+  user: "root"
+  password: "010305"
+  name: "nids_db"
+  # SQLite fallback (dung khi type: "sqlite")
   db_url: "sqlite:///nids_events.db"
 
 api:
