@@ -1,0 +1,4 @@
+alert tcp any any -> any $HTTP_PORTS (msg:"DOS SYN Flood attempt (pure SYN packet to HTTP port)"; flags:S; sid:1000201; rev:1; classtype:denial-of-service; severity:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"DOS Slowloris HTTP header probe detected"; http_header; content:"X-a: b"; nocase; sid:1000202; rev:1; classtype:denial-of-service; severity:2;)
+alert icmp any any -> any any (msg:"DOS Large ICMP payload detected"; content:"PING_DEATH_FLOOD_OVERSIZED"; sid:1000203; rev:1; classtype:denial-of-service; severity:1;)
+alert udp any any -> any 123 (msg:"DOS NTP Monlist query attempt"; content:"monlist"; nocase; sid:1000204; rev:1; classtype:denial-of-service; severity:2;)
