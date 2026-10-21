@@ -23,11 +23,13 @@ def get_db_url() -> str:
     db_type = db_cfg.get("type", "mysql")
     
     if db_type == "mysql":
-        user = db_cfg.get("user", "root")
-        password = str(db_cfg.get("password", "") or "")
-        host = db_cfg.get("host", "localhost")
-        port = db_cfg.get("port", 3306)
-        name = db_cfg.get("name", "nids_db")
+        user = os.getenv("NIDS_DB_USER", db_cfg.get("user", "root"))
+        password = str(
+            os.getenv("NIDS_DB_PASSWORD", db_cfg.get("password", "")) or ""
+        )
+        host = os.getenv("NIDS_DB_HOST", db_cfg.get("host", "localhost"))
+        port = int(os.getenv("NIDS_DB_PORT", db_cfg.get("port", 3306)))
+        name = os.getenv("NIDS_DB_NAME", db_cfg.get("name", "nids_db"))
         
         auth = f"{user}:{quote_plus(password)}" if password else user
         return f"mysql+pymysql://{auth}@{host}:{port}/{name}?charset=utf8mb4"

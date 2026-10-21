@@ -9,6 +9,8 @@ pyahocorasick>=2.1.0
 
 # Database & ORM
 SQLAlchemy>=2.0.25
+pymysql>=1.1.0
+cryptography>=42.0.0
 
 # Web API & Realtime Dashboard
 fastapi>=0.109.0

@@ -1,0 +1,77 @@
+networks:
+  nids_isolated_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+services:
+  mysql_db:
+    image: mysql:8.0
+    container_name: nids_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: "010305"
+      MYSQL_DATABASE: nids_db
+      MYSQL_USER: nids_app
+      MYSQL_PASSWORD: "nids_app_password"
+    networks:
+      nids_isolated_net:
+        ipv4_address: 172.28.0.10
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "-p010305",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  victim_app:
+    image: nginx:alpine
+    container_name: nids_victim
+    networks:
+      nids_isolated_net:
+        ipv4_address: 172.28.0.50
+    ports:
+      - "8000:8000"
+
+  nids_engine:
+    build: .
+    container_name: nids_engine
+    network_mode: "service:victim_app"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    depends_on:
+      mysql_db:
+        condition: service_healthy
+      victim_app:
+        condition: service_started
+    volumes:
+      - .:/app
+    environment:
+      NIDS_DB_HOST: "172.28.0.10"
+      NIDS_DB_PORT: "3306"
+      NIDS_DB_NAME: "nids_db"
+      NIDS_DB_USER: "nids_app"
+      NIDS_DB_PASSWORD: "nids_app_password"
+    restart: unless-stopped
+
+  attacker:
+    image: python:3.10-slim
+    container_name: nids_attacker
+    networks:
+      nids_isolated_net:
+        ipv4_address: 172.28.0.100
+    volumes:
+      - ./create_demo_pcap.py:/attacker/create_demo_pcap.py
+    stdin_open: true
+    tty: true
+    command: /bin/bash

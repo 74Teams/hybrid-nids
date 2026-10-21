@@ -5,10 +5,10 @@ system:
   log_level: "INFO"
 
 network:
-  interface: ""
+  interface: "eth0"
   bpf_filter: "ip"
   promiscuous: true
-  capture_mode: "offline"
+  capture_mode: "live"
   pcap_file: "pcap_samples/demo_attacks.pcap"
 
 detection:
@@ -20,13 +20,11 @@ detection:
 database:
   # Doi type thanh "mysql" de dung MySQL, "sqlite" cho dev nhanh
   type: "mysql"
-  host: "localhost"
+  host: "172.28.0.10"
   port: 3306
   user: "root"
   password: "010305"
   name: "nids_db"
-  # SQLite fallback (dung khi type: "sqlite")
-  db_url: "sqlite:///nids_events.db"
 
 api:
   host: "0.0.0.0"

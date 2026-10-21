@@ -94,7 +94,6 @@ class DetectionEngine:
         """Đánh giá gói tin qua kiến trúc phễu lọc đa tầng."""
         pkt_proto = packet.protocol.lower()
 
-        # Tầng 1: Lọc thô theo Protocol
         proto_candidates: List[SnortRule] = (
             self.rules_by_proto.get(pkt_proto, []) + self.rules_by_proto.get("ip", [])
         )
@@ -103,10 +102,8 @@ class DetectionEngine:
 
         proto_candidate_sids = {r.sid for r in proto_candidates}
 
-        # Tầng 2: Thu thập Rule ứng viên qua Aho-Corasick Pre-filtering
         candidate_rules: Dict[int, SnortRule] = {}
 
-        # 2.1. Các rule không có content (rule cờ TCP, quét mạng, ...)
         for rule in self.no_content_rules:
             if rule.sid in proto_candidate_sids:
                 candidate_rules[rule.sid] = rule

@@ -68,7 +68,6 @@ xss_event = (
 packets.append(xss_event)
 
 # 3. PATH TRAVERSAL / LFI
-
 # SID:1000020 - ../
 path_traversal = (
     IP(src="192.168.1.102", dst="10.0.0.5")

@@ -28,6 +28,20 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-def init_db() -> None:
-    """Khởi tạo toàn bộ bảng trong cơ sở dữ liệu nếu chưa tồn tại."""
-    Base.metadata.create_all(bind=engine)
+def init_db(max_retries: int = 15, delay: float = 2.0) -> None:
+    """
+    Khởi tạo toàn bộ bảng trong cơ sở dữ liệu nếu chưa tồn tại.
+    Tự động retry tối đa 15 lần (30s) trong môi trường Docker khi MySQL cần thời gian khởi động.
+    """
+    import time
+    for attempt in range(1, max_retries + 1):
+        try:
+            Base.metadata.create_all(bind=engine)
+            print("[DB] Ket noi va khoi tao CSDL thanh cong!")
+            return
+        except Exception as e:
+            if attempt == max_retries:
+                print(f"[DB] [Loi Ket Noi] Khong the ket noi CSDL sau {max_retries} lan thu: {e}")
+                raise
+            print(f"[DB] [Attempt {attempt}/{max_retries}] CSDL chua san sang khoi dong. Thu lai sau {delay}s...")
+            time.sleep(delay)
