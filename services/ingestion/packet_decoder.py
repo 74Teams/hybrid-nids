@@ -6,38 +6,38 @@ from scapy.packet import Packet
 from services.ingestion import DecodedPacket
 from services.ingestion.http_parser import HTTPParser
 
-# Tap hop cac port HTTP pho bien - dung de quyet dinh co can parse HTTP hay khong
+# Tập hợp các port HTTP phổ biến, dùng để quyết định có cần parse HTTP hay không
 HTTP_PORTS = {80, 8080, 8000, 3000, 5000, 443}
 
 
 class PacketDecoder:
     """
-    Module chuyen trach duy nhat: Giai ma goi tin tho (Scapy Packet) thanh DecodedPacket.
+    Module chuyên trách duy nhất: giải mã gói tin thô (Scapy Packet) thành DecodedPacket.
 
-    Trach nhiem:
-    - Boc tach cac tang L3 (IP/IPv6), L4 (TCP/UDP/ICMP).
-    - Trich xuat co TCP (SYN, ACK, FIN, RST, PSH, URG) va payload tho.
-    - Dieu phoi chuyen payload sang HTTPParser neu phat hien traffic Web (HTTP Ports).
+    Trách nhiệm:
+    - Bóc tách các tầng L3 (IP/IPv6), L4 (TCP/UDP/ICMP).
+    - Trích xuất cờ TCP (SYN, ACK, FIN, RST, PSH, URG) và payload thô.
+    - Điều phối chuyển payload sang HTTPParser nếu phát hiện traffic Web (HTTP Ports).
 
-    Nguyen tac:
-    - Class nay KHONG biet cach bat goi tin - do la viec cua PacketCapture.
-    - Class nay KHONG luu vao Database hay kich hoat Alert - do la viec cua Detection Engine.
+    Nguyên tắc:
+    - Class này KHÔNG biết cách bắt gói tin, đó là việc của PacketCapture.
+    - Class này KHÔNG lưu vào Database hay kích hoạt Alert, đó là việc của Detection Engine.
     """
 
     @staticmethod
     def decode(scapy_pkt: Packet) -> Optional[DecodedPacket]:
         """
-        Giai ma 1 goi tin Scapy tho thanh DecodedPacket co cau truc.
+        Giải mã 1 gói tin Scapy thô thành DecodedPacket có cấu trúc.
 
         Args:
-            scapy_pkt: Goi tin tho tu Scapy (do PacketCapture truyen vao).
+            scapy_pkt: Gói tin thô từ Scapy (do PacketCapture truyền vào).
 
         Returns:
-            DecodedPacket neu giai ma thanh cong, None neu goi tin khong phai IP.
+            DecodedPacket nếu giải mã thành công, None nếu gói tin không phải IP.
         """
         timestamp = float(getattr(scapy_pkt, "time", time.time()))
 
-        # Tang L3: Giai ma dia chi IP nguon / IP dich
+        # Tầng L3: giải mã địa chỉ IP nguồn / IP đích
         src_ip, dst_ip = "", ""
         if scapy_pkt.haslayer(IP):
             src_ip = scapy_pkt[IP].src
@@ -46,10 +46,10 @@ class PacketDecoder:
             src_ip = scapy_pkt[IPv6].src
             dst_ip = scapy_pkt[IPv6].dst
         else:
-            # Khong phai IP (ARP, LLDP...) -> bo qua
+            # Không phải IP (ARP, LLDP...) nên bỏ qua
             return None
 
-        # Tang L4: Giai ma Protocol, Port va Co TCP
+        # Tầng L4: giải mã protocol, port và cờ TCP
         protocol = "UNKNOWN"
         src_port: Optional[int] = None
         dst_port: Optional[int] = None
@@ -62,7 +62,7 @@ class PacketDecoder:
             tcp = scapy_pkt[TCP]
             src_port = tcp.sport
             dst_port = tcp.dport
-            flags = str(tcp.flags)  # Scapy tra ve chuoi: "S", "SA", "PA", "FUP"...
+            flags = str(tcp.flags)  # Scapy trả về chuỗi: "S", "SA", "PA", "FUP"...
             tcp_flags = {
                 "SYN": "S" in flags,
                 "ACK": "A" in flags,
@@ -70,7 +70,7 @@ class PacketDecoder:
                 "RST": "R" in flags,
                 "PSH": "P" in flags,
                 "URG": "U" in flags,
-                "raw_flags": flags,  # Chuoi tho de Rule Engine so khop co (vi du: flags:FUP)
+                "raw_flags": flags,  # Chuỗi thô để Rule Engine so khớp cờ (ví dụ: flags:FUP)
             }
 
         elif scapy_pkt.haslayer(UDP):
@@ -84,10 +84,10 @@ class PacketDecoder:
             icmp_type = scapy_pkt[ICMP].type
             icmp_code = scapy_pkt[ICMP].code
 
-        # Payload tho (bytes)
+        # Payload thô (bytes)
         raw_payload = bytes(scapy_pkt[Raw].load) if scapy_pkt.haslayer(Raw) else b""
 
-        # Tao DecodedPacket co ban
+        # Tạo DecodedPacket cơ bản
         decoded = DecodedPacket(
             timestamp=timestamp,
             src_ip=src_ip,
@@ -102,8 +102,8 @@ class PacketDecoder:
             raw_packet=bytes(scapy_pkt),
         )
 
-        # Tang L7: Parse HTTP neu la traffic Web
-        # Kiem tra port de quyet dinh co can parse HTTP hay khong
+        # Tầng L7: parse HTTP nếu là traffic Web
+        # Kiểm tra port để quyết định có cần parse HTTP hay không
         is_http_traffic = (
             raw_payload
             and (

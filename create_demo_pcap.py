@@ -251,7 +251,7 @@ ping = (
 )
 packets.append(ping)
 
-# Normal TCP SYN (kết nối bình thường)
+# TCP SYN bình thường (kết nối bình thường)
 normal_syn = (
     IP(src="192.168.1.50", dst="10.0.0.5")
     / TCP(sport=60001, dport=443, flags="S", seq=500)

@@ -1,5 +1,5 @@
 """
-FastAPI Application Entry Point – Hybrid NIDS API Server.
+Điểm khởi chạy ứng dụng FastAPI – Hybrid NIDS API Server.
 
 Luồng khởi động (startup lifespan): init_db() tạo bảng trong CSDL nếu chưa có.
 Rule chỉ đọc từ rules/local.rules bởi process engine (main.py), không đi qua API.
@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Hybrid NIDS – Management API",
     description=(
-        "Backend API phuc vu quan sat luu luong mang, xem canh bao theo thoi gian thuc."
+        "Backend API phục vụ quan sát lưu lượng mạng và xem cảnh báo theo thời gian thực."
     ),
     version="1.1.0",
     lifespan=lifespan,

@@ -4,7 +4,7 @@ File này hướng dẫn Claude Code (claude.ai/code) khi làm việc với code
 
 ## Dự án
 
-Hybrid NIDS (đồ án PBL4): hệ thống phát hiện xâm nhập mạng kết hợp static rule tương thích Snort với một AI worker phát hiện bất thường theo flow. Python 3.10+, Scapy, pyahocorasick, SQLAlchemy 2.0, FastAPI. README và tài liệu phần lớn viết bằng tiếng Việt; comment trong code và log trộn tiếng Việt (thường không dấu) và tiếng Anh.
+Hybrid NIDS (đồ án PBL4): hệ thống phát hiện xâm nhập mạng kết hợp static rule tương thích Snort với một AI worker phát hiện bất thường theo flow. Python 3.10+, Scapy, pyahocorasick, SQLAlchemy 2.0, FastAPI. README, tài liệu, comment, docstring và nội dung log đều viết bằng tiếng Việt có dấu; tên trong code và thuật ngữ kỹ thuật giữ tiếng Anh.
 
 ## Lệnh
 
@@ -27,6 +27,12 @@ Hai **process riêng biệt** dùng chung một database:
 
 - `main.py` — process engine: `PacketCapture` (Scapy, live hoặc pcap offline) → `PacketDecoder.decode` (L2–L4 + HTTP L7 qua `http_parser`) → `queue.Queue` có giới hạn → một worker thread duy nhất gọi `DetectionEngine.evaluate_packet` và `AITrafficWorker.analyze_packet`. Alert đi qua callback `handle_alert` → `EventRepository.save_alert`.
 - `api/main.py` — process FastAPI. Khi khởi động, nó chỉ tạo bảng; API chỉ có `/api/alerts` và `/health`. DB chỉ lưu sự kiện cảnh báo (bảng `events`, `event_payloads`), không lưu rule.
+
+### Logging
+
+- Cấu hình ở `config/logger.py` (`setup_logging`, `ColorFormatter`), gọi một lần ở `main.py`, `api/main.py` và `create_demo_pcap.py`. Mức độ lấy từ `system.log_level` trong `settings.yaml` (mặc định `INFO`, `DEBUG` để xem chi tiết). Màu tự tắt khi đầu ra không phải terminal hoặc có biến môi trường `NO_COLOR`.
+- Mỗi module dùng `logging.getLogger("nids.<khu vực>")`, không dùng `print`. Khu vực: `engine` (`main.py`, `ids_realtime.py`), `alert` (dòng cảnh báo trong `main.py`), `rules` (`manager_rules.py`), `db`, `capture`, `api`, `pcap`.
+- Cảnh báo mang `extra={"priority": n}` để formatter tô màu theo priority (P1 đỏ, P2 vàng, P3 xanh dương).
 
 ### Detection engine (`services/detection/`)
 

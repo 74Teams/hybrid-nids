@@ -17,7 +17,7 @@ Mọi rule nằm trong **một file duy nhất**: `rules/local.rules`. Cú pháp
 3. Rule mới: `rev:1`. Sửa rule đã có: **tăng `rev` thêm 1**. Việc tăng `rev` chỉ để ghi nhận rule đã đổi. Thay đổi có hiệu lực sau khi khởi động lại engine.
 4. Thêm test trong `tests/test_diverse_rules_engine.py`: một gói tấn công làm rule bắn, và một gói hợp lệ gần giống mà rule **không** bắn.
 5. Nếu rule thuộc nhóm demo, thêm gói tương ứng vào `create_demo_pcap.py` rồi chạy `python create_demo_pcap.py`. Việc này đổi số gói, nên phải cập nhật số đếm trong `tests/test_packet_decoder_pcap.py`.
-6. Xong khi: `pytest` xanh, và khi nạp file không có dòng `[RuleParser]` nào (dòng này nghĩa là lỗi cú pháp, SID trùng hoặc option bị bỏ qua).
+6. Xong khi: `pytest` xanh, và khi nạp file không có dòng `WARNING rules` nào (dòng này nghĩa là lỗi cú pháp, SID trùng hoặc có option bị bỏ qua; đặt `system.log_level: DEBUG` để xem chi tiết từng rule).
 
 ## Header
 

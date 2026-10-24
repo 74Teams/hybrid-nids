@@ -96,7 +96,7 @@ class RuleManager:
 
         header_tokens = header_part.split()
         if len(header_tokens) != 7:
-            raise ValueError(f"header phai co 7 thanh phan, nhan duoc {len(header_tokens)}")
+            raise ValueError(f"header phải có 7 thành phần, nhận được {len(header_tokens)}")
 
         action, protocol, src_ip, src_port, direction, dst_ip, dst_port = header_tokens
         rule = SnortRule(
@@ -119,7 +119,7 @@ class RuleManager:
                 if value:
                     parts = value.split()
                     if name != "http_header" or len(parts) != 2 or parts[0] != "field":
-                        raise ValueError(f"tham so khong hop le cho {name}: {value}")
+                        raise ValueError(f"tham số không hợp lệ cho {name}: {value}")
                     header_field = parts[1].lower()
             elif name == "content":
                 rule.contents.append(self._parse_content(value, buffer, header_field))
@@ -153,7 +153,7 @@ class RuleManager:
                 rule.unsupported_options.append(name)
 
         if not rule.sid:
-            raise ValueError("rule thieu sid")
+            raise ValueError("rule thiếu sid")
 
         return rule
 
@@ -184,9 +184,9 @@ class RuleManager:
                 buf.append(ch)
 
         if in_quotes:
-            raise ValueError("thieu dau ngoac kep dong")
+            raise ValueError("thiếu dấu ngoặc kép đóng")
         if "".join(buf).strip():
-            raise ValueError("option cuoi cung phai ket thuc bang ';'")
+            raise ValueError("option cuối cùng phải kết thúc bằng ';'")
         return options
 
     @staticmethod
@@ -194,7 +194,7 @@ class RuleManager:
         """Tách '"inner",rest' thành (inner chưa giải escape, rest)."""
         value = value.strip()
         if not value.startswith('"'):
-            raise ValueError(f"gia tri phai nam trong dau ngoac kep: {value}")
+            raise ValueError(f"giá trị phải nằm trong dấu ngoặc kép: {value}")
         i = 1
         while i < len(value):
             if value[i] == "\\":
@@ -203,7 +203,7 @@ class RuleManager:
             if value[i] == '"':
                 return value[1:i], value[i + 1:]
             i += 1
-        raise ValueError(f"thieu dau ngoac kep dong: {value}")
+        raise ValueError(f"thiếu dấu ngoặc kép đóng: {value}")
 
     @classmethod
     def _unquote(cls, value: str) -> str:
@@ -236,7 +236,7 @@ class RuleManager:
                 out.append(ch)
             i += 1
         if in_hex:
-            raise ValueError("doan hex trong content thieu dau '|' dong")
+            raise ValueError("đoạn hex trong content thiếu dấu '|' đóng")
         return "".join(out)
 
     def _parse_content(self, value: str, buffer: str, header_field: Optional[str]) -> ContentMatch:
@@ -254,7 +254,7 @@ class RuleManager:
             negated=negated,
         )
         if not cm.pattern:
-            raise ValueError("content rong")
+            raise ValueError("content rỗng")
 
         for mod in rest.split(","):
             mod = mod.strip()
@@ -272,7 +272,7 @@ class RuleManager:
         elif name in ("offset", "depth", "distance", "within"):
             setattr(cm, name, int(arg))
         else:
-            raise ValueError(f"modifier content khong ho tro: {name}")
+            raise ValueError(f"modifier content không hỗ trợ: {name}")
 
     def _parse_pcre(self, value: str, buffer: str, header_field: Optional[str]) -> PcreMatch:
         """pcre:"/regex/flags" — hỗ trợ flag i, s, m, x."""
@@ -280,17 +280,17 @@ class RuleManager:
         if value.startswith('"'):
             inner, rest = self._split_quoted(value)
             if rest.strip():
-                raise ValueError(f"pcre co phan thua sau dau ngoac kep: {rest}")
+                raise ValueError(f"pcre có phần thừa sau dấu ngoặc kép: {rest}")
         else:
             inner = value  # Cú pháp cũ không có ngoặc kép
         last_slash = inner.rfind("/")
         if not inner.startswith("/") or last_slash == 0:
-            raise ValueError(f"pcre phai co dang /regex/flags: {inner}")
+            raise ValueError(f"pcre phải có dạng /regex/flags: {inner}")
 
         flags = 0
         for flag in inner[last_slash + 1:]:
             if flag not in PCRE_FLAGS:
-                raise ValueError(f"flag pcre khong ho tro: {flag}")
+                raise ValueError(f"flag pcre không hỗ trợ: {flag}")
             flags |= PCRE_FLAGS[flag]
 
         return PcreMatch(
@@ -308,7 +308,7 @@ class RuleManager:
             key, _, arg = part.strip().partition(" ")
             params[key] = arg.strip()
         if params.get("track") not in ("by_src", "by_dst") or "count" not in params or "seconds" not in params:
-            raise ValueError(f"detection_filter khong hop le: {value}")
+            raise ValueError(f"detection_filter không hợp lệ: {value}")
         return DetectionFilter(
             track=params["track"],
             count=int(params["count"]),

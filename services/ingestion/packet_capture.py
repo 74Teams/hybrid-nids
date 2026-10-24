@@ -8,48 +8,48 @@ logger = logging.getLogger("nids.capture")
 
 class PacketCapture:
     """
-    Module chuyen trach duy nhat: Thu nhan goi tin tho tu card mang hoac file PCAP.
+    Module chuyên trách duy nhất: thu nhận gói tin thô từ card mạng hoặc file PCAP.
 
-    Nguyen tac thiet ke (Zero Packet Loss):
-    - Class nay KHONG lam bat ky logic parse hay phan tich nao.
-    - Khi nhan duoc goi tin tu card mang, no lap tuc chuyen sang raw_callback.
-    - raw_callback se day vao Queue - giup vong lap bat goi KHONG bao gio bi block.
+    Nguyên tắc thiết kế (không rớt gói):
+    - Class này KHÔNG làm bất kỳ logic parse hay phân tích nào.
+    - Khi nhận được gói tin từ card mạng, nó lập tức chuyển sang raw_callback.
+    - raw_callback sẽ đẩy vào Queue, giúp vòng lặp bắt gói KHÔNG bao giờ bị block.
 
-    Loi ich:
-    - De dang thay the thu vien bat goi (Scapy -> pypcap) ma khong anh huong code phia sau.
-    - Luong bat goi tin chay doc lap, nhe nhat co the.
+    Lợi ích:
+    - Dễ thay thế thư viện bắt gói (Scapy -> pypcap) mà không ảnh hưởng code phía sau.
+    - Luồng bắt gói tin chạy độc lập, nhẹ nhất có thể.
     """
 
     def __init__(self, raw_callback: Callable[[Packet], None], bpf_filter: str = "ip"):
         """
         Args:
-            raw_callback: Ham duoc goi cho moi goi tin tho Scapy nhan duoc.
-            bpf_filter:   Bo loc BPF (Berkeley Packet Filter), vi du: "ip", "tcp port 80".
+            raw_callback: Hàm được gọi cho mỗi gói tin thô Scapy nhận được.
+            bpf_filter:   Bộ lọc BPF (Berkeley Packet Filter), ví dụ: "ip", "tcp port 80".
         """
         self.raw_callback = raw_callback
         self.bpf_filter = bpf_filter
 
     def start_live(self, iface: Optional[str] = None) -> None:
         """
-        Lang nghe truc tiep tren card mang (che do Promiscuous).
+        Lắng nghe trực tiếp trên card mạng (chế độ Promiscuous).
 
         Args:
-            iface: Ten card mang (vi du: "Ethernet", "Wi-Fi").
-                   None = tu dong chon card mac dinh cua he thong.
+            iface: Tên card mạng (ví dụ: "Ethernet", "Wi-Fi").
+                   None = tự động chọn card mặc định của hệ thống.
         """
         sniff(
             iface=iface,
             filter=self.bpf_filter,
             prn=self.raw_callback,
-            store=False,  # Khong luu vao RAM, tiet kiem bo nho
+            store=False,  # Không lưu vào RAM, tiết kiệm bộ nhớ
         )
 
     def start_offline(self, pcap_path: str) -> None:
         """
-        Doc va phat lai toan bo goi tin tu file .pcap (che do offline/replay).
+        Đọc và phát lại toàn bộ gói tin từ file .pcap (chế độ offline/replay).
 
         Args:
-            pcap_path: Duong dan den file .pcap can phan tich.
+            pcap_path: Đường dẫn đến file .pcap cần phân tích.
         """
         try:
             sniff(
@@ -59,8 +59,8 @@ class PacketCapture:
                 store=False,
             )
         except Exception as e:
-            # Fallback: BPF filter can yeu cau tcpdump (khong co tren Windows mac dinh)
-            # Thu lai khong dung BPF filter
+            # Dự phòng: BPF filter cần tcpdump (Windows không có sẵn)
+            # nên thử lại không dùng BPF filter
             if "tcpdump" in str(e).lower() or "not available" in str(e).lower():
                 logger.warning("BPF filter không khả dụng, đọc PCAP không dùng filter")
                 sniff(

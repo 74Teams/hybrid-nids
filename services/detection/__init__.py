@@ -63,7 +63,7 @@ class SnortRule:
     contents: List[ContentMatch] = field(default_factory=list)
     pcres: List[PcreMatch] = field(default_factory=list)
 
-    # Non-payload options
+    # Các option không thuộc payload
     flags: Optional[str] = None          # TCP flags: S, FUP, 0, S+, SF*...
     flow: List[str] = field(default_factory=list)  # to_server, established, stateless...
     dsize: Optional[str] = None          # >800, <10, 100<>200

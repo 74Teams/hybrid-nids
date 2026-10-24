@@ -158,6 +158,9 @@ pip install -r requirements.txt
 Hệ thống hỗ trợ linh hoạt cả **MySQL** (môi trường chính) và **SQLite** (môi trường kiểm thử nhanh):
 
 ```yaml
+system:
+  log_level: "INFO"                          # "DEBUG" để xem chi tiết kỹ thuật (từng rule, từng bước)
+
 network:
   interface: ""                              # Để trống để tự động chọn card mặc định
   bpf_filter: "ip"                           # Bộ lọc Berkeley Packet Filter
@@ -187,6 +190,8 @@ api:
   host: "0.0.0.0"
   port: 8000
 ```
+
+> **Log trên terminal:** mỗi dòng có dạng `giờ  mức độ  khu vực  nội dung`; cảnh báo được tô màu theo priority (P1 đỏ, P2 vàng, P3 xanh dương). Màu tự tắt khi đầu ra bị chuyển hướng vào file; đặt biến môi trường `NO_COLOR=1` để tắt màu thủ công.
 
 > **Lưu ý khi dùng MySQL:** Hãy tạo trước cơ sở dữ liệu `nids_db`:
 > ```sql
