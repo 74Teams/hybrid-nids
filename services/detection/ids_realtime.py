@@ -1,3 +1,4 @@
+import logging
 from collections import deque
 from typing import List, Optional, Callable, Dict, Tuple, Deque
 from services.ingestion import DecodedPacket
@@ -5,6 +6,8 @@ from services.detection import SnortRule, ContentMatch, PcreMatch, BUFFER_PKT_DA
 from services.detection.manager_rules import RuleManager
 from services.detection.pattern_matcher import MultiPatternMatcher
 from services.detection.threshold_manager import ThresholdManager
+
+logger = logging.getLogger("nids.engine")
 
 # Mã cờ reserved kiểu Snort 2 (1, 2) tương ứng CWR, ECE của Snort 3 / Scapy
 _FLAG_ALIASES = {"1": "C", "2": "E"}
@@ -362,4 +365,6 @@ class DetectionEngine:
         if self.alert_callback:
             self.alert_callback(alert_data)
         else:
-            print(f"[ALERT sid:{rule.sid}] {rule.msg} | {packet.src_ip} -> {packet.dst_ip}")
+            logger.debug(
+                "Cảnh báo SID %s: %s | %s -> %s", rule.sid, rule.msg, packet.src_ip, packet.dst_ip
+            )

@@ -1,3 +1,4 @@
+import logging
 import re
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
@@ -9,6 +10,8 @@ from services.detection import (
     BUFFER_PKT_DATA,
     STICKY_BUFFERS,
 )
+
+logger = logging.getLogger("nids.rules")
 
 # Option chỉ mang metadata: engine chấp nhận nhưng không dùng khi so khớp
 METADATA_OPTIONS = {"reference", "metadata", "gid", "service"}
@@ -34,13 +37,24 @@ class RuleManager:
         self.rules.clear()
         self.rules_by_sid.clear()
 
-        if not self.rules_dir.exists():
-            return 0
+        if self.rules_dir.exists():
+            for rule_file in sorted(self.rules_dir.glob("*.rules")):
+                self.load_rule_file(rule_file)
 
-        for rule_file in sorted(self.rules_dir.glob("*.rules")):
-            self.load_rule_file(rule_file)
-
-        return len(self.rules)
+        total = len(self.rules)
+        if total:
+            logger.info("Đã nạp %d rule từ %s", total, self.rules_dir)
+        else:
+            logger.warning(
+                "Không nạp được rule nào từ %s, engine sẽ không phát hiện được tấn công nào",
+                self.rules_dir,
+            )
+        unsupported = sum(1 for r in self.rules if r.unsupported_options)
+        if unsupported:
+            logger.warning(
+                "%d rule có option không hỗ trợ, bật log_level: DEBUG để xem chi tiết", unsupported
+            )
+        return total
 
     def load_rule_file(self, filepath: Path) -> None:
         with open(filepath, "r", encoding="utf-8") as f:
@@ -51,18 +65,18 @@ class RuleManager:
                 try:
                     rule = self.parse_rule_line(line)
                     if rule:
-                        self._register(rule, f"dong {line_no} trong {filepath.name}")
+                        self._register(rule, f"dòng {line_no} trong {filepath.name}")
                 except Exception as e:
-                    print(f"[RuleParser] Loi dong {line_no} trong {filepath.name}: {e}")
+                    logger.warning("Lỗi dòng %d trong %s: %s", line_no, filepath.name, e)
 
     def _register(self, rule: SnortRule, location: str) -> None:
         if rule.sid in self.rules_by_sid:
-            print(f"[RuleParser] Bo qua SID trung {rule.sid} ({location})")
+            logger.warning("Bỏ qua SID trùng %d (%s)", rule.sid, location)
             return
         if rule.unsupported_options:
-            print(
-                f"[RuleParser] SID {rule.sid}: bo qua option khong ho tro "
-                f"{rule.unsupported_options} ({location})"
+            logger.debug(
+                "SID %d: bỏ qua option không hỗ trợ %s (%s)",
+                rule.sid, rule.unsupported_options, location,
             )
         self.rules.append(rule)
         self.rules_by_sid[rule.sid] = rule

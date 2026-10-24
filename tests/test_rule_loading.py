@@ -1,3 +1,4 @@
+import logging
 import time
 
 from services.detection.ids_realtime import DetectionEngine
@@ -42,3 +43,37 @@ def test_bad_line_and_duplicate_sid_do_not_stop_loading(tmp_path):
     bad = 'alert tcp any any -> any 80 (msg:"bad"; content:"x"; sid:9; rev:1)'
     dup = 'alert tcp any any -> any 80 (msg:"dup"; content:"ccc"; sid:1; rev:1;)'
     assert load(tmp_path, "\n".join([bad, R1, dup, R2]) + "\n") == 2
+
+
+def rules_records(caplog, levelno):
+    return [r.getMessage() for r in caplog.records if r.name == "nids.rules" and r.levelno == levelno]
+
+
+def test_zero_rules_logs_warning(tmp_path, caplog):
+    caplog.set_level(logging.DEBUG, logger="nids")
+    RuleManager(str(tmp_path / "none")).load_all_rules()
+    assert any("Không nạp được rule nào" in m for m in rules_records(caplog, logging.WARNING))
+
+
+def test_loaded_rules_logs_info(tmp_path, caplog):
+    caplog.set_level(logging.DEBUG, logger="nids")
+    load(tmp_path, R1 + "\n")
+    assert any("Đã nạp 1 rule" in m for m in rules_records(caplog, logging.INFO))
+
+
+def test_unsupported_option_summary(tmp_path, caplog):
+    caplog.set_level(logging.DEBUG, logger="nids")
+    load(tmp_path, 'alert tcp any any -> any any (content:"x"; nocase; sid:1; rev:1;)\n')
+    warnings = rules_records(caplog, logging.WARNING)
+    assert len(warnings) == 1 and "1 rule có option không hỗ trợ" in warnings[0]
+    assert any("SID 1" in m for m in rules_records(caplog, logging.DEBUG))
+
+
+def test_bad_line_and_duplicate_logged(tmp_path, caplog):
+    caplog.set_level(logging.DEBUG, logger="nids")
+    bad = 'alert tcp any any -> any any (content:"x"; sid:9; rev:1)'
+    dup = 'alert tcp any any -> any 80 (msg:"d"; content:"ddd"; sid:2; rev:1;)'
+    load(tmp_path, bad + "\n" + dup + "\n" + dup + "\n")
+    warnings = rules_records(caplog, logging.WARNING)
+    assert any("Lỗi dòng 1" in m for m in warnings)
+    assert any("Bỏ qua SID trùng 2" in m for m in warnings)

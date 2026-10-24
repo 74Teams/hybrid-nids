@@ -1,8 +1,12 @@
+import logging
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
 from config.config import get_db_url
 from services.database.models import Base
+
+logger = logging.getLogger("nids.db")
 
 db_url = get_db_url()
 
@@ -37,11 +41,13 @@ def init_db(max_retries: int = 15, delay: float = 2.0) -> None:
     for attempt in range(1, max_retries + 1):
         try:
             Base.metadata.create_all(bind=engine)
-            print("[DB] Ket noi va khoi tao CSDL thanh cong!")
+            logger.info("Kết nối và khởi tạo CSDL thành công")
             return
         except Exception as e:
             if attempt == max_retries:
-                print(f"[DB] [Loi Ket Noi] Khong the ket noi CSDL sau {max_retries} lan thu: {e}")
+                logger.error("Không thể kết nối CSDL sau %d lần thử: %s", max_retries, e)
                 raise
-            print(f"[DB] [Attempt {attempt}/{max_retries}] CSDL chua san sang khoi dong. Thu lai sau {delay}s...")
+            logger.warning(
+                "CSDL chưa sẵn sàng (lần %d/%d), thử lại sau %ss", attempt, max_retries, delay
+            )
             time.sleep(delay)

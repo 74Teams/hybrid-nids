@@ -1,6 +1,9 @@
+import logging
 from typing import Callable, Optional
 from scapy.all import sniff
 from scapy.packet import Packet
+
+logger = logging.getLogger("nids.capture")
 
 
 class PacketCapture:
@@ -59,7 +62,7 @@ class PacketCapture:
             # Fallback: BPF filter can yeu cau tcpdump (khong co tren Windows mac dinh)
             # Thu lai khong dung BPF filter
             if "tcpdump" in str(e).lower() or "not available" in str(e).lower():
-                print(f"[Warning] BPF filter khong kha dung, doc PCAP khong dung filter...")
+                logger.warning("BPF filter không khả dụng, đọc PCAP không dùng filter")
                 sniff(
                     offline=pcap_path,
                     prn=self.raw_callback,
