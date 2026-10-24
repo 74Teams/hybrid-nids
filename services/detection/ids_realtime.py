@@ -47,12 +47,6 @@ class DetectionEngine:
 
         self.rebuild_index()
 
-    def reload_rules_from_db(self, db_session) -> int:
-        """Hot-reload rules trực tiếp từ CSDL và tái biên dịch cây chỉ mục."""
-        count = self.rule_manager.reload_rules_from_db(db_session)
-        self.rebuild_index()
-        return count
-
     def rebuild_index(self) -> None:
         """Biên dịch và tái cấu trúc toàn bộ chỉ mục luật vào RAM (Zero-Downtime Hot Reload)."""
         self.rules_by_proto = {
@@ -77,9 +71,6 @@ class DetectionEngine:
         }
 
         for rule in self.rule_manager.rules:
-            if not rule.is_enabled:
-                continue
-
             proto = rule.protocol.lower()
             if proto not in self.rules_by_proto:
                 self.rules_by_proto[proto] = []
