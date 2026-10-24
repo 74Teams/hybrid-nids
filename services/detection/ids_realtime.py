@@ -48,7 +48,7 @@ class DetectionEngine:
         self.rebuild_index()
 
     def rebuild_index(self) -> None:
-        """Biên dịch và tái cấu trúc toàn bộ chỉ mục luật vào RAM (Zero-Downtime Hot Reload)."""
+        """Biên dịch và tái cấu trúc toàn bộ chỉ mục luật vào RAM."""
         self.rules_by_proto = {
             "tcp": [],
             "udp": [],
