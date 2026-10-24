@@ -13,7 +13,7 @@ class PacketCapture:
     - raw_callback se day vao Queue - giup vong lap bat goi KHONG bao gio bi block.
 
     Loi ich:
-    - De dang thay the thu vien bat goi (Scapy -> pypcap/dpkt) ma khong anh huong code phia sau.
+    - De dang thay the thu vien bat goi (Scapy -> pypcap) ma khong anh huong code phia sau.
     - Luong bat goi tin chay doc lap, nhe nhat co the.
     """
 

@@ -1,5 +1,0 @@
-
-alert tcp any any -> any any (msg:"SCAN Nmap Xmas Scan detected (FUP flags)"; flags:FUP; sid:1000100; rev:1; classtype:attempted-recon; severity:2;)
-alert tcp any any -> any any (msg:"SCAN Nmap Null Scan detected (No flags)"; flags:0; sid:1000101; rev:1; classtype:attempted-recon; severity:2;)
-alert tcp any any -> any any (msg:"SCAN Nmap FIN Scan detected"; flags:F; sid:1000102; rev:1; classtype:attempted-recon; severity:2;)
-alert tcp any any -> any any (msg:"SCAN Suspicious SYN-FIN packet detected"; flags:SF; sid:1000103; rev:1; classtype:attempted-recon; severity:1;)

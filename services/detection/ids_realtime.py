@@ -1,11 +1,15 @@
-import re
-import time
-from typing import List, Optional, Callable, Dict, Set
+from collections import deque
+from typing import List, Optional, Callable, Dict, Tuple, Deque
 from services.ingestion import DecodedPacket
-from services.detection import SnortRule
+from services.detection import SnortRule, ContentMatch, PcreMatch, BUFFER_PKT_DATA
 from services.detection.manager_rules import RuleManager
 from services.detection.pattern_matcher import MultiPatternMatcher
 from services.detection.threshold_manager import ThresholdManager
+
+# Mã cờ reserved kiểu Snort 2 (1, 2) tương ứng CWR, ECE của Snort 3 / Scapy
+_FLAG_ALIASES = {"1": "C", "2": "E"}
+
+PayloadGroups = List[Tuple[Tuple[str, Optional[str]], List[ContentMatch], List[PcreMatch]]]
 
 
 class DetectionEngine:
@@ -13,8 +17,8 @@ class DetectionEngine:
     Core Engine so khớp luật thời gian thực (Real-time Multi-Tier Rule Matcher).
     Bóc tách các trường trong DecodedPacket và đối chiếu với tập luật của RuleManager theo kiến trúc phễu lọc 4 tầng:
       1. Phân luồng giao thức & cổng (Protocol & Port Demux)
-      2. Lọc mẫu đa chuỗi nhanh (Aho-Corasick Multi-Pattern Pre-filtering)
-      3. Đánh giá ngữ cảnh chi tiết (Flags, HTTP Method, Content, PCRE)
+      2. Lọc mẫu đa chuỗi nhanh (Aho-Corasick Multi-Pattern Pre-filtering) trên fast pattern của rule
+      3. Đánh giá ngữ cảnh chi tiết (flags, flow, dsize, itype/icode, content theo buffer, pcre, detection_filter)
       4. Kiểm soát ngưỡng & chống bão cảnh báo (Threshold Suppression)
     """
 
@@ -31,11 +35,15 @@ class DetectionEngine:
         self.threshold_manager = ThresholdManager(default_window_seconds=threshold_window_seconds)
 
         self.rules_by_proto: Dict[str, List[SnortRule]] = {}
+        # Rule không có fast pattern dùng được cho Aho-Corasick -> luôn được đánh giá ở tầng 3
         self.no_content_rules: List[SnortRule] = []
         self.uri_matcher = MultiPatternMatcher()
         self.header_matcher = MultiPatternMatcher()
         self.body_matcher = MultiPatternMatcher()
         self.raw_matcher = MultiPatternMatcher()
+
+        self._payload_groups: Dict[int, PayloadGroups] = {}
+        self._detection_filter_hits: Dict[Tuple[int, str], Deque[float]] = {}
 
         self.rebuild_index()
 
@@ -54,11 +62,19 @@ class DetectionEngine:
             "ip": [],
         }
         self.no_content_rules = []
+        self._payload_groups = {}
+        self._detection_filter_hits = {}
 
         self.uri_matcher = MultiPatternMatcher()
         self.header_matcher = MultiPatternMatcher()
         self.body_matcher = MultiPatternMatcher()
         self.raw_matcher = MultiPatternMatcher()
+        matchers = {
+            "http_uri": self.uri_matcher,
+            "http_header": self.header_matcher,
+            "http_client_body": self.body_matcher,
+            BUFFER_PKT_DATA: self.raw_matcher,
+        }
 
         for rule in self.rule_manager.rules:
             if not rule.is_enabled:
@@ -68,27 +84,37 @@ class DetectionEngine:
             if proto not in self.rules_by_proto:
                 self.rules_by_proto[proto] = []
             self.rules_by_proto[proto].append(rule)
+            self._payload_groups[rule.sid] = self._group_by_buffer(rule)
 
-            if not rule.contents:
+            fast = self._select_fast_pattern(rule, matchers)
+            if fast is None:
                 self.no_content_rules.append(rule)
                 continue
 
-            fast_content = rule.contents[0]
-            pattern = fast_content.lower() if rule.nocase else fast_content
+            pattern = fast.pattern.lower() if fast.nocase else fast.pattern
+            matchers[fast.buffer].add_pattern(pattern, rule)
 
-            if rule.http_uri:
-                self.uri_matcher.add_pattern(pattern, rule)
-            elif rule.http_client_body:
-                self.body_matcher.add_pattern(pattern, rule)
-            elif rule.http_header:
-                self.header_matcher.add_pattern(pattern, rule)
-            else:
-                self.raw_matcher.add_pattern(pattern, rule)
+        for matcher in matchers.values():
+            matcher.build()
 
-        self.uri_matcher.build()
-        self.header_matcher.build()
-        self.body_matcher.build()
-        self.raw_matcher.build()
+    @staticmethod
+    def _select_fast_pattern(rule: SnortRule, matchers: Dict[str, MultiPatternMatcher]) -> Optional[ContentMatch]:
+        """Chọn content có fast_pattern, nếu không thì content dài nhất (giống Snort)."""
+        candidates = [c for c in rule.contents if not c.negated and c.buffer in matchers]
+        explicit = [c for c in candidates if c.fast_pattern]
+        if explicit:
+            return explicit[0]
+        return max(candidates, key=lambda c: len(c.pattern), default=None)
+
+    @staticmethod
+    def _group_by_buffer(rule: SnortRule) -> PayloadGroups:
+        """Gom content/pcre theo (buffer, field), giữ nguyên thứ tự xuất hiện trong rule."""
+        groups: Dict[Tuple[str, Optional[str]], Tuple[List[ContentMatch], List[PcreMatch]]] = {}
+        for c in rule.contents:
+            groups.setdefault((c.buffer, c.field), ([], []))[0].append(c)
+        for p in rule.pcres:
+            groups.setdefault((p.buffer, p.field), ([], []))[1].append(p)
+        return [(key, contents, pcres) for key, (contents, pcres) in groups.items()]
 
     def evaluate_packet(self, packet: DecodedPacket) -> List[SnortRule]:
         """Đánh giá gói tin qua kiến trúc phễu lọc đa tầng."""
@@ -108,36 +134,19 @@ class DetectionEngine:
             if rule.sid in proto_candidate_sids:
                 candidate_rules[rule.sid] = rule
 
-        # 2.2. Khớp nhanh nội dung HTTP
+        # Tầng 2: Khớp nhanh fast pattern trên từng buffer
+        prefilter_inputs = [(self.raw_matcher, self._buffer_text(packet, BUFFER_PKT_DATA))]
         if packet.http_data:
-            if packet.http_data.uri:
-                uri_hits = self.uri_matcher.search(packet.http_data.uri)
-                uri_hits_lower = self.uri_matcher.search(packet.http_data.uri.lower())
-                for _, rule in (uri_hits + uri_hits_lower):
-                    if rule.sid in proto_candidate_sids:
-                        candidate_rules[rule.sid] = rule
+            prefilter_inputs += [
+                (self.uri_matcher, packet.http_data.uri),
+                (self.header_matcher, self._buffer_text(packet, "http_header")),
+                (self.body_matcher, packet.http_data.body),
+            ]
 
-            if packet.http_data.headers:
-                headers_str = "\r\n".join([f"{k}: {v}" for k, v in packet.http_data.headers.items()])
-                hdr_hits = self.header_matcher.search(headers_str)
-                hdr_hits_lower = self.header_matcher.search(headers_str.lower())
-                for _, rule in (hdr_hits + hdr_hits_lower):
-                    if rule.sid in proto_candidate_sids:
-                        candidate_rules[rule.sid] = rule
-
-            if packet.http_data.body:
-                body_hits = self.body_matcher.search(packet.http_data.body)
-                body_hits_lower = self.body_matcher.search(packet.http_data.body.lower())
-                for _, rule in (body_hits + body_hits_lower):
-                    if rule.sid in proto_candidate_sids:
-                        candidate_rules[rule.sid] = rule
-
-        # 2.3. Khớp nhanh nội dung Raw Payload
-        if packet.raw_payload:
-            raw_text = packet.raw_payload.decode("latin-1", errors="replace")
-            raw_hits = self.raw_matcher.search(raw_text)
-            raw_hits_lower = self.raw_matcher.search(raw_text.lower())
-            for _, rule in (raw_hits + raw_hits_lower):
+        for matcher, text in prefilter_inputs:
+            if not text:
+                continue
+            for _, rule in matcher.search(text) + matcher.search(text.lower()):
                 if rule.sid in proto_candidate_sids:
                     candidate_rules[rule.sid] = rule
 
@@ -149,38 +158,12 @@ class DetectionEngine:
                 continue
             if not self._match_port(packet.src_port, rule.src_port):
                 continue
-
-            if rule.flags and not self._match_flags(packet.tcp_flags, rule.flags):
+            if not self._match_non_payload(packet, rule):
                 continue
-
-            if rule.http_uri or rule.http_client_body or rule.http_header or rule.http_method:
-                if not packet.http_data:
-                    continue
-
-                if rule.http_method and packet.http_data.method != rule.http_method:
-                    continue
-
-                target_text = ""
-                if rule.http_uri:
-                    target_text = packet.http_data.uri
-                elif rule.http_client_body:
-                    target_text = packet.http_data.body
-                elif rule.http_header:
-                    target_text = "\r\n".join([f"{k}: {v}" for k, v in packet.http_data.headers.items()])
-
-                if not self._match_contents(target_text, rule.contents, rule.nocase):
-                    continue
-
-                if rule.pcre and not self._match_pcre(target_text, rule.pcre):
-                    continue
-
-            else:
-                if rule.contents:
-                    raw_text = packet.raw_payload.decode("latin-1", errors="replace")
-                    if not self._match_contents(raw_text, rule.contents, rule.nocase):
-                        continue
-                    if rule.pcre and not self._match_pcre(raw_text, rule.pcre):
-                        continue
+            if not self._match_payload(packet, rule):
+                continue
+            if rule.detection_filter and not self._detection_filter_reached(packet, rule):
+                continue
 
             matched_rules.append(rule)
 
@@ -201,35 +184,162 @@ class DetectionEngine:
         except ValueError:
             return True
 
-    def _match_flags(self, packet_flags: dict, rule_flags: str) -> bool:
-        raw = packet_flags.get("raw_flags", "")
-        if rule_flags == "0":
-            return len(raw) == 0
-        return all(f in raw for f in rule_flags)
+    def _match_non_payload(self, packet: DecodedPacket, rule: SnortRule) -> bool:
+        if rule.flags is not None and not self._match_flags(packet.tcp_flags, rule.flags):
+            return False
+        if "established" in rule.flow and not self._is_established(packet):
+            return False
+        if rule.dsize and not self._match_numeric(len(packet.raw_payload), rule.dsize):
+            return False
+        if rule.itype and not self._match_numeric(packet.icmp_type, rule.itype):
+            return False
+        if rule.icode and not self._match_numeric(packet.icmp_code, rule.icode):
+            return False
+        return True
 
-    def _match_contents(self, text: str, contents: List[str], nocase: bool) -> bool:
-        if not contents:
+    @staticmethod
+    def _is_established(packet: DecodedPacket) -> bool:
+        """
+        Xấp xỉ flow:established khi chưa có bảng theo dõi phiên TCP:
+        gói TCP có ACK và không phải SYN được coi là thuộc phiên đã thiết lập.
+        to_server/from_server chưa được kiểm tra (header rule đã giới hạn hướng qua port).
+        """
+        if packet.protocol.upper() != "TCP":
             return True
-        target = text.lower() if nocase else text
-        for c in contents:
-            pattern = c.lower() if nocase else c
-            if pattern not in target:
+        raw = packet.tcp_flags.get("raw_flags", "")
+        return "A" in raw and "S" not in raw
+
+    @staticmethod
+    def _match_flags(packet_flags: dict, rule_flags: str) -> bool:
+        """
+        Ngữ nghĩa flags của Snort:
+          flags:SF   -> đúng chính xác S và F (không cờ nào khác)
+          flags:S+   -> có S, có thể kèm cờ khác
+          flags:SF*  -> có ít nhất một trong S, F
+          flags:!F   -> không có F
+          flags:0    -> không có cờ nào
+          flags:S,CE -> bỏ qua cờ C, E khi so sánh
+        """
+        spec, _, mask = rule_flags.partition(",")
+        ignored = {_FLAG_ALIASES.get(ch, ch) for ch in mask}
+
+        modifier = ""
+        if spec and spec[0] in "+*!":
+            modifier, spec = spec[0], spec[1:]
+        elif spec and spec[-1] in "+*!":
+            modifier, spec = spec[-1], spec[:-1]
+
+        wanted = set() if spec == "0" else {_FLAG_ALIASES.get(ch, ch) for ch in spec}
+        actual = set(packet_flags.get("raw_flags", "")) - ignored
+
+        if modifier == "+":
+            return wanted <= actual
+        if modifier == "*":
+            return bool(wanted & actual)
+        if modifier == "!":
+            return not (wanted & actual)
+        return actual == wanted
+
+    @staticmethod
+    def _match_numeric(value: Optional[int], expr: str) -> bool:
+        """So khớp biểu thức số kiểu Snort: N, >N, <N, >=N, <=N, !N, A<>B (mở), A<=>B (đóng)."""
+        if value is None:
+            return False
+        if "<=>" in expr:
+            low, high = expr.split("<=>")
+            return int(low) <= value <= int(high)
+        if "<>" in expr:
+            low, high = expr.split("<>")
+            return int(low) < value < int(high)
+        for op, check in (
+            (">=", lambda n: value >= n),
+            ("<=", lambda n: value <= n),
+            (">", lambda n: value > n),
+            ("<", lambda n: value < n),
+            ("!", lambda n: value != n),
+            ("=", lambda n: value == n),
+        ):
+            if expr.startswith(op):
+                return check(int(expr[len(op):]))
+        return value == int(expr)
+
+    def _match_payload(self, packet: DecodedPacket, rule: SnortRule) -> bool:
+        for (buffer, header_field), contents, pcres in self._payload_groups.get(rule.sid, []):
+            text = self._buffer_text(packet, buffer, header_field)
+            if text is None:
+                return False
+            if not self._match_contents(text, contents):
+                return False
+            if any(not p.regex.search(text) for p in pcres):
                 return False
         return True
 
-    def _match_pcre(self, text: str, pcre_str: str) -> bool:
-        try:
-            flags = 0
-            pattern = pcre_str
-            if pcre_str.startswith("/") and pcre_str.rfind("/") > 0:
-                last_slash = pcre_str.rfind("/")
-                pattern = pcre_str[1:last_slash]
-                flag_str = pcre_str[last_slash + 1:]
-                if "i" in flag_str:
-                    flags |= re.IGNORECASE
-            return bool(re.search(pattern, text, flags))
-        except Exception:
-            return False
+    @staticmethod
+    def _buffer_text(packet: DecodedPacket, buffer: str, header_field: Optional[str] = None) -> Optional[str]:
+        """Trả về nội dung của buffer; None nếu gói tin không có buffer đó (vd: không phải HTTP)."""
+        if buffer == BUFFER_PKT_DATA:
+            return packet.raw_payload.decode("latin-1", errors="replace")
+
+        http = packet.http_data
+        if not http:
+            return None
+        if buffer == "http_uri":
+            return http.uri
+        if buffer == "http_client_body":
+            return http.body
+        if buffer == "http_method":
+            return http.method
+        if buffer == "http_header":
+            if header_field:
+                return http.headers.get(header_field)
+            return "\r\n".join([f"{k}: {v}" for k, v in http.headers.items()])
+        return None
+
+    @staticmethod
+    def _match_contents(text: str, contents: List[ContentMatch]) -> bool:
+        """
+        So khớp lần lượt các content trong cùng một buffer.
+        offset/depth tính từ đầu buffer; distance/within tính từ cuối lần khớp trước.
+        Khớp tham lam (lấy vị trí đầu tiên), không quay lui như Snort.
+        """
+        lowered = None
+        prev_end = 0
+        for c in contents:
+            if c.nocase:
+                if lowered is None:
+                    lowered = text.lower()
+                haystack, pattern = lowered, c.pattern.lower()
+            else:
+                haystack, pattern = text, c.pattern
+
+            if c.distance is not None or c.within is not None:
+                start = prev_end + (c.distance or 0)
+                end = start + c.within if c.within is not None else len(haystack)
+            else:
+                start = c.offset or 0
+                end = start + c.depth if c.depth is not None else len(haystack)
+
+            idx = haystack.find(pattern, max(start, 0), end)
+            if c.negated:
+                if idx != -1:
+                    return False
+                continue
+            if idx == -1:
+                return False
+            prev_end = idx + len(pattern)
+        return True
+
+    def _detection_filter_reached(self, packet: DecodedPacket, rule: SnortRule) -> bool:
+        """Chỉ cho rule bắn khi số lần khớp trong `seconds` giây vượt quá `count`."""
+        df = rule.detection_filter
+        tracked_ip = packet.src_ip if df.track == "by_src" else packet.dst_ip
+        hits = self._detection_filter_hits.setdefault(
+            (rule.sid, tracked_ip), deque(maxlen=df.count + 1)
+        )
+        hits.append(packet.timestamp)
+        while hits and packet.timestamp - hits[0] > df.seconds:
+            hits.popleft()
+        return len(hits) > df.count
 
     def _handle_alert_dispatch(self, packet: DecodedPacket, rule: SnortRule) -> None:
         suppressed_hits = 0

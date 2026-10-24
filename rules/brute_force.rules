@@ -1,4 +1,0 @@
-alert tcp any any -> any 22 (msg:"AUTH SSH probe banner attempt"; content:"SSH-2.0"; sid:1000301; rev:1; classtype:attempted-recon; severity:2;)
-alert tcp any any -> any 21 (msg:"AUTH FTP anonymous login attempt"; content:"USER anonymous"; nocase; sid:1000302; rev:1; classtype:attempted-recon; severity:2;)
-alert tcp any any -> any $HTTP_PORTS (msg:"AUTH HTTP Basic Authorization header detected"; http_header; content:"Authorization: Basic"; nocase; sid:1000303; rev:1; classtype:attempted-admin; severity:2;)
-alert tcp any any -> any $HTTP_PORTS (msg:"AUTH Web Admin Login Submission"; http_method:"POST"; http_uri; content:"/admin/login"; sid:1000304; rev:1; classtype:attempted-admin; severity:1;)

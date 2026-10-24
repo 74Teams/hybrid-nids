@@ -59,6 +59,8 @@ def make_udp_packet(
 def make_icmp_packet(
     src_ip="192.168.1.100",
     dst_ip="10.0.0.5",
+    icmp_type=8,
+    icmp_code=0,
     payload=b"",
 ) -> DecodedPacket:
     return DecodedPacket(
@@ -69,6 +71,8 @@ def make_icmp_packet(
         dst_port=None,
         protocol="ICMP",
         tcp_flags={},
+        icmp_type=icmp_type,
+        icmp_code=icmp_code,
         raw_payload=payload,
         http_data=None,
     )
@@ -110,7 +114,7 @@ def make_http_packet(
 
 @pytest.fixture(scope="module")
 def real_engine():
-    """Khởi tạo DetectionEngine nạp toàn bộ tập luật thực tế từ thư mục rules/."""
+    """Khởi tạo DetectionEngine nạp toàn bộ tập luật thực tế từ rules/local.rules."""
     manager = RuleManager("rules")
     manager.load_all_rules()
     # Tắt threshold để kiểm thử so khớp thuần túy
@@ -118,7 +122,7 @@ def real_engine():
     return engine
 
 
-# ── 1. KIỂM THỬ TẤN CÔNG WEB (web_attacks.rules) ────────────────────────────
+# ── 1. KIỂM THỬ TẤN CÔNG WEB (SID 10000xx) ────────────────────────────
 
 def test_web_sqli_union_select(real_engine):
     pkt = make_http_packet(uri="/search?q=1'+union+select+1,2--")
@@ -139,7 +143,7 @@ def test_web_path_traversal(real_engine):
     assert any(r.sid == 1000021 for r in matched)
 
 
-# ── 2. KIỂM THỬ QUÉT MẠNG (network_scans.rules) ─────────────────────────────
+# ── 2. KIỂM THỬ QUÉT MẠNG (SID 10001xx) ─────────────────────────────
 
 def test_scan_nmap_xmas(real_engine):
     pkt = make_tcp_packet(flags="FPU", dport=80)
@@ -153,12 +157,21 @@ def test_scan_nmap_null(real_engine):
     assert any(r.sid == 1000101 for r in matched)
 
 
-# ── 3. KIỂM THỬ TỪ CHỐI DỊCH VỤ (dos_attacks.rules) ─────────────────────────
+# ── 3. KIỂM THỬ TỪ CHỐI DỊCH VỤ (SID 10002xx) ─────────────────────────
 
 def test_dos_syn_flood(real_engine):
-    pkt = make_tcp_packet(flags="S", dport=80)
+    # detection_filter: count 10, seconds 1 -> 10 SYN đầu chưa bắn, SYN thứ 11 mới bắn
+    pkt = make_tcp_packet(dst_ip="10.0.0.201", flags="S", dport=80)
+    for _ in range(10):
+        assert not any(r.sid == 1000201 for r in real_engine.evaluate_packet(pkt))
     matched = real_engine.evaluate_packet(pkt)
     assert any(r.sid == 1000201 for r in matched)
+
+
+def test_dos_syn_flood_ignores_syn_ack(real_engine):
+    pkt = make_tcp_packet(dst_ip="10.0.0.202", flags="SA", dport=80)
+    for _ in range(11):
+        assert not any(r.sid == 1000201 for r in real_engine.evaluate_packet(pkt))
 
 
 def test_dos_slowloris_probe(real_engine):
@@ -168,12 +181,15 @@ def test_dos_slowloris_probe(real_engine):
 
 
 def test_dos_icmp_oversized(real_engine):
-    pkt = make_icmp_packet(payload=b"A" * 32 + b"PING_DEATH_FLOOD_OVERSIZED" + b"B" * 32)
+    pkt = make_icmp_packet(payload=b"A" * 1000)
     matched = real_engine.evaluate_packet(pkt)
     assert any(r.sid == 1000203 for r in matched)
 
+    normal_ping = make_icmp_packet(payload=b"PingPingPingPing")
+    assert not real_engine.evaluate_packet(normal_ping)
 
-# ── 4. KIỂM THỬ DÒ QUÉT MẬT KHẨU (brute_force.rules) ────────────────────────
+
+# ── 4. KIỂM THỬ DÒ QUÉT MẬT KHẨU (SID 10003xx) ────────────────────────
 
 def test_brute_ssh_probe(real_engine):
     pkt = make_tcp_packet(dport=22, payload=b"SSH-2.0-OpenSSH_8.9\r\n")
@@ -193,7 +209,7 @@ def test_brute_http_basic_auth(real_engine):
     assert any(r.sid == 1000303 for r in matched)
 
 
-# ── 5. KIỂM THỬ MÃ ĐỘC & C2 (malware_c2.rules) ──────────────────────────────
+# ── 5. KIỂM THỬ MÃ ĐỘC & C2 (SID 10004xx) ──────────────────────────────
 
 def test_malware_php_webshell(real_engine):
     pkt = make_http_packet(
@@ -217,7 +233,7 @@ def test_c2_sqlmap_user_agent(real_engine):
     assert any(r.sid == 1000404 for r in matched)
 
 
-# ── 6. KIỂM THỬ THĂM DÒ UDP & ICMP (udp_icmp.rules) ─────────────────────────
+# ── 6. KIỂM THỬ THĂM DÒ UDP & ICMP (SID 10005xx) ─────────────────────────
 
 def test_recon_snmp_public_community(real_engine):
     pkt = make_udp_packet(dport=161, payload=b"\x30\x29\x02\x01\x01\x04\x06public\xa0")
@@ -229,6 +245,32 @@ def test_recon_dns_tunneling(real_engine):
     pkt = make_udp_packet(dport=53, payload=b"\x00\x01\x01\x00\x00\x01\x07exfil01\x08c2tunnel\x02io\x00")
     matched = real_engine.evaluate_packet(pkt)
     assert any(r.sid == 1000502 for r in matched)
+
+
+def test_recon_icmp_timestamp(real_engine):
+    pkt = make_icmp_packet(icmp_type=13)
+    matched = real_engine.evaluate_packet(pkt)
+    assert any(r.sid == 1000503 for r in matched)
+
+
+def test_web_command_injection(real_engine):
+    pkt = make_http_packet(uri="/ping?host=127.0.0.1;cat+/etc/shadow")
+    matched = real_engine.evaluate_packet(pkt)
+    assert any(r.sid == 1000030 for r in matched)
+
+
+def test_web_sqli_or_bypass_urlencoded(real_engine):
+    pkt = make_http_packet(uri="/login?user=admin'+or+'1'%3D'1")
+    matched = real_engine.evaluate_packet(pkt)
+    assert any(r.sid == 1000002 for r in matched)
+
+
+def test_auth_admin_login_requires_post(real_engine):
+    post = make_http_packet(method="POST", uri="/admin/login")
+    assert any(r.sid == 1000304 for r in real_engine.evaluate_packet(post))
+
+    get = make_http_packet(method="GET", uri="/admin/login")
+    assert not any(r.sid == 1000304 for r in real_engine.evaluate_packet(get))
 
 
 # ── 7. KIỂM THỬ NÉ TRÁNH & BIẾN THỂ (Evasion & Edge Cases) ──────────────────
@@ -259,9 +301,9 @@ def test_threshold_suppresses_alert_flood():
         threshold_window_seconds=2.0,
     )
 
-    pkt = make_tcp_packet(flags="S", dport=80)
+    pkt = make_tcp_packet(flags="FPU", dport=80)
 
-    # Gửi liên tục 10 gói tin SYN Flood
+    # Gửi liên tục 10 gói tin Xmas Scan
     for _ in range(10):
         engine.evaluate_packet(pkt)
 

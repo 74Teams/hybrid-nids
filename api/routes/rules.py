@@ -165,7 +165,7 @@ def sync_rules_from_files(db: Session = Depends(get_db)):
         "status": "ok",
         "imported": imported,
         "total_in_db": total_in_db,
-        "message": f"Da import {imported} rules moi tu file. Tong so rules trong CSDL: {total_in_db}."
+        "message": f"Da import/cap nhat {imported} rules tu file. Tong so rules trong CSDL: {total_in_db}."
     }
 
 

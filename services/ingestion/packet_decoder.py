@@ -54,6 +54,8 @@ class PacketDecoder:
         src_port: Optional[int] = None
         dst_port: Optional[int] = None
         tcp_flags: dict = {}
+        icmp_type: Optional[int] = None
+        icmp_code: Optional[int] = None
 
         if scapy_pkt.haslayer(TCP):
             protocol = "TCP"
@@ -79,6 +81,8 @@ class PacketDecoder:
 
         elif scapy_pkt.haslayer(ICMP):
             protocol = "ICMP"
+            icmp_type = scapy_pkt[ICMP].type
+            icmp_code = scapy_pkt[ICMP].code
 
         # Payload tho (bytes)
         raw_payload = bytes(scapy_pkt[Raw].load) if scapy_pkt.haslayer(Raw) else b""
@@ -92,6 +96,8 @@ class PacketDecoder:
             dst_port=dst_port,
             protocol=protocol,
             tcp_flags=tcp_flags,
+            icmp_type=icmp_type,
+            icmp_code=icmp_code,
             raw_payload=raw_payload,
             raw_packet=bytes(scapy_pkt),
         )

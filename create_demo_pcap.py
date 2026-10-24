@@ -134,12 +134,13 @@ packets.append(synfin)
 
 # 6. DENIAL OF SERVICE (DOS)
 
-# SID:1000201 - SYN Flood probe
-syn_flood = (
-    IP(src="192.168.1.210", dst="10.0.0.5")
-    / TCP(sport=33445, dport=80, flags="S", seq=1)
-)
-packets.append(syn_flood)
+# SID:1000201 - SYN Flood (detection_filter: > 10 SYN toi cung dich trong 1 giay)
+for i in range(12):
+    syn_flood = (
+        IP(src="192.168.1.210", dst="10.0.0.5")
+        / TCP(sport=33445 + i, dport=80, flags="S", seq=1)
+    )
+    packets.append(syn_flood)
 
 # SID:1000202 - Slowloris HTTP header probe
 slowloris = (
@@ -149,11 +150,11 @@ slowloris = (
 )
 packets.append(slowloris)
 
-# SID:1000203 - Ping of death signature
+# SID:1000203 - Large ICMP echo request (dsize > 800)
 icmp_pod = (
     IP(src="192.168.1.212", dst="10.0.0.5")
     / ICMP(type=8, code=0)
-    / Raw(load=b"A" * 32 + b"PING_DEATH_FLOOD_OVERSIZED" + b"B" * 32)
+    / Raw(load=b"A" * 1000)
 )
 packets.append(icmp_pod)
 
@@ -257,7 +258,7 @@ wrpcap(OUTPUT_FILE, packets)
 print(f"[OK] Da tao {len(packets)} goi tin vao {OUTPUT_FILE}")
 print(f"   - 10 goi tan cong web (SQLi, XSS, Path Traversal, CMD Injection)")
 print(f"   -  4 goi network scan (Xmas, Null, FIN, SYN-FIN)")
-print(f"   -  3 goi DoS (SYN Flood, Slowloris, ICMP Oversized)")
+print(f"   - 14 goi DoS (12 SYN Flood, Slowloris, ICMP Oversized)")
 print(f"   -  2 goi Brute-force (SSH probe, FTP anonymous)")
 print(f"   -  3 goi Malware/C2 (Webshell, Reverse shell, Sqlmap User-Agent)")
 print(f"   -  2 goi UDP/ICMP Recon (SNMP public, DNS tunneling)")

@@ -22,8 +22,8 @@ def test_decode_demo_pcap():
         if packet is not None
     ]
 
-    assert len(packets) == 28
-    assert len(decoded_packets) == 28
+    assert len(packets) == 39
+    assert len(decoded_packets) == 39
 
     http_packets = [
         packet for packet in decoded_packets
