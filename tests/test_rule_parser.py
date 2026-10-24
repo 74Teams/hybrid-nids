@@ -80,14 +80,13 @@ def test_priority_flow_and_detection_filter():
     assert (df.track, df.count, df.seconds) == ("by_dst", 10, 1)
 
 
-def test_legacy_syntax_from_db_still_parses():
-    rule = parse(
-        'alert tcp any any -> any $HTTP_PORTS (msg:"old"; http_method:"post"; http_uri; '
-        'content:"union"; nocase; severity:1; sid:5; rev:1;)'
-    )
-    assert rule.severity == 1
-    assert (rule.contents[0].buffer, rule.contents[0].pattern) == ("http_method", "POST")
-    assert rule.contents[1].buffer == "http_uri" and rule.contents[1].nocase
+def test_snort2_syntax_is_not_silently_accepted():
+    with pytest.raises(ValueError):
+        parse('alert tcp any any -> any 80 (http_method:"POST"; content:"x"; sid:5; rev:1;)')
+    rule = parse('alert tcp any any -> any any (content:"x"; nocase; sid:6; rev:1;)')
+    assert rule.unsupported_options == ["nocase"]
+    rule = parse('alert tcp any any -> any any (content:"x"; severity:1; sid:7; rev:1;)')
+    assert rule.unsupported_options == ["severity"]
 
 
 def test_unknown_option_is_recorded():

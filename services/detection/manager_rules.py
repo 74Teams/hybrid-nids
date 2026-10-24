@@ -10,9 +10,6 @@ from services.detection import (
     STICKY_BUFFERS,
 )
 
-# Modifier của content (Snort 3 viết sau dấu phẩy: content:"x",nocase,depth 5)
-CONTENT_MODIFIERS = {"nocase", "fast_pattern", "offset", "depth", "distance", "within"}
-
 # Option chỉ mang metadata: engine chấp nhận nhưng không dùng khi so khớp
 METADATA_OPTIONS = {"reference", "metadata", "gid", "service"}
 
@@ -22,9 +19,7 @@ PCRE_FLAGS = {"i": re.IGNORECASE, "s": re.DOTALL, "m": re.MULTILINE, "x": re.VER
 class RuleManager:
     """
     Quản lý tập luật (.rules).
-    Hỗ trợ 2 nguồn nạp:
-    - load_all_rules()  : Đọc từ file .rules trên disk (dùng khi startup ban đầu / testing)
-    - load_from_db()    : Đọc từ DB (MySQL/SQLite) – nguồn sự thật chính sau khi có DB
+    Nguồn nạp duy nhất là file .rules trên disk: load_all_rules().
     """
 
     def __init__(self, rules_dir: str = "rules"):
@@ -72,62 +67,11 @@ class RuleManager:
         self.rules.append(rule)
         self.rules_by_sid[rule.sid] = rule
 
-    # ── LOAD FROM DB ─────────────────────────────────────────
-
-    def load_from_db(self, db_session) -> int:
-        """
-        Nạp rules từ DB vào RAM, thay thế toàn bộ rules hiện tại.
-        Chỉ load các rule có is_enabled = True.
-
-        Args:
-            db_session: SQLAlchemy Session đang hoạt động.
-
-        Returns:
-            Số rule được nạp vào RAM.
-        """
-        from services.database.models import RuleModel
-
-        self.rules.clear()
-        self.rules_by_sid.clear()
-
-        db_rules = (
-            db_session.query(RuleModel)
-            .filter(RuleModel.is_enabled == True)
-            .order_by(RuleModel.sid.asc())
-            .all()
-        )
-
-        for db_rule in db_rules:
-            try:
-                rule = self.parse_rule_line(db_rule.raw_rule)
-                if rule:
-                    rule.is_enabled = db_rule.is_enabled
-                    self._register(rule, "DB")
-            except Exception as e:
-                print(f"[RuleManager] Loi khi parse rule SID={db_rule.sid} tu DB: {e}")
-
-        return len(self.rules)
-
-    def reload_rules_from_db(self, db_session) -> int:
-        """
-        Hot-reload: Xóa toàn bộ rules trong RAM và nạp lại từ DB.
-        Được gọi sau mỗi thao tác CRUD qua API.
-
-        Returns:
-            Số rule được nạp sau hot-reload.
-        """
-        count = self.load_from_db(db_session)
-        print(f"[RuleManager] Hot-reload hoan tat: {count} rules dang hoat dong.")
-        return count
-
     # ── PARSER (cú pháp Snort 3) ─────────────────────────────
 
     def parse_rule_line(self, line: str) -> Optional[SnortRule]:
         """
         Parse một dòng rule cú pháp Snort 3. Ném ValueError nếu rule sai cú pháp.
-
-        Vẫn chấp nhận cú pháp cũ đang nằm trong DB: modifier đứng riêng sau content
-        (content:"x"; nocase;), severity:N và http_method:"POST".
         """
         line = line.strip()
         if "(" not in line or not line.endswith(")"):
@@ -156,12 +100,7 @@ class RuleManager:
         buffer, header_field = BUFFER_PKT_DATA, None
 
         for name, value in self._split_options(options_part):
-            if name == "http_method" and value:
-                # Cú pháp cũ: http_method:"POST"
-                rule.contents.append(
-                    ContentMatch(pattern=self._unquote(value).upper(), buffer="http_method")
-                )
-            elif name in STICKY_BUFFERS:
+            if name in STICKY_BUFFERS:
                 buffer, header_field = name, None
                 if value:
                     parts = value.split()
@@ -172,11 +111,6 @@ class RuleManager:
                 rule.contents.append(self._parse_content(value, buffer, header_field))
             elif name == "pcre":
                 rule.pcres.append(self._parse_pcre(value, buffer, header_field))
-            elif name in CONTENT_MODIFIERS:
-                # Cú pháp cũ kiểu Snort 2: modifier là option riêng, áp cho content ngay trước
-                if not rule.contents:
-                    raise ValueError(f"{name} khong co content dung truoc")
-                self._apply_content_modifier(rule.contents[-1], name, value)
             elif name == "msg":
                 rule.msg = self._unquote(value)
             elif name == "sid":
@@ -185,7 +119,7 @@ class RuleManager:
                 rule.rev = int(value)
             elif name == "classtype":
                 rule.classtype = value
-            elif name in ("priority", "severity"):
+            elif name == "priority":
                 rule.severity = int(value)
             elif name == "flags":
                 rule.flags = value.replace(" ", "")

@@ -75,4 +75,3 @@ class SnortRule:
     unsupported_options: List[str] = field(default_factory=list)
 
     raw_rule: str = ""
-    is_enabled: bool = True
