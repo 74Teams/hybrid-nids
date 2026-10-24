@@ -49,11 +49,13 @@ class DropCounter:
     def __init__(self, interval: float = 5.0):
         self.interval = interval
         self._pending = 0
+        self.total = 0  # Tổng số gói đã drop, gồm cả các lần chưa được báo
         self._last_report: Optional[float] = None
 
     def record(self, now: float) -> Optional[int]:
         """Trả về số gói đã drop dồn lại nếu đến lúc báo, ngược lại trả về None."""
         self._pending += 1
+        self.total += 1
         if self._last_report is None or now - self._last_report >= self.interval:
             dropped, self._pending = self._pending, 0
             self._last_report = now
@@ -98,9 +100,9 @@ def main():
         decoded = PacketDecoder.decode(scapy_pkt)
         if decoded is None:
             return  # Bỏ qua gói tin không phải IP
-        stats["packets"] += 1
         try:
             packet_queue.put_nowait(decoded)
+            stats["packets"] += 1  # Chỉ đếm gói thực sự được đưa vào phân tích
         except queue.Full:
             dropped = drops.record(time.monotonic())
             if dropped:
@@ -133,6 +135,8 @@ def main():
             # Đợi worker xử lý hết các gói còn trong hàng đợi
             packet_queue.join()
             time.sleep(0.5)  # Chờ các cảnh báo cuối cùng được ghi xong
+            if drops.total:
+                logger.warning("Tổng cộng %d gói bị bỏ do queue đầy, kết quả có thể thiếu cảnh báo", drops.total)
             logger.info(format_summary(stats["packets"], alert_counts))
             logger.info("Xem cảnh báo tại http://localhost:8000/api/alerts/")
         else:

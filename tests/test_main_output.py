@@ -42,6 +42,14 @@ def test_drop_counter():
     assert counter.record(6.0) == 3
 
 
+def test_drop_counter_keeps_total_even_when_not_reported():
+    counter = DropCounter(interval=5.0)
+    counter.record(0.0)
+    counter.record(1.0)
+    counter.record(2.0)
+    assert counter.total == 3
+
+
 def test_alert_shown_even_if_db_fails(monkeypatch, caplog):
     def db_down(alert_data):
         raise Exception("db down")
