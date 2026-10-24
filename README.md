@@ -14,8 +14,7 @@
 5. [Hướng dẫn chạy & Demo](#5-hướng-dẫn-chạy--demo)
 6. [Tập luật phát hiện (Detection Rules)](#6-tập-luật-phát-hiện-detection-rules)
 7. [Hệ thống REST API](#7-hệ-thống-rest-api)
-8. [Cơ chế Hot-Reload Engine](#8-cơ-chế-hot-reload-engine)
-9. [Trạng thái phát triển](#9-trạng-thái-phát-triển)
+8. [Trạng thái phát triển](#8-trạng-thái-phát-triển)
 
 ---
 
@@ -47,21 +46,22 @@ Hybrid NIDS được xây dựng nhằm giám sát và phân tích lưu lượng
 │  - Detailed Evaluation: So khớp TCP flags, PCRE Regex, HTTP modifier            │
 │  - AI Traffic Worker (Giai đoạn 2): Phân tích đặc trưng luồng (Flow Anomaly)    │
 └───────────────────┬─────────────────────────────────────────┬───────────────────┘
-                    │ Alert Event                             │ Hot-Reload Rules
-                    ▼                                         ▼
-┌─────────────────────────────────────────┐       ┌───────────────────────────────┐
-│  Storage Layer (SQLAlchemy ORM)         │       │  Rule Manager                 │
-│  - MySQL (Production) / SQLite (Dev)    │◀──────│  - Nạp rules từ DB vào RAM    │
-│  - Tables: rules, events, event_payloads│       │  - Quản lý 14+ Snort rules    │
-└───────────────────┬─────────────────────┘       └───────────────▲───────────────┘
-                    │                                             │
-                    ▼                                             │ CRUD Sync
-┌─────────────────────────────────────────────────────────────────┴───────────────┐
+                    │ Alert Event
+                    ▼
+┌─────────────────────────────────────────┐
+│  Storage Layer (SQLAlchemy ORM)         │
+│  - MySQL (Production) / SQLite (Dev)    │
+│  - Tables: events, event_payloads       │
+└───────────────────┬─────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
 │  FastAPI Server (api/main.py)                                                   │
 │  - Alerts API: Tra cứu sự kiện, thống kê cảnh báo                               │
-│  - Rules Management API: CRUD tập luật, Bật/Tắt rule, đồng bộ tức thì           │
 │  - Swagger UI: http://localhost:8000/docs                                       │
 └─────────────────────────────────────────────────────────────────────────────────┘
+
+Rule: engine đọc rules/local.rules lúc khởi động (RuleManager.load_all_rules).
 ```
 
 **Kết quả thực nghiệm trên bộ dữ liệu giả lập (`demo_attacks.pcap`):**
@@ -80,9 +80,9 @@ Hybrid NIDS được xây dựng nhằm giám sát và phân tích lưu lượng
 | **HTTP Parser** | `http_parser.py` | Python native | Bóc tách chuyên sâu HTTP L7: URI, Headers, POST Body |
 | **Pattern Matcher** | `pattern_matcher.py` | `pyahocorasick` | So khớp đa mẫu đồng thời trong $O(N)$ độc lập với số lượng rule |
 | **Realtime IDS** | `ids_realtime.py` | `re`, `threading` | Động cơ so khớp luật thời gian thực qua Queue bất đồng bộ |
-| **Rule Manager** | `manager_rules.py` | Python native | Parse cú pháp Snort-compatible, nạp & hot-reload rules từ CSDL |
-| **Database & ORM** | `models.py`, `repository.py` | `sqlalchemy 2.0`, `pymysql` | Quản lý schema & thao tác CRUD với MySQL / SQLite |
-| **REST API Server** | `api/main.py`, `routes/` | `fastapi`, `uvicorn`, `pydantic` | Cung cấp RESTful API cho Dashboard và quản lý Rules |
+| **Rule Manager** | `manager_rules.py` | Python native | Parse cú pháp Snort 3 và nạp rules từ file `rules/local.rules` |
+| **Database & ORM** | `models.py`, `repository.py` | `sqlalchemy 2.0`, `pymysql` | Lưu và truy vấn sự kiện cảnh báo trên MySQL / SQLite |
+| **REST API Server** | `api/main.py`, `routes/` | `fastapi`, `uvicorn`, `pydantic` | Cung cấp RESTful API tra cứu cảnh báo cho Dashboard |
 | **Configuration** | `config.py`, `settings.yaml` | `pyyaml` | Quản lý tham số card mạng, chế độ capture và kết nối CSDL |
 
 ---
@@ -108,7 +108,7 @@ App/
 │   ├── detection/                 # Khối phân tích & phát hiện xâm nhập
 │   │   ├── __init__.py            # Dataclass: SnortRule, RuleOption
 │   │   ├── ids_realtime.py        # Core Engine so khớp luật thời gian thực
-│   │   ├── manager_rules.py       # Quản lý rules: nạp từ file/DB, hot-reload RAM
+│   │   ├── manager_rules.py       # Quản lý rules: parse và nạp từ file `rules/local.rules`
 │   │   └── pattern_matcher.py     # Cài đặt Aho-Corasick multi-pattern matcher
 │   │
 │   ├── ai_engine/                 # Khối AI phát hiện bất thường (Giai đoạn 2)
@@ -116,16 +116,13 @@ App/
 │   │
 │   └── database/                  # Khối lưu trữ dữ liệu
 │       ├── __init__.py            # Khởi tạo Engine, SessionLocal, get_db() generator
-│       ├── models.py              # ORM Models: RuleModel, EventModel, EventPayloadModel
-│       ├── schemas.py             # Pydantic Schemas: RuleCreate, RuleUpdate, RuleResponse
-│       └── repository.py          # CRUD Data Access: EventRepository, RuleRepository
+│       ├── models.py              # ORM Models: EventModel, EventPayloadModel
+│       └── repository.py          # Data Access: EventRepository
 │
 ├── api/                           # Backend API phục vụ Dashboard
-│   ├── main.py                    # FastAPI app, Lifespan startup, CORS & Engine singleton
-│   ├── dependencies.py            # Dependency Injection: session get_db
+│   ├── main.py                    # FastAPI app, Lifespan startup, CORS
 │   └── routes/
-│       ├── alerts.py              # API xem & lọc danh sách Alerts vi phạm
-│       └── rules.py               # API CRUD đầy đủ: thêm, sửa, xóa, bật/tắt rules
+│       └── alerts.py              # API xem & lọc danh sách Alerts vi phạm
 │
 ├── pcap_samples/
 │   └── demo_attacks.pcap          # File PCAP mẫu gồm 18 gói tin tấn công và bình thường
@@ -212,7 +209,7 @@ python create_demo_pcap.py
 ```bash
 python main.py
 ```
-*Engine sẽ nạp rules vào RAM, đọc gói tin từ PCAP và đẩy các vi phạm vào CSDL.*
+*Engine sẽ nạp rules từ `rules/local.rules` vào RAM, đọc gói tin từ PCAP và đẩy các vi phạm vào CSDL.*
 
 **Bước 3 – Khởi động API Server (mở terminal mới):**
 ```bash
@@ -220,7 +217,6 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 - Truy cập Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
 - Xem danh sách Alerts: [http://localhost:8000/api/alerts/](http://localhost:8000/api/alerts/)
-- Xem danh sách Rules: [http://localhost:8000/api/rules/](http://localhost:8000/api/rules/)
 
 ### Cách 2: Chạy Live Sniffing trên card mạng thật
 
@@ -256,85 +252,18 @@ alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK SQL Injection - UNION SELE
 
 FastAPI cung cấp tài liệu API tự động chuẩn OpenAPI tại `http://localhost:8000/docs`.
 
-### 7.1. Nhóm API Quản lý Rules (`/api/rules`)
+Rule không quản lý qua API: chúng nằm ở `rules/local.rules`. Muốn đổi rule, sửa file rồi khởi động lại engine (`python main.py`).
 
-Hệ thống cung cấp đầy đủ chức năng CRUD với cơ chế đồng bộ CSDL và hot-reload:
-
-| Method | Endpoint | Mô tả |
-|---|---|---|
-| `GET` | `/api/rules/` | Lấy danh sách rules kèm thống kê (`enabled_only=true` để lọc) |
-| `GET` | `/api/rules/{sid}` | Lấy thông tin chi tiết một rule theo SID |
-| `POST` | `/api/rules/` | Tạo rule mới (tự sinh SID, tự build chuỗi `raw_rule` Snort) |
-| `PUT` | `/api/rules/{sid}` | Cập nhật rule (partial update, tự động tăng `rev`) |
-| `DELETE` | `/api/rules/{sid}` | Xóa vĩnh viễn rule khỏi CSDL và RAM Engine |
-| `PATCH` | `/api/rules/{sid}/toggle` | Bật/Tắt nhanh một rule (vô hiệu hóa không cần xóa) |
-
-#### Ví dụ Request tạo Rule mới (`POST /api/rules/`):
-```json
-{
-  "action": "alert",
-  "protocol": "tcp",
-  "src_ip": "any",
-  "src_port": "any",
-  "direction": "->",
-  "dst_ip": "any",
-  "dst_port": "80",
-  "msg": "WEB-ATTACK SQL Injection - DROP TABLE attempt",
-  "classtype": "web-application-attack",
-  "severity": 1,
-  "contents": ["DROP TABLE"],
-  "http_uri": true,
-  "nocase": true
-}
-```
-
-#### Ví dụ Response (`201 Created`):
-```json
-{
-  "id": 15,
-  "sid": 1000104,
-  "rev": 1,
-  "action": "alert",
-  "protocol": "tcp",
-  "src_ip": "any",
-  "src_port": "any",
-  "direction": "->",
-  "dst_ip": "any",
-  "dst_port": "80",
-  "msg": "WEB-ATTACK SQL Injection - DROP TABLE attempt",
-  "classtype": "web-application-attack",
-  "severity": 1,
-  "raw_rule": "alert tcp any any -> any 80 (msg:\"WEB-ATTACK SQL Injection - DROP TABLE attempt\"; http_uri; content:\"DROP TABLE\",nocase; classtype:web-application-attack; priority:1; sid:1000104; rev:1;)",
-  "is_enabled": true,
-  "created_at": "2026-10-13T04:29:30.123456",
-  "updated_at": "2026-10-13T04:29:30.123456"
-}
-```
-
-### 7.2. Nhóm API Cảnh báo & Giám sát (`/api/alerts`)
+### Nhóm API Cảnh báo & Giám sát (`/api/alerts`)
 
 | Method | Endpoint | Mô tả |
 |---|---|---|
-| `GET` | `/health` | Kiểm tra trạng thái hoạt động của API và Detection Engine |
+| `GET` | `/health` | Kiểm tra trạng thái hoạt động của API |
 | `GET` | `/api/alerts/?limit=50` | Lấy danh sách sự kiện xâm nhập gần nhất |
 
 ---
 
-## 8. Cơ chế Hot-Reload Engine
-
-Một trong những tính năng nổi bật của hệ thống là khả năng **cập nhật tập luật theo thời gian thực (Zero-Downtime Hot-Reload)** mà không cần khởi động lại tiến trình:
-
-1. **Khởi động:** Server đọc `rules/local.rules` và import vào MySQL/SQLite: rule chưa có thì thêm mới, rule đã có chỉ bị ghi đè khi `rev` trong file lớn hơn `rev` trong CSDL.
-2. **Nguồn sự thật duy nhất (Single Source of Truth):** Sau khi khởi động, CSDL trở thành trung tâm quản lý.
-3. **Hot-Reload tức thì:** Mỗi khi người dùng gọi API tạo mới, chỉnh sửa, xóa hoặc bật/tắt rule (`POST/PUT/DELETE/PATCH`), hệ thống sẽ gọi phương thức `RuleManager.reload_rules_from_db()`:
-   - Dọn sạch tập luật cũ trong RAM.
-   - Nạp lại toàn bộ rules có trạng thái `is_enabled = True` từ CSDL.
-   - Xây dựng lại cây chỉ mục Aho-Corasick.
-   - Rule mới có hiệu lực ngay trong gói tin tiếp theo được phân tích!
-
----
-
-## 9. Trạng thái phát triển
+## 8. Trạng thái phát triển
 
 | Hạng mục / Tính năng | Trạng thái | Ghi chú |
 |---|:---:|---|
@@ -345,8 +274,6 @@ Một trong những tính năng nổi bật của hệ thống là khả năng *
 | So khớp quy tắc tốc độ cao Aho-Corasick | ✅ Hoàn thành | Tìm kiếm đa mẫu đồng thời trong $O(N)$ |
 | Hỗ trợ Modifier Snort: `http_uri`, `http_client_body`, `pcre` | ✅ Hoàn thành | Đáp ứng các rule Web Application Attack |
 | Cơ sở dữ liệu ORM MySQL & SQLite | ✅ Hoàn thành | SQLAlchemy 2.0, tự động tạo schema |
-| **Hệ thống Rule Management API (CRUD đầy đủ)** | ✅ Hoàn thành | 6 REST endpoints, validate qua Pydantic |
-| **Cơ chế Hot-Reload Detection Engine** | ✅ Hoàn thành | Cập nhật luật trong RAM tức thì không cần restart |
 | API tra cứu cảnh báo (`/api/alerts/`) | ✅ Hoàn thành | Trả về thông tin IP, port, severity, payload evidence |
 | Script tạo mẫu kiểm thử PCAP (`create_demo_pcap.py`) | ✅ Hoàn thành | 18 gói tin mẫu, 0% False Positive |
 | Kênh WebSocket bắn Alert thời gian thực | 🔄 Giai đoạn 2 | Đang phát triển |

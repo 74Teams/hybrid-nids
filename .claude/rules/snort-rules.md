@@ -14,7 +14,7 @@ Mọi rule nằm trong **một file duy nhất**: `rules/local.rules`. Cú pháp
 
 1. Chọn SID còn trống trong dải của nhóm (bảng SID bên dưới). Đặt rule vào đúng section của nhóm đó, giữ thứ tự SID tăng dần.
 2. Viết rule theo **thứ tự option chuẩn**.
-3. Rule mới: `rev:1`. Sửa rule đã có: **tăng `rev` thêm 1**. Lúc import, DB chỉ ghi đè rule khi `rev` trong file lớn hơn `rev` trong DB (`RuleRepository.import_from_snort_rules`), nên quên tăng `rev` thì bản sửa sẽ không vào DB.
+3. Rule mới: `rev:1`. Sửa rule đã có: **tăng `rev` thêm 1**. Việc tăng `rev` chỉ để ghi nhận rule đã đổi. Thay đổi có hiệu lực sau khi khởi động lại engine.
 4. Thêm test trong `tests/test_diverse_rules_engine.py`: một gói tấn công làm rule bắn, và một gói hợp lệ gần giống mà rule **không** bắn.
 5. Nếu rule thuộc nhóm demo, thêm gói tương ứng vào `create_demo_pcap.py` rồi chạy `python create_demo_pcap.py`. Việc này đổi số gói, nên phải cập nhật số đếm trong `tests/test_packet_decoder_pcap.py`.
 6. Xong khi: `pytest` xanh, và khi nạp file không có dòng `[RuleParser]` nào (dòng này nghĩa là lỗi cú pháp, SID trùng hoặc option bị bỏ qua).
@@ -79,13 +79,13 @@ Rule có buffer `http_*` thêm `service:http;`. Buffer `http_*` chỉ có khi g�
 | `itype`, `icode` | `itype:8`, `icode:0` | Chỉ dùng cho `icmp` |
 | `detection_filter` | `detection_filter:track by_src\|by_dst, count N, seconds S` | Chỉ bắn khi có hơn N lần khớp trong S giây |
 | `classtype` | `classtype:web-application-attack` | Dùng tên có trong `classification.config` của Snort |
-| `priority` | `priority:1` | 1 = cao, 2 = trung bình, 3 = thấp (API chỉ nhận 1–3) |
+| `priority` | `priority:1` | 1 = cao, 2 = trung bình, 3 = thấp  |
 | `sid`, `rev` | `sid:1000001; rev:1;` | Bắt buộc |
 | `service`, `reference`, `metadata`, `gid` | | Được chấp nhận nhưng engine không dùng |
 
 Option ngoài bảng (`byte_test`, `isdataat`, `threshold`, `pcre` có flag `R`...) sẽ bị bỏ qua kèm cảnh báo, hoặc làm rule lỗi. Khi cần một option mới, cài nó trong `RuleManager.parse_rule_line` và `DetectionEngine`, viết test, rồi bổ sung vào bảng này.
 
-Dùng `priority` để đặt mức độ, không dùng `severity` (`severity` chỉ còn để đọc rule cũ trong DB). Viết modifier dạng `content:"x",nocase`; dạng cũ `content:"x"; nocase;` vẫn parse được nhưng là cú pháp Snort 2.
+Dùng `priority` để đặt mức độ. Cú pháp Snort 2 không được hỗ trợ: `nocase;` đứng riêng (viết `content:"x",nocase`), `http_method:"..."` (dùng sticky buffer `http_method; content:...`) và `severity:` (dùng `priority`).
 
 ## Chuỗi trong content và pcre
 
@@ -111,7 +111,6 @@ Dùng `priority` để đặt mức độ, không dùng `severity` (`severity` c
 | `10003xx` | AUTH |
 | `10004xx` | MALWARE, C2 |
 | `10005xx` | RECON (UDP / ICMP) |
-| `2000001+` | Rule tạo qua API (`RuleRepository._next_sid`) |
 
 Mỗi SID chỉ xuất hiện một lần. Nếu trùng, parser giữ rule nạp trước và bỏ rule sau.
 
