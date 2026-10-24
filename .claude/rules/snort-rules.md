@@ -1,0 +1,125 @@
+---
+paths:
+  - "rules/**/*.rules"
+  - "services/detection/**"
+  - "services/database/repository.py"
+  - "create_demo_pcap.py"
+---
+
+# Quy tắc viết rule (Snort 3)
+
+Mọi rule nằm trong **một file duy nhất**: `rules/local.rules`. Cú pháp là **Snort 3**, nhưng engine chỉ hiểu một tập con: chỉ dùng các option liệt kê ở mục "Option được hỗ trợ". Rule viết đúng theo tài liệu này cũng chạy được trên Snort 3 thật.
+
+## Quy trình thêm hoặc sửa rule
+
+1. Chọn SID còn trống trong dải của nhóm (bảng SID bên dưới). Đặt rule vào đúng section của nhóm đó, giữ thứ tự SID tăng dần.
+2. Viết rule theo **thứ tự option chuẩn**.
+3. Rule mới: `rev:1`. Sửa rule đã có: **tăng `rev` thêm 1**. Lúc import, DB chỉ ghi đè rule khi `rev` trong file lớn hơn `rev` trong DB (`RuleRepository.import_from_snort_rules`), nên quên tăng `rev` thì bản sửa sẽ không vào DB.
+4. Thêm test trong `tests/test_diverse_rules_engine.py`: một gói tấn công làm rule bắn, và một gói hợp lệ gần giống mà rule **không** bắn.
+5. Nếu rule thuộc nhóm demo, thêm gói tương ứng vào `create_demo_pcap.py` rồi chạy `python create_demo_pcap.py`. Việc này đổi số gói, nên phải cập nhật số đếm trong `tests/test_packet_decoder_pcap.py`.
+6. Xong khi: `pytest` xanh, và khi nạp file không có dòng `[RuleParser]` nào (dòng này nghĩa là lỗi cú pháp, SID trùng hoặc option bị bỏ qua).
+
+## Header
+
+```
+alert <proto> <src_ip> <src_port> -> <dst_ip> <dst_port> (<options>)
+```
+
+| Thành phần | Giá trị dùng được |
+|---|---|
+| action | `alert` |
+| proto | `tcp`, `udp`, `icmp`, `ip` |
+| IP | `any` (engine chưa so khớp IP, mọi giá trị đều coi như `any`) |
+| port | `any`, một số cổng (`22`), hoặc `$HTTP_PORTS` |
+| hướng | `->` |
+
+Engine chưa hỗ trợ danh sách cổng (`[80,443]`), dải cổng (`1:1024`) hay phủ định cổng (`!80`): chúng khớp mọi cổng mà không báo lỗi. Khi cần nhiều cổng, viết mỗi cổng một rule.
+
+`$HTTP_PORTS` được định nghĩa cứng ở hai nơi: `DetectionEngine._match_port` (80, 8080, 8000, 3000, 5000) và `packet_decoder.HTTP_PORTS` (danh sách cổng sẽ được parse HTTP). Thêm cổng HTTP thì sửa cả hai.
+
+## Thứ tự option chuẩn
+
+```
+msg; flow; [flags | itype/icode | dsize]; [buffer; content...; pcre...]...; [detection_filter]; [service]; classtype; priority; sid; rev;
+```
+
+Ví dụ:
+
+```
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK SQL Injection - UNION SELECT detected"; flow:to_server,established; http_uri; content:"union",nocase; content:"select",nocase,distance 0; service:http; classtype:web-application-attack; priority:1; sid:1000001; rev:2;)
+```
+
+Mọi option kết thúc bằng `;`, kể cả option cuối cùng trước `)`. Mỗi rule nằm trên một dòng.
+
+## Sticky buffer
+
+Buffer là **sticky**: viết tên buffer **trước** các content/pcre, và mọi content/pcre phía sau thuộc buffer đó cho đến khi gặp buffer khác.
+
+| Buffer | Nội dung |
+|---|---|
+| `pkt_data` | payload thô (mặc định khi chưa khai báo buffer nào) |
+| `http_uri` | URI của request, chưa URL-decode (`%3D` vẫn là `%3D`, `+` vẫn là `+`) |
+| `http_header` | toàn bộ header dạng `name: value`, nối bằng `\r\n`, tên header viết thường |
+| `http_header:field <name>` | chỉ giá trị của một header, `<name>` viết thường |
+| `http_client_body` | body của request |
+| `http_method` | method (`GET`, `POST`...) |
+
+Rule có buffer `http_*` thêm `service:http;`. Buffer `http_*` chỉ có khi gói tin tới cổng trong `packet_decoder.HTTP_PORTS`. Vì `http_uri` chưa được URL-decode, pcre trên URI phải tự bao cả dạng encode, ví dụ `[\s+]` cho khoảng trắng và `(=|%3d)` cho dấu bằng.
+
+## Option được hỗ trợ
+
+| Option | Cú pháp | Ghi chú |
+|---|---|---|
+| `msg` | `msg:"..."` | Bắt đầu bằng tiền tố nhóm: `WEB-ATTACK`, `SCAN`, `DOS`, `AUTH`, `MALWARE`, `C2`, `RECON` |
+| `content` | `content:[!]"chuỗi"[,nocase][,offset N][,depth N][,distance N][,within N][,fast_pattern]` | Modifier viết sau dấu phẩy, cùng option |
+| `pcre` | `pcre:"/regex/flags"` | Chỉ hỗ trợ flag `i s m x`; regex theo cú pháp Python `re` |
+| `flow` | `flow:to_server,established` hoặc `flow:stateless` | Xem giới hạn engine |
+| `flags` | `flags:S`, `S+`, `SF*`, `!F`, `0`, `S,CE` | Không có `+`/`*`/`!` nghĩa là khớp **chính xác** (cờ thừa thì không khớp) |
+| `dsize` | `dsize:>800`, `<10`, `100<>200` | Độ dài payload |
+| `itype`, `icode` | `itype:8`, `icode:0` | Chỉ dùng cho `icmp` |
+| `detection_filter` | `detection_filter:track by_src\|by_dst, count N, seconds S` | Chỉ bắn khi có hơn N lần khớp trong S giây |
+| `classtype` | `classtype:web-application-attack` | Dùng tên có trong `classification.config` của Snort |
+| `priority` | `priority:1` | 1 = cao, 2 = trung bình, 3 = thấp (API chỉ nhận 1–3) |
+| `sid`, `rev` | `sid:1000001; rev:1;` | Bắt buộc |
+| `service`, `reference`, `metadata`, `gid` | | Được chấp nhận nhưng engine không dùng |
+
+Option ngoài bảng (`byte_test`, `isdataat`, `threshold`, `pcre` có flag `R`...) sẽ bị bỏ qua kèm cảnh báo, hoặc làm rule lỗi. Khi cần một option mới, cài nó trong `RuleManager.parse_rule_line` và `DetectionEngine`, viết test, rồi bổ sung vào bảng này.
+
+Dùng `priority` để đặt mức độ, không dùng `severity` (`severity` chỉ còn để đọc rule cũ trong DB). Viết modifier dạng `content:"x",nocase`; dạng cũ `content:"x"; nocase;` vẫn parse được nhưng là cú pháp Snort 2.
+
+## Chuỗi trong content và pcre
+
+- Ký tự `"`, `;`, `\` trong chuỗi phải escape: `\"`, `\;`, `\\`.
+- Byte nhị phân trong content viết dạng hex giữa hai dấu `|`: `content:"|04 06|public"`. Ký tự `|` thật thì viết `|7C|`.
+- Trong pcre, nên viết `;` là `\x3b` và nháy kép là `\x22` để chuỗi không phụ thuộc cách escape.
+
+## Chất lượng phát hiện
+
+- **Rule TCP có content** thêm `flow:to_server,established` (hoặc `flow:established` khi không biết hướng). **Rule chỉ xét cờ TCP** dùng `flow:stateless`.
+- **Fast pattern** là content dài nhất của rule (hoặc content có `fast_pattern`), dùng để lọc nhanh bằng Aho-Corasick. Hãy chọn content dài và đặc trưng nhất. Rule chỉ có pcre hoặc chỉ có content ngắn sẽ bị đánh giá trên mọi gói, nên ghép thêm một content.
+- **Neo vị trí** khi biết chỗ chuỗi xuất hiện: `depth` cho banner hoặc lệnh ở đầu payload (`content:"SSH-2.0",depth 7`), và `distance`/`within` cho content thứ hai đứng sau content thứ nhất.
+- **Phát hiện dựa trên tần suất** (flood, brute force) dùng `detection_filter`, để một gói hợp lệ đơn lẻ không gây cảnh báo.
+- **Đặc trưng phải là của giao thức hoặc tấn công thật** (opcode, cấu trúc gói, `itype`, `dsize`), không phải chuỗi tự đặt chỉ có trong pcap demo.
+
+## SID
+
+| Dải | Nhóm |
+|---|---|
+| `10000xx` | WEB-ATTACK |
+| `10001xx` | SCAN |
+| `10002xx` | DOS |
+| `10003xx` | AUTH |
+| `10004xx` | MALWARE, C2 |
+| `10005xx` | RECON (UDP / ICMP) |
+| `2000001+` | Rule tạo qua API (`RuleRepository._next_sid`) |
+
+Mỗi SID chỉ xuất hiện một lần. Nếu trùng, parser giữ rule nạp trước và bỏ rule sau.
+
+## Giới hạn của engine
+
+Đây là những chỗ engine khác Snort 3 thật. Cần nhớ khi viết rule hoặc test:
+
+- `flow:established` được xấp xỉ: gói TCP có ACK và không có SYN. `to_server`/`from_server` chưa được kiểm tra.
+- Các content trong một buffer được khớp tham lam theo thứ tự, không quay lui. Hãy viết content theo đúng thứ tự xuất hiện trong dữ liệu.
+- Chưa có tái hợp luồng TCP: content bị chia qua hai gói sẽ không khớp.
+- `detection_filter` đếm theo `packet.timestamp`, nên khi replay pcap, các gói phải có timestamp nằm trong cửa sổ `seconds`.

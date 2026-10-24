@@ -58,10 +58,17 @@ class RuleRepository:
     """Quản lý thao tác CRUD tập luật phát hiện xâm nhập trong CSDL."""
 
     @staticmethod
+    def _escape(value: str) -> str:
+        """Escape các ký tự đặc biệt trong chuỗi option Snort: \\ " ; |"""
+        for ch in ("\\", '"', ";"):
+            value = value.replace(ch, "\\" + ch)
+        return value.replace("|", "|7C|")
+
+    @staticmethod
     def _build_raw_rule(data: RuleCreate, sid: int) -> str:
         """
-        Tự động build chuỗi raw rule theo cú pháp Snort từ các field.
-        Ví dụ: alert tcp any any -> any 80 (msg:"XSS"; http_uri; content:"<script>"; sid:1000010; rev:1;)
+        Tự động build chuỗi raw rule theo cú pháp Snort 3 từ các field.
+        Ví dụ: alert tcp any any -> any 80 (msg:"XSS"; http_uri; content:"<script",nocase; priority:1; sid:1000010; rev:1;)
         """
         header = (
             f"{data.action} {data.protocol} "
@@ -73,36 +80,46 @@ class RuleRepository:
         options_parts = []
 
         # msg
-        options_parts.append(f'msg:"{data.msg}"')
-
-        # HTTP modifiers
-        if data.http_uri:
-            options_parts.append("http_uri")
-        if data.http_client_body:
-            options_parts.append("http_client_body")
-        if data.http_header:
-            options_parts.append("http_header")
-        if data.http_method:
-            options_parts.append(f'http_method:"{data.http_method.upper()}"')
-
-        # Content patterns
-        for content in data.contents:
-            options_parts.append(f'content:"{content}"')
-        if data.nocase and data.contents:
-            options_parts.append("nocase")
+        options_parts.append(f'msg:"{RuleRepository._escape(data.msg)}"')
 
         # TCP flags
         if data.flags is not None:
             options_parts.append(f"flags:{data.flags}")
 
+        # HTTP method (sticky buffer http_method)
+        if data.http_method:
+            options_parts.append("http_method")
+            options_parts.append(f'content:"{data.http_method.upper()}"')
+
+        # Sticky buffer cho content/pcre phía sau
+        has_payload = bool(data.contents or data.pcre)
+        if data.http_uri:
+            buffer = "http_uri"
+        elif data.http_client_body:
+            buffer = "http_client_body"
+        elif data.http_header:
+            buffer = "http_header"
+        else:
+            buffer = "pkt_data" if data.http_method else None
+        if buffer and has_payload:
+            options_parts.append(buffer)
+
+        # Content patterns
+        for content in data.contents:
+            modifier = ",nocase" if data.nocase else ""
+            options_parts.append(f'content:"{RuleRepository._escape(content)}"{modifier}')
+
         # PCRE
         if data.pcre:
-            options_parts.append(f"pcre:{data.pcre}")
+            pcre = data.pcre.strip()
+            if not pcre.startswith('"'):
+                pcre = f'"{pcre}"'
+            options_parts.append(f"pcre:{pcre}")
 
-        # Classtype & severity
+        # Classtype & priority
         if data.classtype:
             options_parts.append(f"classtype:{data.classtype}")
-        options_parts.append(f"severity:{data.severity}")
+        options_parts.append(f"priority:{data.severity}")
 
         # SID & rev
         options_parts.append(f"sid:{sid}")
@@ -245,7 +262,8 @@ class RuleRepository:
     def import_from_snort_rules(db: Session, snort_rules: list) -> int:
         """
         Import hàng loạt SnortRule (đã parse từ file) vào DB.
-        Bỏ qua các rule đã tồn tại (theo SID). Trả về số rule được import.
+        Rule đã tồn tại (theo SID) chỉ được ghi đè khi rev trong file lớn hơn rev trong DB.
+        Trả về số rule được thêm mới hoặc cập nhật.
         """
         imported = 0
         for rule in snort_rules:
@@ -253,7 +271,22 @@ class RuleRepository:
                 continue
             existing = RuleRepository.get_by_sid(db, rule.sid)
             if existing:
-                continue  # Skip duplicate
+                if rule.rev > (existing.rev or 1):
+                    existing.rev = rule.rev
+                    existing.action = rule.action
+                    existing.protocol = rule.protocol
+                    existing.src_ip = rule.src_ip
+                    existing.src_port = rule.src_port
+                    existing.direction = rule.direction
+                    existing.dst_ip = rule.dst_ip
+                    existing.dst_port = rule.dst_port
+                    existing.msg = rule.msg
+                    existing.classtype = rule.classtype or ""
+                    existing.severity = rule.severity
+                    existing.raw_rule = rule.raw_rule
+                    existing.updated_at = datetime.utcnow()
+                    imported += 1
+                continue
 
             db_rule = RuleModel(
                 sid=rule.sid,

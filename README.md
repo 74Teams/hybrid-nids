@@ -95,9 +95,8 @@ App/
 │   ├── config.py                  # Helper load YAML & tự động sinh db_url
 │   └── settings.yaml              # File cấu hình: Network, Database, Detection, API
 │
-├── rules/                         # Tập quy tắc phát hiện gốc (.rules)
-│   ├── web_attacks.rules          # 10 rules: SQLi, XSS, Path Traversal, Command Injection
-│   └── network_scans.rules        # 4 rules: Nmap Xmas, Null, FIN, SYN-FIN Scan
+├── rules/
+│   └── local.rules                # Toàn bộ 30 rule tự định nghĩa (cú pháp Snort 3)
 │
 ├── services/
 │   ├── ingestion/                 # Khối thu nhận & tiền xử lý gói tin
@@ -236,34 +235,20 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
 ## 6. Tập luật phát hiện (Detection Rules)
 
-Quy tắc phát hiện được định nghĩa theo cú pháp tương thích Snort:
+Toàn bộ rule nằm trong một file duy nhất `rules/local.rules`, viết theo cú pháp **Snort 3** (sticky buffer, modifier của content viết sau dấu phẩy, `priority`). Quy tắc viết rule chi tiết nằm ở [`.claude/rules/snort-rules.md`](.claude/rules/snort-rules.md).
+
 ```text
-[action] [proto] [src_ip] [src_port] -> [dst_ip] [dst_port] ( [options] )
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK SQL Injection - UNION SELECT detected"; flow:to_server,established; http_uri; content:"union",nocase; content:"select",nocase,distance 0; service:http; classtype:web-application-attack; priority:1; sid:1000001; rev:2;)
 ```
 
-### 6.1. Quy tắc tấn công ứng dụng Web (`rules/web_attacks.rules`)
-
-| SID | Loại tấn công | Mẫu vi phạm | Modifier / Kỹ thuật |
+| Dải SID | Nhóm | Số rule | Kỹ thuật tiêu biểu |
 |---|---|---|---|
-| `1000001` | SQL Injection | `UNION SELECT` | `http_uri; content:"union"; content:"select"; nocase;` |
-| `1000002` | SQL Injection | Boolean-based bypass | `http_uri; pcre:"/(\%27\|\')\s*(or\|and)\s*[\w\d]+\s*=\s*[\w\d]+/i";` |
-| `1000003` | SQL Injection | Comment execution | `http_uri; content:"--";` |
-| `1000010` | Cross-Site Scripting (XSS) | Chèn thẻ script | `http_uri; content:"<script"; nocase;` |
-| `1000011` | Cross-Site Scripting (XSS) | Javascript URI scheme | `http_uri; content:"javascript:"; nocase;` |
-| `1000012` | Cross-Site Scripting (XSS) | Event handler trong Body | `http_client_body; pcre:"/on\w+\s*=/i";` |
-| `1000020` | Path Traversal | Leo thang thư mục | `http_uri; content:"../";` |
-| `1000021` | Sensitive File Access | Đọc tệp `/etc/passwd` | `http_uri; content:"/etc/passwd";` |
-| `1000022` | Sensitive File Access | Đọc tệp `win.ini` | `http_uri; content:"win.ini"; nocase;` |
-| `1000030` | Command Injection | Ghép lệnh hệ thống | `http_uri; pcre:"/(\|\s*id\|;\s*cat\s+\|\&\s*whoami)/i";` |
-
-### 6.2. Quy tắc rà quét mạng Nmap (`rules/network_scans.rules`)
-
-| SID | Loại Scan | Cờ TCP phát hiện | Đặc điểm |
-|---|---|---|---|
-| `1000100` | Nmap Xmas Scan | `flags:FUP;` | Bật đồng thời FIN, URG, PSH |
-| `1000101` | Nmap Null Scan | `flags:0;` | Không bật bất kỳ cờ TCP nào |
-| `1000102` | Nmap FIN Scan | `flags:F;` | Chỉ bật duy nhất cờ FIN |
-| `1000103` | Bất thường SYN-FIN | `flags:SF;` | Bật đồng thời SYN và FIN (vi phạm RFC 793) |
+| `10000xx` | WEB-ATTACK: SQLi, XSS, Path Traversal, Command Injection | 10 | `http_uri`, `http_client_body`, `pcre`, `distance` |
+| `10001xx` | SCAN: Nmap Xmas, Null, FIN, SYN-FIN | 4 | `flow:stateless`, `flags` |
+| `10002xx` | DOS: SYN Flood, Slowloris, Large ICMP, NTP monlist | 4 | `detection_filter`, `itype`, `dsize`, content hex |
+| `10003xx` | AUTH: SSH, FTP anonymous, HTTP Basic, admin login | 4 | `depth`, `http_header:field`, `http_method` |
+| `10004xx` | MALWARE, C2: webshell, reverse shell, sqlmap, nikto | 5 | `flow:established`, `http_header:field user-agent` |
+| `10005xx` | RECON: SNMP public, DNS tunneling, ICMP timestamp | 3 | content hex `\|04 06\|`, `itype`, `icode` |
 
 ---
 
@@ -319,7 +304,7 @@ Hệ thống cung cấp đầy đủ chức năng CRUD với cơ chế đồng b
   "msg": "WEB-ATTACK SQL Injection - DROP TABLE attempt",
   "classtype": "web-application-attack",
   "severity": 1,
-  "raw_rule": "alert tcp any any -> any 80 (msg:\"WEB-ATTACK SQL Injection - DROP TABLE attempt\"; http_uri; content:\"DROP TABLE\"; nocase; classtype:web-application-attack; severity:1; sid:1000104; rev:1;)",
+  "raw_rule": "alert tcp any any -> any 80 (msg:\"WEB-ATTACK SQL Injection - DROP TABLE attempt\"; http_uri; content:\"DROP TABLE\",nocase; classtype:web-application-attack; priority:1; sid:1000104; rev:1;)",
   "is_enabled": true,
   "created_at": "2026-10-13T04:29:30.123456",
   "updated_at": "2026-10-13T04:29:30.123456"
@@ -339,7 +324,7 @@ Hệ thống cung cấp đầy đủ chức năng CRUD với cơ chế đồng b
 
 Một trong những tính năng nổi bật của hệ thống là khả năng **cập nhật tập luật theo thời gian thực (Zero-Downtime Hot-Reload)** mà không cần khởi động lại tiến trình:
 
-1. **Khởi động lần đầu:** Server đọc các tệp `.rules` trong thư mục `rules/`, tự động import vào MySQL/SQLite nếu trong CSDL chưa có dữ liệu.
+1. **Khởi động:** Server đọc `rules/local.rules` và import vào MySQL/SQLite: rule chưa có thì thêm mới, rule đã có chỉ bị ghi đè khi `rev` trong file lớn hơn `rev` trong CSDL.
 2. **Nguồn sự thật duy nhất (Single Source of Truth):** Sau khi khởi động, CSDL trở thành trung tâm quản lý.
 3. **Hot-Reload tức thì:** Mỗi khi người dùng gọi API tạo mới, chỉnh sửa, xóa hoặc bật/tắt rule (`POST/PUT/DELETE/PATCH`), hệ thống sẽ gọi phương thức `RuleManager.reload_rules_from_db()`:
    - Dọn sạch tập luật cũ trong RAM.

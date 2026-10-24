@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
     print("[API] [1/3] Ket noi va khoi tao CSDL...")
     init_db()
 
-    # 2. Import rules tu file .rules vao DB (chi lan dau, skip neu da co)
+    # 2. Import rules tu file .rules vao DB (them moi, hoac ghi de neu rev trong file lon hon)
     rules_dir = SETTINGS.get("detection", {}).get("rules_dir", "rules")
     print(f"[API] [2/3] Import rules tu thu muc '{rules_dir}' vao DB (neu chua co)...")
     try:
@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
         try:
             imported = RuleRepository.import_from_snort_rules(db, manager.rules)
             total_in_db = len(RuleRepository.get_all(db))
-            print(f"[API]       -> Da import {imported} rules moi. Tong trong DB: {total_in_db} rules.")
+            print(f"[API]       -> Da import/cap nhat {imported} rules. Tong trong DB: {total_in_db} rules.")
         finally:
             db.close()
     except Exception as e:

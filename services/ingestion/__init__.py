@@ -11,6 +11,8 @@ class DecodedPacket:
     dst_port: Optional[int]
     protocol: str  # TCP, UDP, ICMP
     tcp_flags: Dict[str, bool] = field(default_factory=dict)
+    icmp_type: Optional[int] = None
+    icmp_code: Optional[int] = None
     raw_payload: bytes = b""
     raw_packet: bytes = b""
 

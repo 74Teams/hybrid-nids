@@ -137,6 +137,38 @@ def toggle_rule(sid: int, db: Session = Depends(get_db)):
     return RuleResponse.model_validate(rule)
 
 
+# ── 7. RELOAD & SYNC ─────────────────────────────────────────────────────────
+
+@router.post("/reload", summary="Hot-reload Detection Engine tu CSDL")
+def reload_rules(db: Session = Depends(get_db)):
+    """Buộc nạp lại toàn bộ rules đang kích hoạt từ CSDL vào Detection Engine trong RAM."""
+    from api.main import get_detection_engine
+    engine = get_detection_engine()
+    if not engine:
+        return {"status": "ok", "message": "Detection engine chua duoc gan vao API server (running standalone)."}
+    count = engine.reload_rules_from_db(db)
+    return {"status": "ok", "message": f"Da hot-reload thanh cong {count} rules vao Detection Engine."}
+
+
+@router.post("/sync-files", summary="Dong bo rules tu cac file disk vao CSDL")
+def sync_rules_from_files(db: Session = Depends(get_db)):
+    """Quét toàn bộ thư mục rules/ và import các rule mới vào CSDL, sau đó hot-reload."""
+    from services.detection.manager_rules import RuleManager
+    from config.config import SETTINGS
+    rules_dir = SETTINGS.get("detection", {}).get("rules_dir", "rules")
+    manager = RuleManager(rules_dir)
+    manager.load_all_rules()
+    imported = RuleRepository.import_from_snort_rules(db, manager.rules)
+    _try_hot_reload(db)
+    total_in_db = len(RuleRepository.get_all(db))
+    return {
+        "status": "ok",
+        "imported": imported,
+        "total_in_db": total_in_db,
+        "message": f"Da import/cap nhat {imported} rules tu file. Tong so rules trong CSDL: {total_in_db}."
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # INTERNAL HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
