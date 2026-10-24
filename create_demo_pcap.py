@@ -6,7 +6,12 @@ Chạy: python create_demo_pcap.py
 Output: pcap_samples/demo_attacks.pcap
 """
 from scapy.all import IP, TCP, UDP, ICMP, Raw, wrpcap, Ether
+import logging
 import os
+
+from config.logger import setup_logging
+
+logger = logging.getLogger("nids.pcap")
 
 OUTPUT_DIR = "pcap_samples"
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "demo_attacks.pcap")
@@ -255,13 +260,13 @@ packets.append(normal_syn)
 
 # GHI RA FILE PCAP
 wrpcap(OUTPUT_FILE, packets)
-print(f"[OK] Da tao {len(packets)} goi tin vao {OUTPUT_FILE}")
-print(f"   - 10 goi tan cong web (SQLi, XSS, Path Traversal, CMD Injection)")
-print(f"   -  4 goi network scan (Xmas, Null, FIN, SYN-FIN)")
-print(f"   - 14 goi DoS (12 SYN Flood, Slowloris, ICMP Oversized)")
-print(f"   -  2 goi Brute-force (SSH probe, FTP anonymous)")
-print(f"   -  3 goi Malware/C2 (Webshell, Reverse shell, Sqlmap User-Agent)")
-print(f"   -  2 goi UDP/ICMP Recon (SNMP public, DNS tunneling)")
-print(f"   -  4 goi traffic binh thuong (HTTP, DNS, ICMP, SYN)")
-print(f"\n[INFO] De chay NIDS phan tich file nay:")
-print(f"   python main.py")
+setup_logging("INFO")
+logger.info("Đã tạo %d gói tin vào %s", len(packets), OUTPUT_FILE)
+logger.info("  - 10 gói tấn công web (SQLi, XSS, Path Traversal, CMD Injection)")
+logger.info("  -  4 gói network scan (Xmas, Null, FIN, SYN-FIN)")
+logger.info("  - 14 gói DoS (12 SYN Flood, Slowloris, ICMP Oversized)")
+logger.info("  -  2 gói Brute-force (SSH probe, FTP anonymous)")
+logger.info("  -  3 gói Malware/C2 (Webshell, Reverse shell, Sqlmap User-Agent)")
+logger.info("  -  2 gói UDP/ICMP Recon (SNMP public, DNS tunneling)")
+logger.info("  -  4 gói traffic bình thường (HTTP, DNS, ICMP, SYN)")
+logger.info("Để chạy NIDS phân tích file này: python main.py")

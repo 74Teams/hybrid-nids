@@ -4,11 +4,15 @@ FastAPI Application Entry Point – Hybrid NIDS API Server.
 Luồng khởi động (startup lifespan): init_db() tạo bảng trong CSDL nếu chưa có.
 Rule chỉ đọc từ rules/local.rules bởi process engine (main.py), không đi qua API.
 """
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import alerts
+from config.logger import setup_logging
+
+logger = logging.getLogger("nids.api")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -18,15 +22,17 @@ from api.routes import alerts
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Thực hiện các tác vụ khởi tạo khi server bắt đầu."""
+    from config.config import SETTINGS
     from services.database import init_db
 
-    print("[API] Khoi dong NIDS API Server...")
+    setup_logging(SETTINGS.get("system", {}).get("log_level", "INFO"))
+    logger.info("Khởi động NIDS API Server")
     init_db()
-    print("[API] NIDS API Server san sang! Swagger UI: http://localhost:8000/docs")
+    logger.info("NIDS API Server sẵn sàng, Swagger UI: http://localhost:8000/docs")
 
-    yield  # Server dang chay
+    yield  # Server đang chạy
 
-    print("[API] Dang dong NIDS API Server...")
+    logger.info("Đóng NIDS API Server")
 
 
 # ─────────────────────────────────────────────────────────────
