@@ -6,7 +6,9 @@ system:
 
 network:
   interface: "eth0"
-  bpf_filter: "ip"
+  # Loại port 3306: engine chạy chung network với victim nên sẽ thấy cả kết nối ghi alert vào MySQL,
+  # nếu không loại thì nội dung câu INSERT (chứa chuỗi tấn công) lại sinh thêm alert.
+  bpf_filter: "ip and not port 3306"
   promiscuous: true
   capture_mode: "live"
   pcap_file: "pcap_samples/demo_attacks.pcap"
