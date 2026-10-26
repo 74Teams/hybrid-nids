@@ -63,4 +63,5 @@ Test khởi tạo `DetectionEngine` trực tiếp (thường với `enable_thres
 
 - KHÔNG chạy `git commit`/`git push` khi chưa được người dùng cho phép rõ ràng; không bao giờ merge thẳng vào `main`. Làm việc trên feature branch và merge qua PR.
 - Mọi tài liệu phải viết bằng tiếng Việt có dấu: README, tài liệu thiết kế, spec, plan, mô tả PR và chính file `CLAUDE.md` này. Giữ nguyên dạng tiếng Anh cho tên trong code, lệnh, đường dẫn file, key cấu hình và các thuật ngữ kỹ thuật chuẩn (ví dụ Aho-Corasick, pub/sub, SID).
+- Thông điệp commit (dòng tiêu đề và nội dung) viết bằng tiếng Anh ngắn gọn, theo kiểu Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`...). Quy ước này chỉ áp dụng cho commit message, không áp dụng cho mô tả PR (vẫn viết tiếng Việt có dấu theo dòng trên).
 - Một số tính năng đã lên kế hoạch (Redis pub/sub, WebSocket alert, AI engine theo flow) chưa được triển khai, và `ai_worker.py` mới chỉ là stub.
