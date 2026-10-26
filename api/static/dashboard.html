@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hybrid NIDS Dashboard</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --text: #1b2433; --muted: #64708a; --line: #e2e7ef;
+    --p1: #d93636; --p2: #c98a00; --p3: #2f6fdb; --ok: #1f9d55;
+    --p1-bg: #fdecec; --p2-bg: #fff6df; --p3-bg: #eaf1fe;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1520; --panel: #182131; --text: #e6ebf5; --muted: #8b97ad; --line: #2a364c;
+      --p1: #ff6b6b; --p2: #f2b84b; --p3: #6ea4ff; --ok: #4cd08a;
+      --p1-bg: #3a1f26; --p2-bg: #3a3020; --p3-bg: #1d2c47;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 18px; margin: 0; flex: 1 1 auto; }
+  .status { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--p1); }
+  .dot.ok { background: var(--ok); }
+  button { font: inherit; padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); cursor: pointer; }
+  button:hover { border-color: var(--p1); color: var(--p1); }
+  main { padding: 16px; max-width: 1280px; margin: 0 auto; display: grid; gap: 16px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; }
+  .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .card .value { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .card.p1 .value { color: var(--p1); } .card.p2 .value { color: var(--p2); } .card.p3 .value { color: var(--p3); }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; }
+  .panel h2 { font-size: 14px; margin: 0 0 10px; }
+  .bar-row { display: grid; grid-template-columns: minmax(120px, 40%) 1fr 40px; gap: 8px; align-items: center; margin: 4px 0; }
+  .bar-row .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar { height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: var(--p3); }
+  .bar-row .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td.msg, td.uri { white-space: normal; word-break: break-all; }
+  th { color: var(--muted); font-size: 12px; text-transform: uppercase; }
+  tr.p1 td:first-child { box-shadow: inset 4px 0 var(--p1); } tr.p2 td:first-child { box-shadow: inset 4px 0 var(--p2); } tr.p3 td:first-child { box-shadow: inset 4px 0 var(--p3); }
+  .badge { display: inline-block; min-width: 28px; text-align: center; padding: 0 6px; border-radius: 4px; font-weight: 700; }
+  .badge.p1 { background: var(--p1-bg); color: var(--p1); } .badge.p2 { background: var(--p2-bg); color: var(--p2); } .badge.p3 { background: var(--p3-bg); color: var(--p3); }
+  tr.fresh { animation: flash 1.6s ease-out; }
+  @keyframes flash { from { background: var(--p2-bg); } to { background: transparent; } }
+  .empty { color: var(--muted); padding: 16px 0; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Hybrid NIDS – Giám sát cảnh báo</h1>
+  <span class="status"><span id="dot" class="dot"></span><span id="status">Đang kết nối…</span></span>
+  <button id="clear" type="button">Xoá dữ liệu</button>
+</header>
+<main>
+  <section class="cards">
+    <div class="card"><div class="label">Tổng cảnh báo</div><div class="value" id="total">0</div></div>
+    <div class="card p1"><div class="label">P1 – Nghiêm trọng</div><div class="value" id="p1">0</div></div>
+    <div class="card p2"><div class="label">P2 – Trung bình</div><div class="value" id="p2">0</div></div>
+    <div class="card p3"><div class="label">P3 – Thấp</div><div class="value" id="p3">0</div></div>
+  </section>
+  <section class="panel">
+    <h2>Top loại tấn công</h2>
+    <div id="top"><div class="empty">Chưa có dữ liệu</div></div>
+  </section>
+  <section class="panel">
+    <h2>Cảnh báo gần nhất</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Thời gian</th><th>P</th><th>SID</th><th>Cảnh báo</th><th>Nguồn → Đích</th><th>Method</th><th>URI</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="empty" class="empty">Chưa có cảnh báo nào. Hãy chạy tấn công từ container attacker.</div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const seen = new Set();
+let firstLoad = true;
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined && text !== null) e.textContent = text;   // textContent: payload tấn công không bao giờ được render thành HTML
+  return e;
+}
+const endpoint = (ip, port) => port != null ? ip + ":" + port : ip;
+
+function renderStats(s) {
+  $("total").textContent = s.total;
+  $("p1").textContent = s.by_severity["1"]; $("p2").textContent = s.by_severity["2"]; $("p3").textContent = s.by_severity["3"];
+  const box = $("top");
+  box.replaceChildren();
+  if (!s.top_attacks.length) { box.append(el("div", "empty", "Chưa có dữ liệu")); return; }
+  const max = Math.max(...s.top_attacks.map((a) => a.count));
+  for (const a of s.top_attacks) {
+    const row = el("div", "bar-row");
+    row.append(el("div", "name", (a.sid != null ? "SID " + a.sid + " – " : "") + a.summary));
+    const bar = el("div", "bar"), fill = el("span");
+    fill.style.width = (100 * a.count / max) + "%";
+    bar.append(fill);
+    row.append(bar, el("div", "n", a.count));
+    box.append(row);
+  }
+}
+
+function renderAlerts(alerts) {
+  const body = $("rows");
+  body.replaceChildren();
+  $("empty").style.display = alerts.length ? "none" : "block";
+  for (const a of alerts) {
+    const sev = [1, 2, 3].includes(a.severity) ? a.severity : 2;
+    const tr = el("tr", "p" + sev);
+    if (!firstLoad && !seen.has(a.id)) tr.classList.add("fresh");
+    seen.add(a.id);
+    const time = a.timestamp ? new Date(a.timestamp).toLocaleTimeString("vi-VN") : "";
+    const badge = el("span", "badge p" + sev, "P" + sev);
+    const sevCell = el("td"); sevCell.append(badge);
+    tr.append(el("td", "", time), sevCell, el("td", "", a.sid ?? "AI"), el("td", "msg", a.summary),
+      el("td", "", endpoint(a.src_ip, a.src_port) + " → " + endpoint(a.dst_ip, a.dst_port)),
+      el("td", "", a.http_method || ""), el("td", "uri", a.http_uri || ""));
+    body.append(tr);
+  }
+  firstLoad = false;
+}
+
+function setStatus(ok) {
+  $("dot").className = "dot" + (ok ? " ok" : "");
+  $("status").textContent = ok ? "Đã kết nối – tự làm mới mỗi 2 giây" : "Mất kết nối tới API";
+}
+
+async function refresh() {
+  try {
+    const [alerts, stats] = await Promise.all([
+      fetch("/api/alerts/?limit=100").then((r) => r.json()),
+      fetch("/api/alerts/stats").then((r) => r.json()),
+    ]);
+    renderAlerts(alerts); renderStats(stats); setStatus(true);
+  } catch (e) {
+    setStatus(false);
+  }
+}
+
+$("clear").addEventListener("click", async () => {
+  if (!confirm("Xoá toàn bộ cảnh báo đã lưu?")) return;
+  await fetch("/api/alerts/", { method: "DELETE" });
+  seen.clear(); firstLoad = true;
+  refresh();
+});
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

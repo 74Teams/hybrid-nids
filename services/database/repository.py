@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Dict, Any, List
+from sqlalchemy import func
 from services.database.models import EventModel, EventPayloadModel
 
 
@@ -44,5 +45,43 @@ class EventRepository:
         session = SessionLocal()
         try:
             return session.query(EventModel).order_by(EventModel.timestamp.desc()).limit(limit).all()
+        finally:
+            session.close()
+
+    @staticmethod
+    def get_stats(top: int = 8) -> Dict[str, Any]:
+        """Thống kê cho dashboard: tổng cảnh báo, số cảnh báo theo priority và top loại tấn công."""
+        from services.database import SessionLocal
+        session = SessionLocal()
+        try:
+            total = session.query(func.count(EventModel.id)).scalar() or 0
+            by_severity = {"1": 0, "2": 0, "3": 0}
+            for severity, count in session.query(EventModel.severity, func.count(EventModel.id)).group_by(EventModel.severity):
+                by_severity[str(severity)] = count
+            rows = (
+                session.query(EventModel.summary, EventModel.sid, func.count(EventModel.id).label("n"))
+                .group_by(EventModel.summary, EventModel.sid)
+                .order_by(func.count(EventModel.id).desc())
+                .limit(top)
+                .all()
+            )
+            return {
+                "total": total,
+                "by_severity": by_severity,
+                "top_attacks": [{"summary": r.summary, "sid": r.sid, "count": r.n} for r in rows],
+            }
+        finally:
+            session.close()
+
+    @staticmethod
+    def clear_events() -> int:
+        """Xoá toàn bộ cảnh báo (dùng để reset giữa các lượt demo); trả về số cảnh báo đã xoá."""
+        from services.database import SessionLocal
+        session = SessionLocal()
+        try:
+            session.query(EventPayloadModel).delete()
+            deleted = session.query(EventModel).delete()
+            session.commit()
+            return deleted
         finally:
             session.close()
