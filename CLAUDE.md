@@ -26,12 +26,13 @@ Chưa cấu hình linter. Docker: `docker compose up --build` khởi động MyS
 Hai **process riêng biệt** dùng chung một database:
 
 - `main.py` — process engine: `PacketCapture` (Scapy, live hoặc pcap offline) → `PacketDecoder.decode` (L2–L4 + HTTP L7 qua `http_parser`) → `queue.Queue` có giới hạn → một worker thread duy nhất gọi `DetectionEngine.evaluate_packet` và `AITrafficWorker.analyze_packet`. Alert đi qua callback `handle_alert` → `EventRepository.save_alert`.
-- `api/main.py` — process FastAPI. Khi khởi động, nó chỉ tạo bảng; API chỉ có `/api/alerts` và `/health`. DB chỉ lưu sự kiện cảnh báo (bảng `events`, `event_payloads`), không lưu rule.
+- `api/main.py` — process FastAPI. Khi khởi động, nó chỉ tạo bảng. API gồm `/api/alerts` (danh sách), `/api/alerts/stats`, `DELETE /api/alerts/`, `/health`, và dashboard `api/static/dashboard.html` phục vụ tại `/`. DB chỉ lưu sự kiện cảnh báo (bảng `events`, `event_payloads`), không lưu rule.
+- `attacker/attack_demo.py` — kịch bản tấn công demo, chạy trong container attacker. Mỗi đòn khai báo SID kỳ vọng; `tests/test_attack_demo.py` kiểm tra đòn nào cũng trúng đúng rule và rule nào cũng có đòn trình diễn (thêm rule mới thì phải thêm đòn). Kịch bản thuyết trình ở `docs/demo/kich-ban-demo.md`.
 
 ### Logging
 
 - Cấu hình ở `config/logger.py` (`setup_logging`, `ColorFormatter`), gọi một lần ở `main.py`, `api/main.py` và `create_demo_pcap.py`. Mức độ lấy từ `system.log_level` trong `settings.yaml` (mặc định `INFO`, `DEBUG` để xem chi tiết). Màu tự tắt khi đầu ra không phải terminal hoặc có biến môi trường `NO_COLOR`.
-- Mỗi module dùng `logging.getLogger("nids.<khu vực>")`, không dùng `print`. Khu vực: `engine` (`main.py`, `ids_realtime.py`), `alert` (dòng cảnh báo trong `main.py`), `rules` (`manager_rules.py`), `db`, `capture`, `api`, `pcap`.
+- Mỗi module dùng `logging.getLogger("nids.<khu vực>")`, không dùng `print`. Khu vực: `engine` (`main.py`, `ids_realtime.py`), `alert` (dòng cảnh báo trong `main.py`), `rules` (`manager_rules.py`), `db`, `capture`, `api`, `pcap`, `attack` (`attacker/attack_demo.py`).
 - Cảnh báo mang `extra={"priority": n}` để formatter tô màu theo priority (P1 đỏ, P2 vàng, P3 xanh dương).
 
 ### Detection engine (`services/detection/`)
@@ -47,7 +48,7 @@ Hai **process riêng biệt** dùng chung một database:
 - `config/settings.yaml` được load một lần lúc import vào `config.config.SETTINGS`. `get_db_url()` dựng URL từ mục `database`, và các biến môi trường `NIDS_DB_HOST/PORT/NAME/USER/PASSWORD` sẽ ghi đè (docker-compose dựa vào điều này). `type: sqlite` dùng `db_url`.
 - `init_db()` thử lại tối đa 15 lần, mỗi lần cách 2s, vì MySQL khởi động chậm trong Docker.
 - `settings.yaml` đã commit mặc định dùng `capture_mode: "live"`, interface `eth0` và IP MySQL của Docker; khi chạy local thì chuyển sang `offline` và/hoặc `sqlite`.
-- Trong Docker, `nids_engine` dùng `network_mode: service:victim_app` để sniff traffic của victim, và mount repo vào `/app`.
+- Trong Docker, `nids_engine` dùng `network_mode: service:victim_app` để sniff traffic của victim, và mount repo vào `/app`. `nids_api` (API + dashboard) cố ý chạy ở network riêng để request poll của dashboard không bị engine sniff nhầm. `network.bpf_filter` loại port 3306: engine thấy cả kết nối ghi alert vào MySQL, nếu không loại thì câu INSERT chứa chuỗi tấn công sẽ sinh alert mới (vòng lặp).
 
 ### Test
 

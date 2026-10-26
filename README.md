@@ -65,7 +65,7 @@ Rule: engine đọc rules/local.rules lúc khởi động (RuleManager.load_all_
 ```
 
 **Kết quả thực nghiệm trên bộ dữ liệu giả lập (`demo_attacks.pcap`):**
-- Phát hiện thành công **16 cảnh báo** từ 18 gói tin kiểm thử.
+- Phát hiện thành công **25 cảnh báo** từ 39 gói tin kiểm thử.
 - Bao phủ: SQL Injection, Cross-Site Scripting (XSS), Path Traversal / LFI, Command Injection, Nmap Port Scans (Xmas, Null, FIN, SYN-FIN).
 - **0 cảnh báo sai (Zero False Positive)** trên lưu lượng thông thường (HTTP, DNS, ICMP, TCP Handshake).
 
@@ -96,7 +96,7 @@ App/
 │   └── settings.yaml              # File cấu hình: Network, Database, Detection, API
 │
 ├── rules/
-│   └── local.rules                # Toàn bộ 30 rule tự định nghĩa (cú pháp Snort 3)
+│   └── local.rules                # Toàn bộ 67 rule tự định nghĩa (cú pháp Snort 3)
 │
 ├── services/
 │   ├── ingestion/                 # Khối thu nhận & tiền xử lý gói tin
@@ -120,12 +120,20 @@ App/
 │       └── repository.py          # Data Access: EventRepository
 │
 ├── api/                           # Backend API phục vụ Dashboard
-│   ├── main.py                    # FastAPI app, Lifespan startup, CORS
+│   ├── main.py                    # FastAPI app, Lifespan startup, CORS, phục vụ dashboard tại `/`
+│   ├── static/
+│   │   └── dashboard.html         # Dashboard theo dõi cảnh báo (tự làm mới mỗi 2 giây)
 │   └── routes/
-│       └── alerts.py              # API xem & lọc danh sách Alerts vi phạm
+│       └── alerts.py              # API xem, thống kê và xoá Alerts
+│
+├── attacker/
+│   └── attack_demo.py             # Kịch bản tấn công demo (chạy trong container attacker)
+│
+├── docs/demo/
+│   └── kich-ban-demo.md           # Kịch bản thuyết trình và Q&A
 │
 ├── pcap_samples/
-│   └── demo_attacks.pcap          # File PCAP mẫu gồm 18 gói tin tấn công và bình thường
+│   └── demo_attacks.pcap          # File PCAP mẫu gồm 39 gói tin tấn công và bình thường
 │
 ├── main.py                        # Điểm khởi chạy toàn bộ tiến trình NIDS
 ├── create_demo_pcap.py            # Script sinh gói tin PCAP mẫu phục vụ kiểm thử
@@ -208,7 +216,7 @@ api:
 ```bash
 python create_demo_pcap.py
 ```
-> Tạo tệp `pcap_samples/demo_attacks.pcap` với 18 gói tin tấn công và bình thường.
+> Tạo tệp `pcap_samples/demo_attacks.pcap` với 39 gói tin tấn công và bình thường.
 
 **Bước 2 – Khởi chạy Core Detection Engine:**
 ```bash
@@ -223,7 +231,20 @@ uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 - Truy cập Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
 - Xem danh sách Alerts: [http://localhost:8000/api/alerts/](http://localhost:8000/api/alerts/)
 
-### Cách 2: Chạy Live Sniffing trên card mạng thật
+### Cách 2: Demo trực tiếp bằng Docker (tấn công thật trong mạng cô lập)
+
+```bash
+docker compose up --build -d
+```
+Mở dashboard tại [http://localhost:8000/](http://localhost:8000/), rồi tấn công từ container `attacker`:
+```bash
+docker exec -it nids_attacker python attacker/attack_demo.py all      # toàn bộ 67 rule
+docker exec -it nids_attacker python attacker/attack_demo.py web      # hoặc: scan | dos | auth | malware | recon
+docker logs -f nids_engine                                            # xem cảnh báo có màu theo priority
+```
+Chi tiết từng bước và câu hỏi thường gặp: [`docs/demo/kich-ban-demo.md`](docs/demo/kich-ban-demo.md).
+
+### Cách 3: Chạy Live Sniffing trên card mạng thật
 
 1. Mở `config/settings.yaml`, sửa `capture_mode: "live"`.
 2. Mở Command Prompt / PowerShell bằng quyền **Run as Administrator**.
@@ -244,12 +265,12 @@ alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK SQL Injection - UNION SELE
 
 | Dải SID | Nhóm | Số rule | Kỹ thuật tiêu biểu |
 |---|---|---|---|
-| `10000xx` | WEB-ATTACK: SQLi, XSS, Path Traversal, Command Injection | 10 | `http_uri`, `http_client_body`, `pcre`, `distance` |
-| `10001xx` | SCAN: Nmap Xmas, Null, FIN, SYN-FIN | 4 | `flow:stateless`, `flags` |
-| `10002xx` | DOS: SYN Flood, Slowloris, Large ICMP, NTP monlist | 4 | `detection_filter`, `itype`, `dsize`, content hex |
-| `10003xx` | AUTH: SSH, FTP anonymous, HTTP Basic, admin login | 4 | `depth`, `http_header:field`, `http_method` |
-| `10004xx` | MALWARE, C2: webshell, reverse shell, sqlmap, nikto | 5 | `flow:established`, `http_header:field user-agent` |
-| `10005xx` | RECON: SNMP public, DNS tunneling, ICMP timestamp | 3 | content hex `\|04 06\|`, `itype`, `icode` |
+| `10000xx` | WEB-ATTACK: SQLi, XSS, Path Traversal/LFI/RFI, Command Injection, Log4Shell, Shellshock, XXE, SSRF | 24 | `http_uri`, `http_client_body`, `pcre`, `distance` |
+| `10001xx` | SCAN: Nmap Xmas, Null, FIN, SYN-FIN, SYN-RST, quét cổng, User-Agent scanner | 8 | `flow:stateless`, `flags`, `detection_filter` |
+| `10002xx` | DOS: SYN/UDP/ICMP/HTTP flood, Slowloris, Large ICMP, NTP/DNS/Memcached khuếch đại | 9 | `detection_filter`, `itype`, `dsize`, content hex |
+| `10003xx` | AUTH: SSH/FTP/Web brute force, FTP anonymous, HTTP Basic, admin login | 7 | `depth`, `http_header:field`, `http_method` |
+| `10004xx` | MALWARE, C2: webshell, reverse shell, Mimikatz, EICAR, cryptominer, sqlmap, nikto | 11 | `flow:established`, `http_header:field user-agent` |
+| `10005xx` | RECON: SNMP public, DNS tunneling/AXFR/version.bind, ICMP, NetBIOS, SSDP | 8 | content hex `\|04 06\|`, `itype`, `icode` |
 
 ---
 
@@ -264,7 +285,10 @@ Rule không quản lý qua API: chúng nằm ở `rules/local.rules`. Muốn đ�
 | Method | Endpoint | Mô tả |
 |---|---|---|
 | `GET` | `/health` | Kiểm tra trạng thái hoạt động của API |
+| `GET` | `/` | Dashboard theo dõi cảnh báo thời gian thực |
 | `GET` | `/api/alerts/?limit=50` | Lấy danh sách sự kiện xâm nhập gần nhất |
+| `GET` | `/api/alerts/stats` | Thống kê: tổng, theo priority, top loại tấn công |
+| `DELETE` | `/api/alerts/` | Xoá toàn bộ cảnh báo (reset trước lượt demo mới) |
 
 ---
 
@@ -280,7 +304,7 @@ Rule không quản lý qua API: chúng nằm ở `rules/local.rules`. Muốn đ�
 | Hỗ trợ Modifier Snort: `http_uri`, `http_client_body`, `pcre` | ✅ Hoàn thành | Đáp ứng các rule Web Application Attack |
 | Cơ sở dữ liệu ORM MySQL & SQLite | ✅ Hoàn thành | SQLAlchemy 2.0, tự động tạo schema |
 | API tra cứu cảnh báo (`/api/alerts/`) | ✅ Hoàn thành | Trả về thông tin IP, port, severity, payload evidence |
-| Script tạo mẫu kiểm thử PCAP (`create_demo_pcap.py`) | ✅ Hoàn thành | 18 gói tin mẫu, 0% False Positive |
+| Script tạo mẫu kiểm thử PCAP (`create_demo_pcap.py`) | ✅ Hoàn thành | 39 gói tin mẫu, 25 cảnh báo |
 | Kênh WebSocket bắn Alert thời gian thực | 🔄 Giai đoạn 2 | Đang phát triển |
 | Trích xuất đặc trưng luồng (Flow Feature Extractor) | 🔄 Giai đoạn 2 | Trích xuất packet rate, duration, byte count |
 | AI Traffic Worker (ML Anomaly Detection) | 🔄 Giai đoạn 2 | Mô hình Random Forest / XGBoost phát hiện DoS |
