@@ -70,10 +70,19 @@
     <div id="top"><div class="empty">Chưa có dữ liệu</div></div>
   </section>
   <section class="panel">
+    <h2>Top IP tấn công</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>IP</th><th>Sự kiện honeypot</th><th>Cảnh báo NIDS</th><th>Lần cuối</th></tr></thead>
+        <tbody id="attackers"></tbody>
+      </table>
+    </div>
+  </section>
+  <section class="panel">
     <h2>Cảnh báo gần nhất</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Thời gian</th><th>P</th><th>SID</th><th>Cảnh báo</th><th>Nguồn → Đích</th><th>Method</th><th>URI</th></tr></thead>
+        <thead><tr><th>Thời gian</th><th>P</th><th>Nguồn</th><th>SID</th><th>Cảnh báo</th><th>Nguồn → Đích</th><th>Method</th><th>URI</th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
       <div id="empty" class="empty">Chưa có cảnh báo nào. Hãy chạy tấn công từ container attacker.</div>
@@ -123,12 +132,24 @@ function renderAlerts(alerts) {
     const time = a.timestamp ? new Date(a.timestamp).toLocaleTimeString("vi-VN") : "";
     const badge = el("span", "badge p" + sev, "P" + sev);
     const sevCell = el("td"); sevCell.append(badge);
-    tr.append(el("td", "", time), sevCell, el("td", "", a.sid ?? "AI"), el("td", "msg", a.summary),
+    tr.append(el("td", "", time), sevCell, el("td", "", a.source_type === "HONEYPOT" ? "Honeypot" : "NIDS"),
+      el("td", "", a.sid ?? (a.source_type === "HONEYPOT" ? "–" : "AI")), el("td", "msg", a.summary),
       el("td", "", endpoint(a.src_ip, a.src_port) + " → " + endpoint(a.dst_ip, a.dst_port)),
       el("td", "", a.http_method || ""), el("td", "uri", a.http_uri || ""));
     body.append(tr);
   }
   firstLoad = false;
+}
+
+function renderAttackers(list) {
+  const body = $("attackers");
+  body.replaceChildren();
+  for (const a of list) {
+    const tr = el("tr");
+    tr.append(el("td", "", a.src_ip), el("td", "", a.honeypot_events), el("td", "", a.nids_alerts),
+      el("td", "", new Date(a.last_seen).toLocaleTimeString("vi-VN")));
+    body.append(tr);
+  }
 }
 
 function setStatus(ok) {
@@ -138,11 +159,12 @@ function setStatus(ok) {
 
 async function refresh() {
   try {
-    const [alerts, stats] = await Promise.all([
+    const [alerts, stats, attackers] = await Promise.all([
       fetch("/api/alerts/?limit=100").then((r) => r.json()),
       fetch("/api/alerts/stats").then((r) => r.json()),
+      fetch("/api/alerts/attackers").then((r) => r.json()),
     ]);
-    renderAlerts(alerts); renderStats(stats); setStatus(true);
+    renderAlerts(alerts); renderStats(stats); renderAttackers(attackers); setStatus(true);
   } catch (e) {
     setStatus(false);
   }

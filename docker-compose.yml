@@ -40,8 +40,11 @@ services:
       nids_isolated_net:
         ipv4_address: 172.28.0.50
 
+  # Image Python dùng chung: chỉ nids_engine build, honeypot và API dùng lại (build 4 lần song song dễ làm Docker Desktop sập).
   nids_engine:
     build: .
+    image: hybrid-nids-app
+    pull_policy: never
     container_name: nids_engine
     network_mode: "service:victim_app"
     cap_add:
@@ -62,10 +65,50 @@ services:
       NIDS_DB_PASSWORD: "nids_app_password"
     restart: unless-stopped
 
+  # Honeypot chạy chung network với victim: NIDS sniff được cả traffic tới honeypot,
+  # nên cùng một đòn vừa sinh cảnh báo rule vừa sinh sự kiện HONEYPOT.
+  honeypot_ssh:
+    image: hybrid-nids-app
+    pull_policy: never
+    container_name: nids_honeypot_ssh
+    command: python -m honeypot ssh
+    network_mode: "service:victim_app"
+    depends_on:
+      mysql_db:
+        condition: service_healthy
+      victim_app:
+        condition: service_started
+    volumes:
+      - .:/app
+    environment: &nids_db_env
+      NIDS_DB_HOST: "172.28.0.10"
+      NIDS_DB_PORT: "3306"
+      NIDS_DB_NAME: "nids_db"
+      NIDS_DB_USER: "nids_app"
+      NIDS_DB_PASSWORD: "nids_app_password"
+    restart: unless-stopped
+
+  honeypot_http:
+    image: hybrid-nids-app
+    pull_policy: never
+    container_name: nids_honeypot_http
+    command: python -m honeypot http
+    network_mode: "service:victim_app"
+    depends_on:
+      mysql_db:
+        condition: service_healthy
+      victim_app:
+        condition: service_started
+    volumes:
+      - .:/app
+    environment: *nids_db_env
+    restart: unless-stopped
+
   # API + dashboard chạy ở network namespace riêng (không chung với victim) để các request
   # poll của dashboard không bị engine sniff nhầm thành lưu lượng cần phân tích.
   nids_api:
-    build: .
+    image: hybrid-nids-app
+    pull_policy: never
     container_name: nids_api
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000
     networks:

@@ -16,6 +16,7 @@ import argparse
 import logging
 import socket
 import struct
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -51,7 +52,15 @@ class PacketAttack:
     interval: float = 0.0  # Giãn cách giữa các gói (giây)
 
 
-Attack = object  # HttpAttack hoặc PacketAttack
+@dataclass
+class CommandAttack:
+    """Đòn chạy bằng công cụ ngoài (hydra...); đích là honeypot nên không có SID kỳ vọng."""
+    name: str
+    argv: List[str]
+    sids: Tuple[int, ...] = ()
+
+
+Attack = object  # HttpAttack, PacketAttack hoặc CommandAttack
 
 
 # ─────────────────────────────────────────────────────────────
@@ -204,6 +213,21 @@ def build_recon(target: str, src: Optional[str] = None) -> list:
     ]
 
 
+HONEYPOT_SSH_PORT = 2222
+HONEYPOT_HTTP_PORT = 8080
+
+
+def build_honeypot(target: str, src: Optional[str] = None) -> list:
+    """Đòn vào honeypot SSH (2222) và HTTP (8080); kết quả mong đợi là sự kiện HONEYPOT, không phải SID."""
+    login = lambda user, pw: http_request("POST", "/wp-admin-login", {"User-Agent": "sqlmap/1.8"}, f"username={user}&password={pw}")  # noqa: E731
+    return [
+        CommandAttack("SSH brute force (hydra, user root)", ["hydra", "-l", "root", "-p", "123456", "-t", "4", "-s", str(HONEYPOT_SSH_PORT), f"ssh://{target}"]),
+        CommandAttack("SSH credential stuffing (hydra, user admin)", ["hydra", "-l", "admin", "-p", "admin", "-t", "4", "-s", str(HONEYPOT_SSH_PORT), f"ssh://{target}"]),
+        HttpAttack("Web login sai mật khẩu", (), login("admin", "wrong"), port=HONEYPOT_HTTP_PORT),
+        HttpAttack("Web login SQLi", (), login("admin'+or+1=1--", "x"), port=HONEYPOT_HTTP_PORT),
+    ]
+
+
 GROUPS: Dict[str, Callable[..., list]] = {
     "web": lambda target, src=None: build_web(),
     "scan": build_scan,
@@ -211,11 +235,14 @@ GROUPS: Dict[str, Callable[..., list]] = {
     "auth": build_auth,
     "malware": build_malware,
     "recon": build_recon,
+    "honeypot": build_honeypot,
 }
 
 
 def attack_packets(attack, target: str, src: Optional[str] = None) -> list:
     """Toàn bộ gói Scapy của một đòn tấn công (dùng cho test)."""
+    if isinstance(attack, CommandAttack):
+        return []
     return http_as_packets(attack, target, src) if isinstance(attack, HttpAttack) else attack.packets
 
 
@@ -242,13 +269,22 @@ def send_packets(attack: PacketAttack) -> None:
     send(attack.packets, inter=attack.interval, verbose=False)
 
 
+def run_command(attack: CommandAttack) -> None:
+    try:
+        subprocess.run(attack.argv, check=False, timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        logger.warning("Không chạy được '%s' (%s)", attack.argv[0], e)
+
+
 def run_group(group: str, target: str, delay: float) -> int:
     attacks = GROUPS[group](target)
     for attack in attacks:
-        sids = ", ".join(str(s) for s in attack.sids)
+        sids = ", ".join(str(s) for s in attack.sids) or "sự kiện honeypot"
         logger.info("[%s] %s → kỳ vọng SID %s", group, attack.name, sids)
         if isinstance(attack, HttpAttack):
             send_http(attack, target)
+        elif isinstance(attack, CommandAttack):
+            run_command(attack)
         else:
             send_packets(attack)
         time.sleep(delay)
@@ -269,7 +305,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.list:
         for g in groups:
             for attack in GROUPS[g](args.target):
-                logger.info("[%s] %s (SID %s)", g, attack.name, ", ".join(map(str, attack.sids)))
+                logger.info("[%s] %s (SID %s)", g, attack.name, ", ".join(map(str, attack.sids)) or "-")
         return 0
 
     total = sum(run_group(g, args.target, args.delay) for g in groups)

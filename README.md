@@ -255,6 +255,12 @@ Chi tiết từng bước và câu hỏi thường gặp: [`docs/demo/kich-ban-d
 
 ---
 
+### Honeypot kết hợp
+
+Container `honeypot_ssh` (cổng 2222) và `honeypot_http` (cổng 8080) chạy chung network với victim. Mọi kết nối vào honeypot được ghi vào bảng `events` với `source_type = HONEYPOT`; cảnh báo của rule engine từ IP đã chạm honeypot được nâng một bậc priority và gắn `[honeypot-confirmed]`. Demo: `docker exec -it nids_attacker python attacker/attack_demo.py honeypot`. Dashboard có bảng "Top IP tấn công", API có `/api/alerts/attackers` và `/api/alerts/?source_type=HONEYPOT`.
+
+---
+
 ## 6. Tập luật phát hiện (Detection Rules)
 
 Toàn bộ rule nằm trong một file duy nhất `rules/local.rules`, viết theo cú pháp **Snort 3** (sticky buffer, modifier của content viết sau dấu phẩy, `priority`). Quy tắc viết rule chi tiết nằm ở [`.claude/rules/snort-rules.md`](.claude/rules/snort-rules.md).
