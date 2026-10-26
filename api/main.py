@@ -6,8 +6,10 @@ Rule chỉ đọc từ rules/local.rules bởi process engine (main.py), không 
 """
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from api.routes import alerts
 from config.logger import setup_logging
@@ -61,6 +63,14 @@ app.add_middleware(
 # ─────────────────────────────────────────────────────────────
 
 app.include_router(alerts.router)
+
+DASHBOARD_FILE = Path(__file__).parent / "static" / "dashboard.html"
+
+
+@app.get("/", include_in_schema=False)
+def dashboard():
+    """Trang dashboard theo dõi cảnh báo theo thời gian thực."""
+    return FileResponse(DASHBOARD_FILE)
 
 
 @app.get("/health", tags=["System"])

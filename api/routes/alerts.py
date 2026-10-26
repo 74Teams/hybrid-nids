@@ -6,6 +6,18 @@ from services.database.repository import EventRepository
 
 router = APIRouter(prefix="/api/alerts", tags=["Alerts"])
 
+@router.get("/stats")
+def get_stats() -> Dict[str, Any]:
+    """Thống kê cảnh báo cho dashboard: tổng, theo priority, top loại tấn công."""
+    return EventRepository.get_stats()
+
+
+@router.delete("/")
+def clear_alerts() -> Dict[str, int]:
+    """Xoá toàn bộ cảnh báo để bắt đầu lượt demo mới."""
+    return {"deleted": EventRepository.clear_events()}
+
+
 @router.get("/")
 def get_alerts(limit: int = 50) -> List[Dict[str, Any]]:
     """Lấy danh sách các cảnh báo vi phạm gần nhất."""
