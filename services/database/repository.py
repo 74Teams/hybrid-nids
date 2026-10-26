@@ -1,6 +1,7 @@
 from datetime import datetime
-from typing import Dict, Any, List
-from sqlalchemy import func
+from datetime import timedelta
+from typing import Dict, Any, List, Optional, Set
+from sqlalchemy import case, func
 from services.database.models import EventModel, EventPayloadModel
 
 
@@ -32,6 +33,8 @@ class EventRepository:
                 summary=alert_data.get("msg", ""),
                 status="NEW"
             )
+            if alert_data.get("matched_content"):
+                event.payload = EventPayloadModel(matched_content=alert_data["matched_content"])
             session.add(event)
             session.commit()
             session.refresh(event)
@@ -40,11 +43,52 @@ class EventRepository:
             session.close()
 
     @staticmethod
-    def get_recent_events(limit: int = 50) -> List[EventModel]:
+    def get_recent_events(limit: int = 50, source_type: Optional[str] = None) -> List[EventModel]:
         from services.database import SessionLocal
         session = SessionLocal()
         try:
-            return session.query(EventModel).order_by(EventModel.timestamp.desc()).limit(limit).all()
+            query = session.query(EventModel)
+            if source_type:
+                query = query.filter(EventModel.source_type == source_type)
+            return query.order_by(EventModel.timestamp.desc()).limit(limit).all()
+        finally:
+            session.close()
+
+    @staticmethod
+    def honeypot_attacker_ips(window_seconds: int = 3600) -> Set[str]:
+        """IP đã chạm honeypot trong `window_seconds` giây gần nhất (honeypot không có người dùng hợp lệ)."""
+        from services.database import SessionLocal
+        session = SessionLocal()
+        try:
+            since = datetime.utcnow() - timedelta(seconds=window_seconds)
+            rows = (session.query(EventModel.src_ip)
+                    .filter(EventModel.source_type == "HONEYPOT", EventModel.timestamp >= since)
+                    .distinct().all())
+            return {r[0] for r in rows}
+        finally:
+            session.close()
+
+    @staticmethod
+    def get_attackers(limit: int = 20) -> List[Dict[str, Any]]:
+        """Tổng hợp theo IP nguồn: số sự kiện honeypot, số cảnh báo NIDS, lần đầu/cuối thấy."""
+        from services.database import SessionLocal
+        session = SessionLocal()
+        try:
+            hp = func.sum(case((EventModel.source_type == "HONEYPOT", 1), else_=0))
+            rows = (
+                session.query(EventModel.src_ip, hp.label("hp"), func.count(EventModel.id).label("n"),
+                              func.min(EventModel.timestamp).label("first"),
+                              func.max(EventModel.timestamp).label("last"))
+                .group_by(EventModel.src_ip)
+                .order_by(func.count(EventModel.id).desc())
+                .limit(limit)
+                .all()
+            )
+            return [
+                {"src_ip": r.src_ip, "honeypot_events": int(r.hp or 0), "nids_alerts": r.n - int(r.hp or 0),
+                 "first_seen": r.first.isoformat(), "last_seen": r.last.isoformat()}
+                for r in rows
+            ]
         finally:
             session.close()
 

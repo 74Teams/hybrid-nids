@@ -1,7 +1,7 @@
 
 
 from fastapi import APIRouter
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from services.database.repository import EventRepository
 
 router = APIRouter(prefix="/api/alerts", tags=["Alerts"])
@@ -12,6 +12,12 @@ def get_stats() -> Dict[str, Any]:
     return EventRepository.get_stats()
 
 
+@router.get("/attackers")
+def get_attackers(limit: int = 20) -> List[Dict[str, Any]]:
+    """IP tấn công: số sự kiện honeypot và số cảnh báo NIDS của từng IP."""
+    return EventRepository.get_attackers(limit=limit)
+
+
 @router.delete("/")
 def clear_alerts() -> Dict[str, int]:
     """Xoá toàn bộ cảnh báo để bắt đầu lượt demo mới."""
@@ -19,9 +25,9 @@ def clear_alerts() -> Dict[str, int]:
 
 
 @router.get("/")
-def get_alerts(limit: int = 50) -> List[Dict[str, Any]]:
-    """Lấy danh sách các cảnh báo vi phạm gần nhất."""
-    events = EventRepository.get_recent_events(limit=limit)
+def get_alerts(limit: int = 50, source_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Lấy danh sách các cảnh báo gần nhất; lọc theo nguồn bằng source_type=RULE_ENGINE|HONEYPOT."""
+    events = EventRepository.get_recent_events(limit=limit, source_type=source_type)
     return [
         {
             "id": e.id,

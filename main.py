@@ -63,8 +63,42 @@ class DropCounter:
         return None
 
 
+class HoneypotIPCache:
+    """Tập IP đã chạm honeypot, làm mới từ CSDL tối đa một lần mỗi `ttl` giây (honeypot ghi từ process khác)."""
+
+    def __init__(self, ttl: float = 5.0):
+        self.ttl = ttl
+        self._ips: set = set()
+        self._loaded_at: Optional[float] = None
+
+    def __contains__(self, ip: str) -> bool:
+        now = time.monotonic()
+        if self._loaded_at is None or now - self._loaded_at >= self.ttl:
+            self._loaded_at = now  # đặt trước khi truy vấn để CSDL lỗi cũng không bị gọi lại mỗi gói
+            try:
+                self._ips = EventRepository.honeypot_attacker_ips()
+            except Exception as e:
+                logger.error("Không đọc được danh sách IP honeypot: %s", e)
+        return ip in self._ips
+
+
+honeypot_ips = HoneypotIPCache()
+
+
+def enrich_alert(alert_data: dict) -> dict:
+    """IP đã chạm honeypot chắc chắn là attacker: nâng một bậc priority (tối đa P1) và gắn nhãn."""
+    if alert_data.get("source_type", "RULE_ENGINE") != "RULE_ENGINE" or alert_data.get("src_ip") not in honeypot_ips:
+        return alert_data
+    return {
+        **alert_data,
+        "severity": max(1, alert_data.get("severity", 2) - 1),
+        "msg": f"{alert_data.get('msg')} [honeypot-confirmed]",
+    }
+
+
 def handle_alert(alert_data: dict) -> None:
     """Callback khi phát hiện vi phạm: hiện cảnh báo trên terminal rồi lưu vào CSDL."""
+    alert_data = enrich_alert(alert_data)
     severity = alert_data.get("severity", 2)
     alert_counts[severity] += 1
     # Hiện cảnh báo trước khi lưu DB để lỗi CSDL không làm mất cảnh báo trên màn hình
