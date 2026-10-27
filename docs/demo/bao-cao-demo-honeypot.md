@@ -1,6 +1,6 @@
 # Báo cáo demo: Hybrid NIDS kết hợp Honeypot
 
-Demo tấn công thủ công bằng các công cụ thật (curl, hydra, ssh, nmap), không dùng `attacker/attack_demo.py`. Các cột "Kết quả thực tế" để trống, điền sau khi chạy.
+Demo tấn công thủ công bằng các công cụ thật (curl, hydra, ssh, nmap), không dùng `lab/attacker/attack_demo.py`. Các cột "Kết quả thực tế" để trống, điền sau khi chạy.
 
 ## 1. Mục tiêu
 

@@ -34,7 +34,7 @@ services:
       retries: 5
 
   victim_app:
-    build: ./victim
+    build: ./lab/victim
     container_name: nids_victim
     networks:
       nids_isolated_net:
@@ -71,7 +71,7 @@ services:
     image: hybrid-nids-app
     pull_policy: never
     container_name: nids_honeypot_ssh
-    command: python -m honeypot ssh
+    command: python -m nids.honeypot ssh
     network_mode: "service:victim_app"
     depends_on:
       mysql_db:
@@ -92,7 +92,7 @@ services:
     image: hybrid-nids-app
     pull_policy: never
     container_name: nids_honeypot_http
-    command: python -m honeypot http
+    command: python -m nids.honeypot http
     network_mode: "service:victim_app"
     depends_on:
       mysql_db:
@@ -110,7 +110,7 @@ services:
     image: hybrid-nids-app
     pull_policy: never
     container_name: nids_api
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    command: uvicorn nids.api.main:app --host 0.0.0.0 --port 8000
     networks:
       nids_isolated_net:
         ipv4_address: 172.28.0.20
@@ -130,9 +130,9 @@ services:
     restart: unless-stopped
 
   # Máy tấn công: image Kali riêng (nmap, hping3, hydra, ...), chạy
-  #   docker exec -it nids_attacker python attacker/attack_demo.py all
+  #   docker exec -it nids_attacker python lab/attacker/attack_demo.py all
   attacker:
-    build: ./attacker
+    build: ./lab/attacker
     container_name: nids_attacker
     networks:
       nids_isolated_net:

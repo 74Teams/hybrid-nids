@@ -16,4 +16,4 @@ COPY . .
 
 ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "-u", "main.py"]
+CMD ["python", "-u", "-m", "nids.engine"]

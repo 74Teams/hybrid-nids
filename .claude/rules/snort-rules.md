@@ -1,9 +1,8 @@
 ---
 paths:
   - "rules/**/*.rules"
-  - "services/detection/**"
-  - "services/database/repository.py"
-  - "create_demo_pcap.py"
+  - "nids/engine/**"
+  - "nids/db/repository.py"
 ---
 
 # Quy tắc viết rule (Snort 3)
@@ -15,9 +14,8 @@ Mọi rule nằm trong **một file duy nhất**: `rules/local.rules`. Cú pháp
 1. Chọn SID còn trống trong dải của nhóm (bảng SID bên dưới). Đặt rule vào đúng section của nhóm đó, giữ thứ tự SID tăng dần.
 2. Viết rule theo **thứ tự option chuẩn**.
 3. Rule mới: `rev:1`. Sửa rule đã có: **tăng `rev` thêm 1**. Việc tăng `rev` chỉ để ghi nhận rule đã đổi. Thay đổi có hiệu lực sau khi khởi động lại engine.
-4. Thêm test trong `tests/test_diverse_rules_engine.py`: một gói tấn công làm rule bắn, và một gói hợp lệ gần giống mà rule **không** bắn.
-5. Nếu rule thuộc nhóm demo, thêm gói tương ứng vào `create_demo_pcap.py` rồi chạy `python create_demo_pcap.py`. Việc này đổi số gói, nên phải cập nhật số đếm trong `tests/test_packet_decoder_pcap.py`.
-6. Xong khi: `pytest` xanh, và khi nạp file không có dòng `WARNING rules` nào (dòng này nghĩa là lỗi cú pháp, SID trùng hoặc có option bị bỏ qua; đặt `system.log_level: DEBUG` để xem chi tiết từng rule).
+4. Thêm test trong `tests/engine/test_diverse_rules_engine.py`: một gói tấn công làm rule bắn, và một gói hợp lệ gần giống mà rule **không** bắn.
+5. Xong khi: `pytest` xanh, và khi nạp file không có dòng `WARNING rules` nào (dòng này nghĩa là lỗi cú pháp, SID trùng hoặc có option bị bỏ qua; đặt `system.log_level: DEBUG` để xem chi tiết từng rule).
 
 ## Header
 
@@ -35,7 +33,7 @@ alert <proto> <src_ip> <src_port> -> <dst_ip> <dst_port> (<options>)
 
 Engine chưa hỗ trợ danh sách cổng (`[80,443]`), dải cổng (`1:1024`) hay phủ định cổng (`!80`): chúng khớp mọi cổng mà không báo lỗi. Khi cần nhiều cổng, viết mỗi cổng một rule.
 
-`$HTTP_PORTS` được định nghĩa cứng ở hai nơi: `DetectionEngine._match_port` (80, 8080, 8000, 3000, 5000) và `packet_decoder.HTTP_PORTS` (danh sách cổng sẽ được parse HTTP). Thêm cổng HTTP thì sửa cả hai.
+`$HTTP_PORTS` được định nghĩa cứng ở hai nơi: `DetectionEngine._match_port` (80, 8080, 8000, 3000, 5000) và `nids/engine/decoder.py::HTTP_PORTS` (danh sách cổng sẽ được parse HTTP). Thêm cổng HTTP thì sửa cả hai.
 
 ## Thứ tự option chuẩn
 
@@ -64,7 +62,7 @@ Buffer là **sticky**: viết tên buffer **trước** các content/pcre, và m�
 | `http_client_body` | body của request |
 | `http_method` | method (`GET`, `POST`...) |
 
-Rule có buffer `http_*` thêm `service:http;`. Buffer `http_*` chỉ có khi gói tin tới cổng trong `packet_decoder.HTTP_PORTS`. Vì `http_uri` chưa được URL-decode, pcre trên URI phải tự bao cả dạng encode, ví dụ `[\s+]` cho khoảng trắng và `(=|%3d)` cho dấu bằng.
+Rule có buffer `http_*` thêm `service:http;`. Buffer `http_*` chỉ có khi gói tin tới cổng trong `nids/engine/decoder.py::HTTP_PORTS`. Vì `http_uri` chưa được URL-decode, pcre trên URI phải tự bao cả dạng encode, ví dụ `[\s+]` cho khoảng trắng và `(=|%3d)` cho dấu bằng.
 
 ## Option được hỗ trợ
 
@@ -99,7 +97,7 @@ Dùng `priority` để đặt mức độ. Cú pháp Snort 2 không được h�
 - **Fast pattern** là content dài nhất của rule (hoặc content có `fast_pattern`), dùng để lọc nhanh bằng Aho-Corasick. Hãy chọn content dài và đặc trưng nhất. Rule chỉ có pcre hoặc chỉ có content ngắn sẽ bị đánh giá trên mọi gói, nên ghép thêm một content.
 - **Neo vị trí** khi biết chỗ chuỗi xuất hiện: `depth` cho banner hoặc lệnh ở đầu payload (`content:"SSH-2.0",depth 7`), và `distance`/`within` cho content thứ hai đứng sau content thứ nhất.
 - **Phát hiện dựa trên tần suất** (flood, brute force) dùng `detection_filter`, để một gói hợp lệ đơn lẻ không gây cảnh báo.
-- **Đặc trưng phải là của giao thức hoặc tấn công thật** (opcode, cấu trúc gói, `itype`, `dsize`), không phải chuỗi tự đặt chỉ có trong pcap demo.
+- **Đặc trưng phải là của giao thức hoặc tấn công thật** (opcode, cấu trúc gói, `itype`, `dsize`), không phải chuỗi tự đặt chỉ có trong gói demo.
 
 ## SID
 
@@ -121,4 +119,4 @@ Mỗi SID chỉ xuất hiện một lần. Nếu trùng, parser giữ rule nạp
 - `flow:established` được xấp xỉ: gói TCP có ACK và không có SYN. `to_server`/`from_server` chưa được kiểm tra.
 - Các content trong một buffer được khớp tham lam theo thứ tự, không quay lui. Hãy viết content theo đúng thứ tự xuất hiện trong dữ liệu.
 - Chưa có tái hợp luồng TCP: content bị chia qua hai gói sẽ không khớp.
-- `detection_filter` đếm theo `packet.timestamp`, nên khi replay pcap, các gói phải có timestamp nằm trong cửa sổ `seconds`.
+- `detection_filter` đếm theo `packet.timestamp`, nên trong test các gói dựng sẵn phải có timestamp nằm trong cửa sổ `seconds`.

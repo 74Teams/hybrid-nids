@@ -27,8 +27,6 @@ ENV/
 *.db
 *.sqlite3
 
-# PCAP captures (large sample files)
-# pcap_samples/*.pcap
 
 # IDE
 .vscode/

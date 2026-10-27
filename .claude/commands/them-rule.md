@@ -1,5 +1,5 @@
 ---
-description: Thêm một rule phát hiện kiểu Snort vào rules/local.rules kèm test positive/negative và wiring demo pcap. Dùng khi cần phát hiện một dấu hiệu tấn công mới.
+description: Thêm một rule phát hiện kiểu Snort vào rules/local.rules kèm test positive/negative. Dùng khi cần phát hiện một dấu hiệu tấn công mới.
 argument-hint: <mô tả tấn công cần phát hiện>
 ---
 
@@ -26,7 +26,7 @@ Bạn đang thêm một rule phát hiện cho dự án NIDS này. Tuân thủ đ
    - **Chỉ dùng option có trong bảng "Option được hỗ trợ".** Nếu dấu hiệu bắt buộc cần một option chưa hỗ trợ (`byte_test`, `isdataat`, `threshold`, `http_method:"..."`, `severity:`, `nocase;` đứng riêng, pcre flag `R`, danh sách/dải/phủ định cổng...) → **DỪNG và báo rõ option còn thiếu**, không tự chế hay xấp xỉ bằng cách sai.
    - Chọn fast pattern tốt: một `content` dài, đặc trưng. Rule TCP có content thêm `flow:to_server,established`; rule chỉ xét cờ TCP dùng `flow:stateless`. Rule `http_*` thêm `service:http;`.
 
-4. **Thêm test** vào `tests/test_diverse_rules_engine.py`, đặt trong section nhóm tương ứng, dùng helper sẵn có (`make_http_packet`, `make_tcp_packet`, `make_udp_packet`, `make_icmp_packet`) và fixture `real_engine`. Thêm **hai** hàm test:
+4. **Thêm test** vào `tests/engine/test_diverse_rules_engine.py`, đặt trong section nhóm tương ứng, dùng helper sẵn có (`make_http_packet`, `make_tcp_packet`, `make_udp_packet`, `make_icmp_packet`) và fixture `real_engine`. Thêm **hai** hàm test:
    - Positive — gói KHỚP:
      ```python
      def test_<ten_ngan>(real_engine):
@@ -42,26 +42,20 @@ Bạn đang thêm một rule phát hiện cho dự án NIDS này. Tuân thủ đ
      ```
    - Đọc **giá trị trả về** của `evaluate_packet` (list `SnortRule`, dùng `r.sid`) — không dùng alert callback.
 
-5. **Wiring demo pcap.** Thêm một gói tấn công tương ứng vào `create_demo_pcap.py`:
-   - Dựng inline bằng Scapy đúng kiểu file đang dùng: `IP(src=..., dst="10.0.0.5")/TCP(flags="PA", seq=..., ack=1)/Raw(load=b"...HTTP...\r\n\r\n...")` (UDP/ICMP thì theo mẫu các gói cùng loại trong file). Attacker đặt IP `192.168.1.x` theo quy ước nhóm; victim luôn `10.0.0.5`.
-   - Chạy `python create_demo_pcap.py` để sinh lại `pcap_samples/demo_attacks.pcap`.
-   - Cập nhật số đếm trong `tests/test_packet_decoder_pcap.py`: tăng tổng số gói (hiện `39`); nếu gói mới là HTTP và tới cổng thuộc `HTTP_PORTS` (`{80,8080,8000,3000,5000,443}`) thì tăng cả số gói HTTP (hiện `14`).
-   - Thêm SID mới vào danh sách assert trong `tests/test_all_rules_pcap_integration.py` nếu muốn pcap tích hợp bao phủ rule này.
-
-6. **Chạy test** (có thể giao cho subagent `general-purpose`; repo **không** có subagent `test-runner`):
+5. **Chạy test** (có thể giao cho subagent `general-purpose`; repo **không** có subagent `test-runner`):
    ```
-   pytest tests/test_diverse_rules_engine.py tests/test_packet_decoder_pcap.py tests/test_all_rules_pcap_integration.py tests/test_rule_loading.py
+   pytest tests/engine/test_diverse_rules_engine.py tests/engine/test_rule_loading.py
    ```
    Và xác nhận khi nạp ruleset **không** có dòng `WARNING rules` (đặt `system.log_level: DEBUG` trong `config/settings.yaml` để xem chi tiết nếu nghi ngờ). `WARNING rules` nghĩa là lỗi cú pháp, SID trùng, hoặc có option bị bỏ qua.
 
-7. **Báo lại** ngắn gọn: rule đã thêm (dán nguyên dòng rule), lý do chọn từng option chính (buffer, content/pcre, flow, detection_filter...), SID và nhóm, các file đã sửa, và kết quả `pytest`.
+6. **Báo lại** ngắn gọn: rule đã thêm (dán nguyên dòng rule), lý do chọn từng option chính (buffer, content/pcre, flow, detection_filter...), SID và nhóm, các file đã sửa, và kết quả `pytest`.
 
 ## Giới hạn engine phải nhớ khi sinh rule/test
 
 Viết sai những điểm này thì rule/test sẽ không khớp dù cú pháp đúng:
 - **Không tái hợp luồng TCP** — toàn bộ content của một rule phải nằm trong **một** gói. Dựng payload test đầy đủ trong một packet.
 - `flow:established` được xấp xỉ là "gói TCP có ACK và không có SYN"; `to_server`/`from_server` **không** được kiểm tra.
-- `detection_filter` đếm theo `packet.timestamp` → khi replay pcap, các gói phải có timestamp nằm trong cửa sổ `seconds`.
+- `detection_filter` đếm theo `packet.timestamp` → trong test các gói dựng sẵn phải có timestamp nằm trong cửa sổ `seconds`.
 - **IP không được so khớp** (mọi IP coi như `any`); **không** hỗ trợ danh sách cổng `[80,443]`, dải `1:1024`, hay phủ định `!80` (chúng khớp mọi cổng mà không báo lỗi).
 - Buffer `http_*` chỉ tồn tại khi gói tới cổng thuộc `HTTP_PORTS` (`{80,8080,8000,3000,5000,443}`); `http_uri` **chưa** URL-decode (`%3D` vẫn là `%3D`, `+` vẫn là `+`) — pcre trên URI phải tự bao cả dạng encode.
 - Content trong **một** buffer khớp tham lam theo thứ tự, không quay lui — viết content theo đúng thứ tự xuất hiện trong dữ liệu; dùng `distance`/`within` cho content đứng sau.
