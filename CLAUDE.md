@@ -11,8 +11,7 @@ Hybrid NIDS + honeypot (đồ án PBL4): hệ thống phát hiện xâm nhập m
 ```bash
 pip install -r requirements.txt
 
-python create_demo_pcap.py        # tạo lại pcap_samples/demo_attacks.pcap
-python main.py                    # chạy engine capture + detection (offline hoặc live, theo settings.yaml)
+python main.py                    # chạy engine capture + detection (live hoặc offline, theo settings.yaml)
 python -m honeypot ssh            # honeypot SSH (cổng 2222); `python -m honeypot http` cho honeypot HTTP (cổng 8080)
 uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload   # API tra cứu alert (Swagger tại /docs)
 
@@ -33,8 +32,8 @@ Các **process riêng biệt** (engine, API, mỗi honeypot một process) dùng
 
 ### Logging
 
-- Cấu hình ở `config/logger.py` (`setup_logging`, `ColorFormatter`), gọi một lần ở `main.py`, `api/main.py` và `create_demo_pcap.py`. Mức độ lấy từ `system.log_level` trong `settings.yaml` (mặc định `INFO`, `DEBUG` để xem chi tiết). Màu tự tắt khi đầu ra không phải terminal hoặc có biến môi trường `NO_COLOR`.
-- Mỗi module dùng `logging.getLogger("nids.<khu vực>")`, không dùng `print`. Khu vực: `engine` (`main.py`, `ids_realtime.py`), `alert` (dòng cảnh báo trong `main.py`), `rules` (`manager_rules.py`), `db`, `capture`, `api`, `pcap`, `attack` (`attacker/attack_demo.py`).
+- Cấu hình ở `config/logger.py` (`setup_logging`, `ColorFormatter`), gọi một lần ở `main.py`, và `api/main.py`. Mức độ lấy từ `system.log_level` trong `settings.yaml` (mặc định `INFO`, `DEBUG` để xem chi tiết). Màu tự tắt khi đầu ra không phải terminal hoặc có biến môi trường `NO_COLOR`.
+- Mỗi module dùng `logging.getLogger("nids.<khu vực>")`, không dùng `print`. Khu vực: `engine` (`main.py`, `ids_realtime.py`), `alert` (dòng cảnh báo trong `main.py`), `rules` (`manager_rules.py`), `db`, `capture`, `api`, `attack` (`attacker/attack_demo.py`).
 - Cảnh báo mang `extra={"priority": n}` để formatter tô màu theo priority (P1 đỏ, P2 vàng, P3 xanh dương).
 
 ### Detection engine (`services/detection/`)
@@ -53,12 +52,12 @@ IP đã chạm honeypot (trong 1 giờ gần nhất) chắc chắn là attacker.
 
 - `config/settings.yaml` được load một lần lúc import vào `config.config.SETTINGS`. `get_db_url()` dựng URL từ mục `database`, và các biến môi trường `NIDS_DB_HOST/PORT/NAME/USER/PASSWORD` sẽ ghi đè (docker-compose dựa vào điều này). `type: sqlite` dùng `db_url`.
 - `init_db()` thử lại tối đa 15 lần, mỗi lần cách 2s, vì MySQL khởi động chậm trong Docker.
-- `settings.yaml` đã commit mặc định dùng `capture_mode: "live"`, interface `eth0` và IP MySQL của Docker; khi chạy local thì chuyển sang `offline` và/hoặc `sqlite`.
+- `settings.yaml` đã commit mặc định dùng `capture_mode: "live"`, interface `eth0` và IP MySQL của Docker; khi chạy local thì chuyển sang `sqlite` (và `offline` kèm `pcap_file` nếu có file pcap riêng).
 - Trong Docker, `honeypot_ssh` và `honeypot_http` cũng dùng `network_mode: service:victim_app` (cổng 2222 và 8080; 8080 nằm trong `HTTP_PORTS` nên rule web áp dụng luôn), nên cùng một đòn vừa sinh cảnh báo rule vừa sinh sự kiện honeypot. `nids_engine` dùng `network_mode: service:victim_app` để sniff traffic của victim, và mount repo vào `/app`. `nids_api` (API + dashboard) cố ý chạy ở network riêng để request poll của dashboard không bị engine sniff nhầm. `network.bpf_filter` loại port 3306: engine thấy cả kết nối ghi alert vào MySQL, nếu không loại thì câu INSERT chứa chuỗi tấn công sẽ sinh alert mới (vòng lặp).
 
 ### Test
 
-Test khởi tạo `DetectionEngine` trực tiếp (thường với `enable_threshold=False`) và hoặc replay `pcap_samples/demo_attacks.pcap`, hoặc tự dựng các `DecodedPacket`. Test pcap kiểm tra các SID cụ thể và số packet (39), nên tạo lại pcap hoặc sửa rule có thể làm test fail. `tests/test_rule_parser.py` kiểm tra parser và ngữ nghĩa từng option.
+Test khởi tạo `DetectionEngine` trực tiếp (thường với `enable_threshold=False`) và tự dựng các `DecodedPacket`. `tests/test_rule_parser.py` kiểm tra parser và ngữ nghĩa từng option.
 
 ## Rule
 

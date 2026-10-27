@@ -66,7 +66,7 @@ def test_alert_shown_even_if_db_fails(monkeypatch, caplog):
 
 
 def test_no_print_calls_left():
-    files = [ROOT / "main.py", ROOT / "create_demo_pcap.py"]
+    files = [ROOT / "main.py"]
     for folder in ("api", "config", "services"):
         files += (ROOT / folder).rglob("*.py")
     offenders = []

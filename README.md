@@ -33,7 +33,7 @@
 
 ## Description
 
-Hybrid NIDS sniffs traffic live from a network interface or replays a `.pcap` file. It decodes every packet from L2 up to HTTP (L7) and matches it against a set of Snort 3–syntax rules. Matching is fast because an Aho-Corasick prefilter scans each payload once, so only rules whose patterns actually appear get the full check.
+Hybrid NIDS sniffs traffic live from a network interface. It decodes every packet from L2 up to HTTP (L7) and matches it against a set of Snort 3–syntax rules. Matching is fast because an Aho-Corasick prefilter scans each payload once, so only rules whose patterns actually appear get the full check.
 
 Signatures only catch attacks that are already known. To cover more, the system runs SSH and HTTP honeypots that write into the same database. Nobody legitimate ever touches a honeypot, so any IP that does is a confirmed attacker. Rule alerts from those IPs are raised one priority level and tagged `[honeypot-confirmed]`.
 
@@ -54,7 +54,7 @@ flowchart LR
     end
 
     subgraph engine["NIDS engine (main.py)"]
-        cap["PacketCapture<br/>Scapy live / pcap"] --> dec["PacketDecoder<br/>L2–L4 + HTTP L7"]
+        cap["PacketCapture<br/>Scapy live"] --> dec["PacketDecoder<br/>L2–L4 + HTTP L7"]
         dec --> q[["Bounded queue"]]
         q --> det["DetectionEngine<br/>demux → Aho-Corasick → rule checks → threshold"]
         det --> enrich["handle_alert<br/>honeypot enrichment"]
@@ -75,7 +75,7 @@ The engine, the API and each honeypot run as **separate processes** and talk to 
 ## Features
 
 **Detection engine**
-- Live capture (promiscuous mode) or offline pcap replay with Scapy
+- Live packet capture in promiscuous mode with Scapy
 - Packet decoding for IP/TCP/UDP/ICMP (including TCP flags) and HTTP request parsing (method, URI, headers, body)
 - Snort 3 rule parser: sticky buffers (`http_uri`, `http_header`, `http_client_body`, `http_method`), comma modifiers (`nocase`, `depth`, `offset`, `distance`, `within`), `pcre`, `flags`, `flow`, `dsize`, `itype`/`icode`, `detection_filter`
 - Four-stage matching funnel: protocol/port demux → Aho-Corasick prefilter (one matcher per buffer) → detailed option checks → `ThresholdManager` to stop alert storms
@@ -130,7 +130,7 @@ The engine, the API and each honeypot run as **separate processes** and talk to 
 ## Prerequisites
 
 - **Python 3.10 or newer** and `pip`
-- **Packet capture driver** (only for live capture):
+- **Packet capture driver**:
   - Windows: [Npcap](https://npcap.com/#download), installed with *"WinPcap API-compatible Mode"*
   - Linux: `libpcap`, e.g. `sudo apt install -y libpcap-dev`
 - **Database**: nothing extra for SQLite. For MySQL you need MySQL 8 and an empty database:
@@ -150,7 +150,7 @@ cd intrusion-detection-system
 pip install -r requirements.txt
 ```
 
-Then edit `config/settings.yaml`. The committed defaults target the Docker lab (live capture on `eth0`, MySQL at `172.28.0.10`). For a quick local run, switch to offline replay and SQLite:
+Then edit `config/settings.yaml`. The committed defaults target the Docker lab (live capture on `eth0`, MySQL at `172.28.0.10`). For a local run, point `interface` at your network card and switch to SQLite:
 
 ```yaml
 system:
@@ -159,8 +159,7 @@ system:
 network:
   interface: ""                # empty = default interface
   bpf_filter: "ip and not port 3306"
-  capture_mode: "offline"      # "offline" (pcap replay) or "live"
-  pcap_file: "pcap_samples/demo_attacks.pcap"
+  capture_mode: "live"
 
 detection:
   rules_dir: "rules"
@@ -183,16 +182,9 @@ The `NIDS_DB_HOST`, `NIDS_DB_PORT`, `NIDS_DB_NAME`, `NIDS_DB_USER` and `NIDS_DB_
 
 ## Usage
 
-### 1. Offline demo (no admin rights needed)
+### 1. Live sniffing
 
-```bash
-python create_demo_pcap.py      # generates pcap_samples/demo_attacks.pcap (39 packets)
-python main.py                  # replays the pcap through the engine and stores alerts
-```
-
-### 2. Live sniffing
-
-Set `capture_mode: "live"` (and `interface` if needed) in `config/settings.yaml`, then run from an elevated shell:
+Set `interface` in `config/settings.yaml` if needed, then run from an elevated shell:
 
 ```bash
 python main.py
@@ -200,7 +192,7 @@ python main.py
 
 Alerts are printed as colour-coded log lines (P1 red, P2 yellow, P3 blue). Set `NO_COLOR=1` to turn the colours off.
 
-### 3. Web console and API
+### 2. Web console and API
 
 ```bash
 uvicorn api.main:app --host 0.0.0.0 --port 8000
@@ -228,14 +220,14 @@ Main endpoints:
 | `GET` | `/api/rules/` | Loaded rules (read-only) |
 | `GET` | `/health` | Health check |
 
-### 4. Honeypots
+### 3. Honeypots
 
 ```bash
 python -m honeypot ssh          # SSH honeypot on port 2222
 python -m honeypot http         # HTTP honeypot on port 8080
 ```
 
-### 5. Adding or changing rules
+### 4. Adding or changing rules
 
 All rules live in `rules/local.rules`, written in Snort 3 syntax:
 
@@ -245,7 +237,7 @@ alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK SQL Injection - UNION SELE
 
 Pick a free SID in the right group's range, add a positive and a negative test plus a demo attack in `attacker/attack_demo.py`, then restart the engine. Rules are loaded only at startup. The full authoring guide is in [`.claude/rules/snort-rules.md`](.claude/rules/snort-rules.md).
 
-### 6. Running the tests
+### 5. Running the tests
 
 ```bash
 pytest

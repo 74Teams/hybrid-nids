@@ -106,12 +106,6 @@ Bảng dưới gõ trực tiếp trong container attacker (`docker exec -it nids
 
 ## 3. Phương án dự phòng
 
-**Docker không chạy được.** Chạy thẳng trên Windows, không cần quyền Admin:
-
-1. Sửa `config/settings.yaml`: `capture_mode: "offline"`, `database.type: "sqlite"`.
-2. `python main.py` (replay `pcap_samples/demo_attacks.pcap`: 39 gói, 25 cảnh báo).
-3. `uvicorn api.main:app --port 8000` rồi mở [http://localhost:8000/](http://localhost:8000/).
-
 **Dashboard trống dù đã tấn công.** Kiểm tra theo thứ tự: `docker logs nids_engine` có hiện cảnh báo không (nếu có mà dashboard trống thì lỗi nằm ở MySQL hoặc API); `docker compose ps` cả năm container phải `running`; `curl http://localhost:8000/health`.
 
 **Engine báo không lưu được vào CSDL.** MySQL khởi động chậm; đợi thêm và chạy `docker compose restart nids_engine`.
