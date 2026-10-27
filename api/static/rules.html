@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hybrid NIDS Rules</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <a class="brand" href="/">Hybrid<b>NIDS</b></a>
+  <ul class="menu">
+    <li><span tabindex="0">Services</span><ul><li><a href="/rules">Rules</a></li></ul></li>
+    <li><span tabindex="0">Status</span><ul><li><a href="/">Dashboard</a></li><li><a href="/logs">System Logs</a></li></ul></li>
+  </ul>
+  <span class="status"><span id="dot" class="dot"></span><span id="status">Đang kết nối…</span></span>
+</nav>
+<div class="crumb-wrap"><div class="breadcrumb"><a href="/rules">Services</a><span class="sep">/</span><a href="/rules">NIDS</a><span class="sep">/</span><span class="cur">Rules</span></div></div>
+<main>
+  <section class="panel">
+    <h2>Nhóm rule</h2>
+    <div class="panel-body">
+      <div class="form-row"><label for="group">Nhóm</label><select id="group"></select></div>
+      <div class="form-row"><label for="q">Tìm kiếm</label><input id="q" placeholder="SID, mô tả hoặc classtype"></div>
+      <div class="actions"><span class="grow"></span><button type="button" id="all" class="btn-success">Xem tất cả</button></div>
+      <p class="note">Rule được đọc từ <b>rules/local.rules</b>. Trang này chỉ để xem; muốn thêm hoặc sửa rule, sửa file rồi khởi động lại engine.</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><span class="grow" id="title">Rules</span></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>SID</th><th>Proto</th><th>Src</th><th>SPort</th><th>Dst</th><th>DPort</th><th>Pri</th><th>Classtype</th><th>Mô tả</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="empty" class="empty">Không có rule nào khớp.</div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let rules = [];
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined && text !== null) e.textContent = text;
+  return e;
+}
+function priIcon(sev) {
+  const ns = "http://www.w3.org/2000/svg";
+  const s = document.createElementNS(ns, "svg");
+  s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("class", "pri p" + sev);
+  const t = document.createElementNS(ns, "title"); t.textContent = "P" + sev;
+  const p = document.createElementNS(ns, "path"); p.setAttribute("d", "M12 2 1 21h22zM11 10h2v5h-2zm0 6h2v2h-2z");
+  s.append(t, p);
+  return s;
+}
+
+function render() {
+  const g = $("group").value, q = $("q").value.trim().toLowerCase();
+  const list = rules.filter((r) => (!g || r.group === g) &&
+    (!q || String(r.sid).includes(q) || r.msg.toLowerCase().includes(q) || r.classtype.toLowerCase().includes(q)));
+  $("title").textContent = `Rules (${list.length}/${rules.length})`;
+  $("empty").style.display = list.length ? "none" : "block";
+  const body = $("rows");
+  body.replaceChildren();
+  for (const r of list) {
+    const sev = [1, 2, 3].includes(r.severity) ? r.severity : 2;
+    const tr = el("tr", "clickable");
+    tr.id = "sid-" + r.sid;
+    const pri = el("td"); pri.append(priIcon(sev));
+    const log = el("a", "btn", "Xem log"); log.href = "/logs?sid=" + r.sid;
+    log.addEventListener("click", (e) => e.stopPropagation());
+    const logCell = el("td", "nw"); logCell.append(log);
+    const desc = el("td", "msg", r.msg);
+    if (r.unsupported_options.length) desc.append(el("span", "sub", "⚠ option chưa hỗ trợ: " + r.unsupported_options.join(", ")));
+    tr.append(el("td", "nw", r.sid), el("td", "", r.protocol.toUpperCase()), el("td", "", r.src_ip), el("td", "", r.src_port),
+      el("td", "", r.dst_ip), el("td", "", r.dst_port), pri, el("td", "", r.classtype), desc, logCell);
+    const detail = el("tr");
+    detail.hidden = true;
+    const cell = el("td"); cell.colSpan = 10; cell.append(el("pre", "", r.raw_rule));
+    detail.append(cell);
+    tr.addEventListener("click", () => { detail.hidden = !detail.hidden; });
+    body.append(tr, detail);
+  }
+  focusHash();
+}
+
+// /rules#sid=1000001: cuộn tới, tô sáng và mở sẵn rule đó
+function focusHash() {
+  const m = location.hash.match(/^#sid=(\d+)/);
+  const row = m && $("sid-" + m[1]);
+  if (!row) return;
+  row.classList.add("hl");
+  row.nextElementSibling.hidden = false;
+  row.scrollIntoView({ block: "center" });
+}
+
+async function init() {
+  try {
+    const r = await fetch("/api/rules/");
+    if (!r.ok) throw new Error(r.status);
+    rules = await r.json();
+    $("status").textContent = "Đã kết nối"; $("dot").className = "dot ok";
+  } catch (e) {
+    $("status").textContent = "Mất kết nối tới API";
+  }
+  const groups = [...new Set(rules.map((r) => r.group))];
+  $("group").append(new Option("Tất cả", ""));
+  for (const g of groups) $("group").append(new Option(`${g} (${rules.filter((r) => r.group === g).length})`, g));
+  render();
+}
+
+$("group").addEventListener("change", render);
+$("q").addEventListener("input", render);
+$("all").addEventListener("click", () => { $("group").value = ""; $("q").value = ""; render(); });
+init();
+</script>
+</body>
+</html>

@@ -43,14 +43,71 @@ class EventRepository:
             session.close()
 
     @staticmethod
-    def get_recent_events(limit: int = 50, source_type: Optional[str] = None) -> List[EventModel]:
+    def _apply_filters(query, source_type: Optional[str] = None, protocol: Optional[str] = None,
+                       src_ip: Optional[str] = None, dst_ip: Optional[str] = None, sid: Optional[int] = None,
+                       severity: Optional[int] = None, since: Optional[datetime] = None,
+                       until: Optional[datetime] = None, q: Optional[str] = None):
+        """Áp bộ lọc trang Logs; tham số None nghĩa là không lọc theo trường đó."""
+        if source_type:
+            query = query.filter(EventModel.source_type == source_type)
+        if protocol:
+            query = query.filter(func.lower(EventModel.protocol) == protocol.lower())
+        if src_ip:
+            query = query.filter(EventModel.src_ip == src_ip)
+        if dst_ip:
+            query = query.filter(EventModel.dst_ip == dst_ip)
+        if sid is not None:
+            query = query.filter(EventModel.sid == sid)
+        if severity is not None:
+            query = query.filter(EventModel.severity == severity)
+        if since:
+            query = query.filter(EventModel.timestamp >= since)
+        if until:
+            query = query.filter(EventModel.timestamp <= until)
+        if q:
+            query = query.filter(EventModel.summary.contains(q))
+        return query
+
+    @staticmethod
+    def get_recent_events(limit: int = 50, source_type: Optional[str] = None, offset: int = 0,
+                          **filters) -> List[EventModel]:
         from services.database import SessionLocal
         session = SessionLocal()
         try:
-            query = session.query(EventModel)
-            if source_type:
-                query = query.filter(EventModel.source_type == source_type)
-            return query.order_by(EventModel.timestamp.desc()).limit(limit).all()
+            query = EventRepository._apply_filters(session.query(EventModel), source_type=source_type, **filters)
+            return query.order_by(EventModel.timestamp.desc(), EventModel.id.desc()).offset(offset).limit(limit).all()
+        finally:
+            session.close()
+
+    @staticmethod
+    def count_events(**filters) -> int:
+        from services.database import SessionLocal
+        session = SessionLocal()
+        try:
+            return EventRepository._apply_filters(session.query(func.count(EventModel.id)), **filters).scalar() or 0
+        finally:
+            session.close()
+
+    @staticmethod
+    def get_payload(event_id: int) -> Optional[Dict[str, Any]]:
+        """Payload thô của một sự kiện (None nếu sự kiện không có payload)."""
+        from services.database import SessionLocal
+        session = SessionLocal()
+        try:
+            p = session.query(EventPayloadModel).filter(EventPayloadModel.event_id == event_id).first()
+            if p is None:
+                return None
+            return {"matched_content": p.matched_content, "http_headers": p.http_headers,
+                    "http_body": p.http_body, "packet_raw_hex": p.packet_raw_hex}
+        finally:
+            session.close()
+
+    @staticmethod
+    def get_event(event_id: int) -> Optional[EventModel]:
+        from services.database import SessionLocal
+        session = SessionLocal()
+        try:
+            return session.get(EventModel, event_id)
         finally:
             session.close()
 
@@ -93,6 +150,25 @@ class EventRepository:
             session.close()
 
     @staticmethod
+    def get_timeline(minutes: int = 60, buckets: int = 30) -> Dict[str, Any]:
+        """Số cảnh báo NIDS / honeypot trong `minutes` phút gần nhất, chia đều thành `buckets` cột (cột trống = 0)."""
+        from services.database import SessionLocal
+        step = minutes * 60 / buckets
+        start = datetime.now() - timedelta(minutes=minutes)  # timestamp lưu giờ máy (datetime.fromtimestamp)
+        session = SessionLocal()
+        try:
+            rows = (session.query(EventModel.timestamp, EventModel.source_type)
+                    .filter(EventModel.timestamp >= start).all())
+        finally:
+            session.close()
+        cols = [{"t": (start + timedelta(seconds=i * step)).isoformat(timespec="seconds"), "nids": 0, "honeypot": 0}
+                for i in range(buckets)]
+        for ts, source in rows:
+            i = min(int((ts - start).total_seconds() // step), buckets - 1)
+            cols[i]["honeypot" if source == "HONEYPOT" else "nids"] += 1
+        return {"step_seconds": step, "buckets": cols}
+
+    @staticmethod
     def get_stats(top: int = 8) -> Dict[str, Any]:
         """Thống kê cho dashboard: tổng cảnh báo, số cảnh báo theo priority và top loại tấn công."""
         from services.database import SessionLocal
@@ -118,13 +194,34 @@ class EventRepository:
             session.close()
 
     @staticmethod
-    def clear_events() -> int:
-        """Xoá toàn bộ cảnh báo (dùng để reset giữa các lượt demo); trả về số cảnh báo đã xoá."""
+    def delete_event(event_id: int) -> bool:
+        """Xoá một cảnh báo cùng payload của nó; False nếu không có."""
         from services.database import SessionLocal
         session = SessionLocal()
         try:
-            session.query(EventPayloadModel).delete()
-            deleted = session.query(EventModel).delete()
+            session.query(EventPayloadModel).filter(EventPayloadModel.event_id == event_id).delete()
+            deleted = session.query(EventModel).filter(EventModel.id == event_id).delete()
+            session.commit()
+            return bool(deleted)
+        finally:
+            session.close()
+
+    @staticmethod
+    def clear_events(**filters) -> int:
+        """Xoá cảnh báo khớp bộ lọc (không lọc = xoá hết, dùng reset giữa các lượt demo); trả về số đã xoá."""
+        from services.database import SessionLocal
+        session = SessionLocal()
+        try:
+            if not any(v is not None for v in filters.values()):
+                session.query(EventPayloadModel).delete()
+                deleted = session.query(EventModel).delete()
+                session.commit()
+                return deleted
+            ids = [r[0] for r in EventRepository._apply_filters(session.query(EventModel.id), **filters)]
+            if not ids:
+                return 0
+            session.query(EventPayloadModel).filter(EventPayloadModel.event_id.in_(ids)).delete(synchronize_session=False)
+            deleted = session.query(EventModel).filter(EventModel.id.in_(ids)).delete(synchronize_session=False)
             session.commit()
             return deleted
         finally:

@@ -10,8 +10,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
-from api.routes import alerts
+from api.routes import alerts, rules
 from config.logger import setup_logging
 
 logger = logging.getLogger("nids.api")
@@ -63,17 +64,31 @@ app.add_middleware(
 # ─────────────────────────────────────────────────────────────
 
 app.include_router(alerts.router)
+app.include_router(rules.router)
 
-DASHBOARD_FILE = Path(__file__).parent / "static" / "dashboard.html"
+STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/", include_in_schema=False)
 def dashboard():
     """Trang dashboard theo dõi cảnh báo theo thời gian thực."""
-    return FileResponse(DASHBOARD_FILE)
+    return FileResponse(STATIC_DIR / "dashboard.html")
+
+
+@app.get("/logs", include_in_schema=False)
+def logs_page():
+    """Trang Status › Logs: lọc, xem chi tiết, xoá và xuất CSV sự kiện."""
+    return FileResponse(STATIC_DIR / "logs.html")
 
 
 @app.get("/health", tags=["System"])
 def health_check():
     """Kiểm tra trạng thái server."""
     return {"status": "ok", "service": "NIDS_API"}
+
+
+@app.get("/rules", include_in_schema=False)
+def rules_page():
+    """Trang Services › Rules: xem (chỉ đọc) tập rule đang nạp từ rules/."""
+    return FileResponse(STATIC_DIR / "rules.html")

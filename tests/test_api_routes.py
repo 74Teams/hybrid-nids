@@ -4,10 +4,11 @@ from sqlalchemy.orm import Session
 from services.database.models import Base, EventModel
 
 
-def test_no_rules_routes_remain():
+def test_rules_api_is_read_only():
     from api.main import app
-    paths = list(app.openapi()["paths"])
-    assert not any(p.startswith("/api/rules") for p in paths)
+    paths = app.openapi()["paths"]
+    rule_paths = {p: set(ops) for p, ops in paths.items() if p.startswith("/api/rules")}
+    assert rule_paths == {"/api/rules/": {"get"}}
     assert "/api/alerts/" in paths
     assert "/health" in paths
 

@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hybrid NIDS Logs</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="navbar">
+  <a class="brand" href="/">Hybrid<b>NIDS</b></a>
+  <ul class="menu">
+    <li><span tabindex="0">Services</span><ul><li><a href="/rules">Rules</a></li></ul></li>
+    <li><span tabindex="0">Status</span><ul><li><a href="/">Dashboard</a></li><li><a href="/logs">System Logs</a></li></ul></li>
+  </ul>
+  <span class="status"><span id="dot" class="dot"></span><span id="status">Đang kết nối…</span></span>
+</nav>
+<div class="crumb-wrap"><div class="breadcrumb"><a href="/">Status</a><span class="sep">/</span><a href="/logs">System Logs</a><span class="sep">/</span><span class="cur" id="crumb">Tất cả</span></div></div>
+<main>
+  <nav class="tabs" id="tabs">
+    <a href="#all">Tất cả</a>
+    <a href="#nids">NIDS</a>
+    <a href="#ssh">Honeypot SSH</a>
+    <a href="#http">Honeypot HTTP</a>
+  </nav>
+
+  <section class="panel">
+    <div class="panel-head"><span class="grow">Bộ lọc log</span>
+      <button type="button" class="toggle" id="toggle" aria-expanded="false" aria-controls="filter" title="Mở / thu gọn">⊕</button></div>
+    <form class="panel-body" id="filter" hidden>
+      <div class="form-cols">
+        <div>
+          <div class="form-row"><label for="f-src">IP nguồn</label><input id="f-src" name="src_ip" placeholder="vd. 172.28.0.100"></div>
+          <div class="form-row"><label for="f-dst">IP đích</label><input id="f-dst" name="dst_ip"></div>
+          <div class="form-row"><label for="f-sid">SID</label><input id="f-sid" name="sid" type="number" min="0"></div>
+          <div class="form-row"><label for="f-q">Từ khoá</label><input id="f-q" name="q" placeholder="trong phần mô tả, vd. SQL"></div>
+        </div>
+        <div>
+          <div class="form-row"><label for="f-sev">Priority</label><select id="f-sev" name="severity"><option value="">Tất cả</option><option value="1">P1 – Nghiêm trọng</option><option value="2">P2 – Trung bình</option><option value="3">P3 – Thấp</option></select></div>
+          <div class="form-row"><label for="f-proto">Protocol</label><select id="f-proto" name="protocol"><option value="">Tất cả</option><option>TCP</option><option>UDP</option><option>ICMP</option><option value="ssh">SSH (honeypot)</option><option value="http">HTTP (honeypot)</option></select></div>
+          <div class="form-row"><label for="f-since">Từ thời điểm</label><input id="f-since" name="since" type="datetime-local" step="1"></div>
+          <div class="form-row"><label for="f-until">Đến thời điểm</label><input id="f-until" name="until" type="datetime-local" step="1"></div>
+        </div>
+      </div>
+      <div class="form-row"><label for="f-limit">Số dòng / trang</label><select id="f-limit" name="limit" style="max-width:120px"><option>25</option><option selected>50</option><option>100</option><option>500</option></select></div>
+      <div class="actions">
+        <button type="submit" class="btn-primary">Áp dụng</button>
+        <button type="reset" class="btn-warning">Đặt lại</button>
+        <span class="grow"></span>
+        <a class="btn btn-success" id="export" href="/api/alerts/export.csv">Xuất CSV</a>
+        <button type="button" class="btn-danger" id="delete">Xoá theo bộ lọc</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><span class="grow" id="title">Cảnh báo mới nhất (mới nhất ở trên)</span>
+      <label class="check"><input type="checkbox" id="auto"> Tự làm mới 5s</label>
+      <button type="button" id="reload">Làm mới</button></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Ngày giờ</th><th>Pri</th><th>Nguồn</th><th>Proto</th><th>Loại</th><th>Src</th><th>SPort</th><th>Dst</th><th>DPort</th><th>SID</th><th>Mô tả</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="empty" class="empty">Không có sự kiện nào khớp bộ lọc.</div>
+    </div>
+    <div class="pager">
+      <span id="range">0 / 0</span>
+      <span><button type="button" id="prev">‹ Trước</button> <button type="button" id="next">Sau ›</button></span>
+    </div>
+  </section>
+</main>
+
+<dialog id="detail">
+  <div class="panel-head"><span class="grow" id="d-title">Chi tiết</span>
+    <button type="button" id="d-close" aria-label="Đóng">✕</button></div>
+  <div class="panel-body" id="d-body"></div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const TABS = {
+  all:  { name: "Tất cả", params: {} },
+  nids: { name: "NIDS", params: { source_type: "RULE_ENGINE" } },
+  ssh:  { name: "Honeypot SSH", params: { source_type: "HONEYPOT", protocol: "ssh" } },
+  http: { name: "Honeypot HTTP", params: { source_type: "HONEYPOT", protocol: "http" } },
+};
+const ICONS = {
+  search: "M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 14 15.5l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z",
+  plus: "M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4z",
+  close: "M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6z",
+};
+let offset = 0, total = 0, timer = null;
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined && text !== null) e.textContent = text;   // textContent: payload tấn công không bao giờ được render thành HTML
+  return e;
+}
+function svg(d, cls) {
+  const ns = "http://www.w3.org/2000/svg";
+  const s = document.createElementNS(ns, "svg");
+  s.setAttribute("viewBox", "0 0 24 24"); if (cls) s.setAttribute("class", cls);
+  const p = document.createElementNS(ns, "path"); p.setAttribute("d", d);
+  s.append(p);
+  return s;
+}
+function iconBtn(name, title, onClick, cls) {
+  const b = el("button", "icon-btn" + (cls ? " " + cls : ""));
+  b.type = "button"; b.title = title; b.append(svg(ICONS[name]));
+  b.addEventListener("click", (e) => { e.stopPropagation(); onClick(); });
+  return b;
+}
+// Tam giác cảnh báo tô màu theo priority, giống cột Action của pfSense
+function priIcon(sev) {
+  const s = svg("M12 2 1 21h22zM11 10h2v5h-2zm0 6h2v2h-2z", "pri p" + sev);
+  const t = document.createElementNS("http://www.w3.org/2000/svg", "title"); t.textContent = "P" + sev;
+  s.prepend(t);
+  return s;
+}
+const tabKey = () => TABS[location.hash.slice(1)] ? location.hash.slice(1) : "all";
+const pageSize = () => Number($("filter").elements.limit.value);
+
+// Bộ lọc hiện tại (tab + form) dưới dạng query string, không gồm limit/offset
+function filterQuery() {
+  const p = new URLSearchParams(TABS[tabKey()].params);
+  for (const [k, v] of new FormData($("filter"))) if (k !== "limit" && v !== "") p.set(k, v);
+  return p;
+}
+
+function setPanel(open) {
+  $("filter").hidden = !open;
+  $("toggle").textContent = open ? "⊖" : "⊕";
+  $("toggle").setAttribute("aria-expanded", open);
+}
+// 🔍 / ⊕ trong bảng: điền một ô lọc rồi tải lại
+function setFilter(name, value) {
+  $("filter").elements[name].value = value;
+  setPanel(true); offset = 0; load();
+}
+
+function setStatus(ok) {
+  $("dot").className = "dot" + (ok ? " ok" : "");
+  $("status").textContent = ok ? "Đã kết nối" : "Mất kết nối tới API";
+}
+
+const endpointCell = (ip, field) => {
+  const td = el("td", "nw", ip);
+  const sub = el("span", "sub"); sub.append(iconBtn("search", "Lọc theo " + ip, () => setFilter(field, ip)));
+  td.append(sub);
+  return td;
+};
+
+function renderRows(list) {
+  const body = $("rows");
+  body.replaceChildren();
+  $("empty").style.display = list.length ? "none" : "block";
+  for (const a of list) {
+    const sev = [1, 2, 3].includes(a.severity) ? a.severity : 2;
+    const tr = el("tr", "clickable");
+    tr.tabIndex = 0;
+    tr.addEventListener("click", () => showDetail(a.id));
+    tr.addEventListener("keydown", (e) => { if (e.key === "Enter") showDetail(a.id); });
+
+    const d = a.timestamp ? new Date(a.timestamp) : null;
+    const when = el("td", "nw", d ? d.toLocaleDateString("vi-VN") : "");
+    if (d) when.append(el("span", "sub", d.toLocaleTimeString("vi-VN")));
+    const pri = el("td"); pri.append(priIcon(sev));
+
+    const sidCell = el("td", "nw");
+    const actions = el("span", "sub");
+    if (a.sid != null) {
+      const link = el("a", "", a.sid); link.href = "/rules#sid=" + a.sid;
+      link.addEventListener("click", (e) => e.stopPropagation());
+      sidCell.append(link);
+      actions.append(iconBtn("plus", "Chỉ xem SID " + a.sid, () => setFilter("sid", a.sid)));
+    } else {
+      sidCell.append(a.source_type === "HONEYPOT" ? "–" : "AI");
+    }
+    actions.append(iconBtn("close", "Xoá cảnh báo này", () => deleteOne(a.id), "del"));
+    sidCell.append(actions);
+
+    const desc = el("td", "msg", a.summary);
+    const http = [a.http_method, a.http_uri].filter(Boolean).join(" ");
+    if (http) desc.append(el("span", "sub uri", http));
+
+    tr.append(when, pri, el("td", "", a.source_type === "HONEYPOT" ? "Honeypot" : "NIDS"), el("td", "", a.protocol),
+      el("td", "", a.attack_type), endpointCell(a.src_ip, "src_ip"), el("td", "", a.src_port ?? ""),
+      endpointCell(a.dst_ip, "dst_ip"), el("td", "", a.dst_port ?? ""), sidCell, desc);
+    body.append(tr);
+  }
+}
+
+async function load() {
+  const q = filterQuery();
+  $("export").href = "/api/alerts/export.csv?" + q;
+  q.set("limit", pageSize()); q.set("offset", offset);
+  try {
+    const r = await fetch("/api/alerts/?" + q);
+    if (!r.ok) throw new Error(r.status);
+    total = Number(r.headers.get("X-Total-Count") || 0);
+    const list = await r.json();
+    renderRows(list);
+    $("range").textContent = list.length ? `${offset + 1}–${offset + list.length} / ${total} sự kiện` : `0 / ${total} sự kiện`;
+    $("prev").disabled = offset === 0;
+    $("next").disabled = offset + list.length >= total;
+    setStatus(true);
+  } catch (e) {
+    setStatus(false);
+  }
+}
+
+function selectTab() {
+  const key = tabKey();
+  for (const a of $("tabs").children) a.classList.toggle("active", a.hash === "#" + key);
+  $("crumb").textContent = TABS[key].name;
+  offset = 0;
+  load();
+}
+
+async function showDetail(id) {
+  const r = await fetch("/api/alerts/" + id);
+  if (!r.ok) { alert("Không tải được chi tiết sự kiện #" + id); return; }
+  const a = await r.json();
+  $("d-title").textContent = `Sự kiện #${a.id} – ${a.summary}`;
+  const dl = el("dl");
+  for (const k of ["timestamp", "source_type", "attack_type", "severity", "sid", "src_ip", "src_port",
+                   "dst_ip", "dst_port", "protocol", "http_method", "http_uri", "status"]) {
+    if (a[k] == null || a[k] === "") continue;
+    dl.append(el("dt", "", k), el("dd", "", a[k]));
+  }
+  const body = $("d-body");
+  body.replaceChildren(dl);
+  const p = a.payload || {};
+  const parts = [["Matched content / evidence", p.matched_content], ["HTTP headers", p.http_headers],
+                 ["HTTP body", p.http_body], ["Packet raw (hex)", p.packet_raw_hex]].filter(([, v]) => v);
+  if (!parts.length) body.append(el("h3", "", "Không có payload"));
+  for (const [title, v] of parts) body.append(el("h3", "", title), el("pre", "", v));
+  $("detail").showModal();
+}
+
+async function deleteOne(id) {
+  if (!confirm("Xoá cảnh báo #" + id + "?")) return;
+  await fetch("/api/alerts/" + id, { method: "DELETE" });
+  load();
+}
+
+$("filter").addEventListener("submit", (e) => { e.preventDefault(); offset = 0; load(); });
+$("filter").addEventListener("reset", () => setTimeout(() => { offset = 0; load(); }));
+$("prev").addEventListener("click", () => { offset = Math.max(0, offset - pageSize()); load(); });
+$("next").addEventListener("click", () => { offset += pageSize(); load(); });
+$("reload").addEventListener("click", load);
+$("auto").addEventListener("change", (e) => {
+  clearInterval(timer);
+  timer = e.target.checked ? setInterval(load, 5000) : null;
+});
+$("toggle").addEventListener("click", () => setPanel($("filter").hidden));
+$("d-close").addEventListener("click", () => $("detail").close());
+$("delete").addEventListener("click", async () => {
+  const q = filterQuery();
+  const n = Number((await fetch("/api/alerts/?limit=0&" + q)).headers.get("X-Total-Count") || 0);
+  if (!n) { alert("Không có sự kiện nào khớp bộ lọc."); return; }
+  const scope = [...q.keys()].length ? "khớp bộ lọc hiện tại" : "(TOÀN BỘ dữ liệu)";
+  if (!confirm(`Xoá ${n} sự kiện ${scope}? Thao tác không thể hoàn tác.`)) return;
+  await fetch("/api/alerts/?" + q, { method: "DELETE" });
+  offset = 0;
+  load();
+});
+window.addEventListener("hashchange", selectTab);
+
+// Link từ trang Rules: /logs?sid=1000001 điền sẵn bộ lọc
+for (const [k, v] of new URLSearchParams(location.search)) {
+  const f = $("filter").elements[k];
+  if (f && k !== "limit") { f.value = v; setPanel(true); }
+}
+selectTab();
+</script>
+</body>
+</html>
