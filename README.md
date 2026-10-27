@@ -53,7 +53,7 @@ flowchart LR
         hphttp["HTTP honeypot :8080<br/>(Flask)"]
     end
 
-    subgraph engine["NIDS engine (main.py)"]
+    subgraph engine["NIDS engine (nids/engine)"]
         cap["PacketCapture<br/>Scapy live"] --> dec["PacketDecoder<br/>L2–L4 + HTTP L7"]
         dec --> q[["Bounded queue"]]
         q --> det["DetectionEngine<br/>demux → Aho-Corasick → rule checks → threshold"]
@@ -187,7 +187,7 @@ The `NIDS_DB_HOST`, `NIDS_DB_PORT`, `NIDS_DB_NAME`, `NIDS_DB_USER` and `NIDS_DB_
 Set `interface` in `config/settings.yaml` if needed, then run from an elevated shell:
 
 ```bash
-python main.py
+python -m nids.engine
 ```
 
 Alerts are printed as colour-coded log lines (P1 red, P2 yellow, P3 blue). Set `NO_COLOR=1` to turn the colours off.
@@ -195,7 +195,7 @@ Alerts are printed as colour-coded log lines (P1 red, P2 yellow, P3 blue). Set `
 ### 2. Web console and API
 
 ```bash
-uvicorn api.main:app --host 0.0.0.0 --port 8000
+uvicorn nids.api.main:app --host 0.0.0.0 --port 8000
 ```
 
 | Page | URL |
@@ -223,8 +223,8 @@ Main endpoints:
 ### 3. Honeypots
 
 ```bash
-python -m honeypot ssh          # SSH honeypot on port 2222
-python -m honeypot http         # HTTP honeypot on port 8080
+python -m nids.honeypot ssh          # SSH honeypot on port 2222
+python -m nids.honeypot http         # HTTP honeypot on port 8080
 ```
 
 ### 4. Adding or changing rules
@@ -235,7 +235,7 @@ All rules live in `rules/local.rules`, written in Snort 3 syntax:
 alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK SQL Injection - UNION SELECT detected"; flow:to_server,established; http_uri; content:"union",nocase; content:"select",nocase,distance 0; service:http; classtype:web-application-attack; priority:1; sid:1000001; rev:2;)
 ```
 
-Pick a free SID in the right group's range, add a positive and a negative test plus a demo attack in `attacker/attack_demo.py`, then restart the engine. Rules are loaded only at startup. The full authoring guide is in [`.claude/rules/snort-rules.md`](.claude/rules/snort-rules.md).
+Pick a free SID in the right group's range, add a positive and a negative test plus a demo attack in `lab/attacker/attack_demo.py`, then restart the engine. Rules are loaded only at startup. The full authoring guide is in [`.claude/rules/snort-rules.md`](.claude/rules/snort-rules.md).
 
 ### 5. Running the tests
 
@@ -266,8 +266,8 @@ docker logs -f nids_engine                                        # wait for "Đ
 Open http://localhost:8000/, then launch attacks from the attacker container:
 
 ```bash
-docker exec -it nids_attacker python attacker/attack_demo.py all          # every rule
-docker exec -it nids_attacker python attacker/attack_demo.py web          # or: scan | dos | auth | malware | recon | honeypot
+docker exec -it nids_attacker python lab/attacker/attack_demo.py all          # every rule
+docker exec -it nids_attacker python lab/attacker/attack_demo.py web          # or: scan | dos | auth | malware | recon | honeypot
 docker exec -it nids_attacker bash                                        # manual tools, e.g. nmap -sX -p 80 172.28.0.50
 ```
 

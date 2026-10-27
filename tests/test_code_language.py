@@ -17,8 +17,8 @@ UNACCENTED = re.compile(
 
 
 def python_files():
-    files = [ROOT / "main.py"]
-    for folder in ("api", "config", "services", "tests"):
+    files = []
+    for folder in ("nids", "lab", "tests"):
         files += (ROOT / folder).rglob("*.py")
     return [f for f in files if f.name != "test_code_language.py"]
 

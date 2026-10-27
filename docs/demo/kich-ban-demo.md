@@ -14,7 +14,7 @@ Làm từ tối hôm trước, không làm sát giờ:
 6. Bấm **Xoá dữ liệu** để bảng bắt đầu từ 0.
 7. Chuẩn bị hai cửa sổ cạnh nhau: terminal chạy `docker logs -f nids_engine` và trình duyệt dashboard.
 
-Kiểm tra nhanh toàn bộ chuỗi (30 giây): `docker exec -it nids_attacker python attacker/attack_demo.py web --delay 0.2`, thấy alert xuất hiện rồi bấm Xoá dữ liệu.
+Kiểm tra nhanh toàn bộ chuỗi (30 giây): `docker exec -it nids_attacker python lab/attacker/attack_demo.py web --delay 0.2`, thấy alert xuất hiện rồi bấm Xoá dữ liệu.
 
 ## 2. Trình tự trình diễn
 
@@ -22,7 +22,7 @@ Kiểm tra nhanh toàn bộ chuỗi (30 giây): `docker exec -it nids_attacker p
 |---|---|---|---|
 | 1. Kiến trúc | Hai process dùng chung CSDL: engine (capture → decode → Aho-Corasick → kiểm tra chi tiết → threshold) và API/dashboard. Rule viết theo cú pháp Snort 3, nạp từ `rules/local.rules`. | (chỉ trình bày sơ đồ trong README) | |
 | 2. Lưu lượng bình thường | Truy cập victim bình thường thì không có cảnh báo. | `docker exec -it nids_attacker python -c "import urllib.request as u; print(u.urlopen('http://172.28.0.50/').status)"` | In `200`, dashboard vẫn 0 cảnh báo |
-| 3. Tấn công web | SQLi, XSS, traversal, Log4Shell, XXE, SSRF… đi qua HTTP thật. | `docker exec -it nids_attacker python attacker/attack_demo.py web` | Mỗi đòn hiện một dòng log có màu, SID khớp dòng "kỳ vọng SID" của attacker |
+| 3. Tấn công web | SQLi, XSS, traversal, Log4Shell, XXE, SSRF… đi qua HTTP thật. | `docker exec -it nids_attacker python lab/attacker/attack_demo.py web` | Mỗi đòn hiện một dòng log có màu, SID khớp dòng "kỳ vọng SID" của attacker |
 | 4. Quét mạng | Nmap Xmas/Null/FIN và quét cổng SYN dựa trên cờ TCP. | `... attack_demo.py scan` | SID 1000100–1000107 |
 | 5. DoS | SYN/UDP/ICMP/HTTP flood. Rule dùng `detection_filter` (đếm trong cửa sổ thời gian), một gói đơn lẻ không bắn. | `... attack_demo.py dos` | Flood chỉ bắn sau ngưỡng; `ThresholdManager` chặn bão alert |
 | 6. Brute force và mã độc | SSH/FTP/web brute force, reverse shell, Mimikatz, cryptominer. | `... attack_demo.py auth` rồi `... attack_demo.py malware` | SID 10003xx, 10004xx |
@@ -31,7 +31,7 @@ Kiểm tra nhanh toàn bộ chuỗi (30 giây): `docker exec -it nids_attacker p
 
 Mỗi lệnh `attack_demo.py` nghỉ 1,5 giây giữa các đòn để khán giả theo dõi kịp (đổi bằng `--delay`). Chạy lại sau khi bấm **Xoá dữ liệu** để lặp lại phần nào đó.
 
-Nếu hết giờ, chạy một lệnh duy nhất: `docker exec -it nids_attacker python attacker/attack_demo.py all --delay 0.5`.
+Nếu hết giờ, chạy một lệnh duy nhất: `docker exec -it nids_attacker python lab/attacker/attack_demo.py all --delay 0.5`.
 
 ## Demo gõ lệnh thủ công
 
@@ -102,7 +102,7 @@ Bảng dưới gõ trực tiếp trong container attacker (`docker exec -it nids
 | Payload qua nc (4444/3333) | `echo 'X5O...EICAR-STANDARD-ANTIVIRUS-TEST-FILE...' \| nc -q 1 172.28.0.50 4444` | 1000410 |
 | Payload qua nc (4444/3333) | `echo '{"id":1,"method":"mining.subscribe","params":[]}' \| nc -q 1 172.28.0.50 3333` | 1000411 |
 
-5 rule UDP đòi hỏi byte nhị phân chính xác (NTP monlist 1000204, DNS ANY 1000207, Memcached stats 1000208, NetBIOS 1000505, SSDP 1000507) không có lệnh dòng lệnh thủ công tương đương gọn gàng; chúng vẫn được trình diễn qua `attacker/attack_demo.py dos` và `... recon`.
+5 rule UDP đòi hỏi byte nhị phân chính xác (NTP monlist 1000204, DNS ANY 1000207, Memcached stats 1000208, NetBIOS 1000505, SSDP 1000507) không có lệnh dòng lệnh thủ công tương đương gọn gàng; chúng vẫn được trình diễn qua `lab/attacker/attack_demo.py dos` và `... recon`.
 
 ## 3. Phương án dự phòng
 
@@ -118,10 +118,10 @@ Bảng dưới gõ trực tiếp trong container attacker (`docker exec -it nids
 
 **Khác gì Snort thật?** Rule cú pháp Snort 3 nhưng engine chỉ hiểu một tập con option (content, pcre, flags, flow, dsize, itype/icode, detection_filter, sticky buffer HTTP). Chưa có tái hợp luồng TCP (chuỗi bị chia qua hai gói sẽ không khớp), `flow:established` được xấp xỉ bằng cờ ACK, chưa so khớp IP/dải cổng.
 
-**Có dương tính giả không?** Mỗi rule có test gói tấn công và gói lành tính gần giống (`tests/test_demo_rules.py`, `tests/test_diverse_rules_engine.py`). Rule dựa trên tần suất dùng `detection_filter` để một gói hợp lệ đơn lẻ không gây cảnh báo.
+**Có dương tính giả không?** Mỗi rule có test gói tấn công và gói lành tính gần giống (`tests/lab/test_demo_rules.py`, `tests/engine/test_diverse_rules_engine.py`). Rule dựa trên tần suất dùng `detection_filter` để một gói hợp lệ đơn lẻ không gây cảnh báo.
 
-**Bộ rule lấy từ đâu?** 67 rule tự viết, chia theo nhóm SID (WEB, SCAN, DOS, AUTH, MALWARE/C2, RECON). Có sẵn bộ community của Snort ở `vendor/` nhưng mặc định không nạp.
+**Bộ rule lấy từ đâu?** 67 rule tự viết, chia theo nhóm SID (WEB, SCAN, DOS, AUTH, MALWARE/C2, RECON). Có sẵn bộ community của Snort ở `rules/vendor/` nhưng mặc định không nạp.
 
-**Thêm rule mới thế nào?** Sửa `rules/local.rules` rồi khởi động lại engine. Mỗi rule mới cần test positive/negative và một đòn trong `attacker/attack_demo.py` (có test kiểm tra rule nào cũng có đòn trình diễn).
+**Thêm rule mới thế nào?** Sửa `rules/local.rules` rồi khởi động lại engine. Mỗi rule mới cần test positive/negative và một đòn trong `lab/attacker/attack_demo.py` (có test kiểm tra rule nào cũng có đòn trình diễn).
 
 **Hiệu năng và rớt gói?** Capture đẩy vào hàng đợi có giới hạn (`queue_max_size`), worker xử lý song song; nếu đầy thì bỏ gói và ghi cảnh báo `Queue đầy` kèm tổng số gói bị bỏ.
