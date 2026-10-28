@@ -12,6 +12,31 @@ logger = logging.getLogger("nids.honeypot")
 
 SSH_BANNER = settings.ssh_banner
 PROMPT = settings.ssh_prompt.encode()
+HOSTNAME = settings.ssh_prompt.rstrip('$# ')
+KERNEL = "6.8.0-45-generic"                         # khớp với ssh_motd
+
+# Kết quả giả cho các lệnh attacker hay dùng để dò môi trường (dùng chung cho shell và exec)
+FAKE_COMMANDS = {
+    'pwd': '/usr/local',
+    'whoami': 'corpuser1',
+    'id': 'uid=1001(corpuser1) gid=1001(corpuser1) groups=1001(corpuser1)',
+    'hostname': HOSTNAME,
+    'uname': 'Linux',
+    'uname -r': KERNEL,
+    'uname -a': f'Linux {HOSTNAME} {KERNEL} #45-Ubuntu SMP PREEMPT_DYNAMIC Fri Aug 30 12:02:04 UTC 2024 x86_64 x86_64 x86_64 GNU/Linux',
+    'ls': 'jumpbox1.conf',
+    'cat jumpbox1.conf': 'HI, How are you today?',
+}
+
+
+def fake_response(cmd):
+    """Trả về (output, exit status) giả cho một lệnh; lệnh lạ báo 'command not found' như bash."""
+    cmd = ' '.join(cmd.split())
+    if not cmd:
+        return None, 0
+    if cmd in FAKE_COMMANDS:
+        return FAKE_COMMANDS[cmd], 0
+    return f'bash: {cmd.split()[0]}: command not found', 127
 
 
 def load_host_key(path=None):
@@ -33,9 +58,12 @@ def emulated_shell(channel, conn):
         if not char:                               # client ngắt kết nối
             break
 
-        if char in (b'\x7f', b'\x08'):             # backspace
+        if char in (b'\x7f', b'\x08'):             # backspace: xoá trọn một ký tự UTF-8 (bộ gõ tiếng Việt gửi ký tự nhiều byte rồi backspace)
             if command:
-                command = command[:-1]
+                end = len(command) - 1
+                while end > 0 and 0x80 <= command[end] < 0xC0:   # lùi qua các byte nối tiếp
+                    end -= 1
+                command = command[:end]
                 channel.send(b'\b \b')
             continue
 
@@ -76,18 +104,7 @@ def emulated_shell(channel, conn):
         if cmd == 'exit':
             channel.send(b'\r\nlogout\r\n')
             break
-        elif cmd == 'pwd':
-            response = '/usr/local'
-        elif cmd == 'whoami':
-            response = 'corpuser1'
-        elif cmd == 'ls':
-            response = 'jumpbox1.conf'
-        elif cmd == 'cat jumpbox1.conf':
-            response = 'HI, How are you today?'
-        elif cmd == '':
-            response = None
-        else:
-            response = f'bash: {cmd.split()[0]}: command not found'
+        response, _ = fake_response(cmd)
 
         channel.send(b'\r\n')
         if response:
@@ -104,6 +121,7 @@ class Server(paramiko.ServerInterface):
         self.conn = conn
         self.input_username = input_username
         self.input_password = input_password
+        self.exec_command = None
 
     def check_channel_request(self, kind, chanid):
         if kind == 'session':
@@ -134,13 +152,10 @@ class Server(paramiko.ServerInterface):
             command = command.decode(errors='replace')
         logger.info('Lệnh exec "%s" từ %s', command, self.conn["src_ip"])
         log_event('ssh', 'ssh.exec', command=command, **self.conn)
-        try:
-            name = command.split()[0] if command.split() else ''
-            channel.send(f'bash: {name}: command not found\r\n'.encode())
-            channel.send_exit_status(127)
-            channel.close()
-        except Exception:
-            pass
+        # chỉ ghi nhận ở đây: gửi output và đóng channel trước khi paramiko trả lời
+        # request thì client nhận "Channel closed"; client_handle sẽ trả lời sau
+        self.exec_command = command
+        self.event.set()
         return True
 
 
@@ -163,8 +178,17 @@ def client_handle(client, addr, username, password, host_key):
             logger.debug("Không có channel nào được mở")
             return
 
-        # chỉ vào shell khi client yêu cầu shell (exec đã được xử lý riêng)
+        # chờ client yêu cầu shell hoặc exec
         if not server.event.wait(10):
+            return
+
+        if server.exec_command is not None:
+            response, status = fake_response(server.exec_command)
+            if response:
+                channel.send(response.encode() + b'\n')
+            channel.send_exit_status(status)
+            channel.close()
+            transport.join(5)                      # chờ client nhận exit status và tự ngắt
             return
 
         standard_banner = settings.ssh_motd + "\r\n\r\n"
