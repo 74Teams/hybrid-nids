@@ -79,7 +79,7 @@ The engine, the API and each honeypot run as **separate processes** and talk to 
 - Packet decoding for IP/TCP/UDP/ICMP (including TCP flags) and HTTP request parsing (method, URI, headers, body)
 - Snort 3 rule parser: sticky buffers (`http_uri`, `http_header`, `http_client_body`, `http_method`), comma modifiers (`nocase`, `depth`, `offset`, `distance`, `within`), `pcre`, `flags`, `flow`, `dsize`, `itype`/`icode`, `detection_filter`
 - Four-stage matching funnel: protocol/port demux → Aho-Corasick prefilter (one matcher per buffer) → detailed option checks → `ThresholdManager` to stop alert storms
-- 67 bundled rules in `rules/local.rules`, grouped by SID range:
+- 67 bundled rules split into one file per group (`rules/web-attack.rules`, `scan.rules`, `dos.rules`, `auth.rules`, `malware-c2.rules`, `recon.rules`), plus `rules/custom.rules` for rules written in the web console (SID ≥ 2000000):
 
   | SID range | Group | Examples |
   |---|---|---|
@@ -99,7 +99,7 @@ The engine, the API and each honeypot run as **separate processes** and talk to 
 **Web console** (served by the API, no extra build step)
 - **Dashboard**: alert totals by priority, a stacked "alerts over time" chart (15 min to 24 h), top attack types, top attacking IPs, and a live feed that refreshes every 2 s
 - **Status › System Logs**: tabs per source (NIDS, SSH honeypot, HTTP honeypot), an advanced filter (IP, SID, priority, protocol, time range, keyword), a detail view with the raw payload, one-click filter by IP/SID, delete a single row or everything matching the filter, CSV export
-- **Services › Rules**: read-only view of the loaded rules, filterable by group and searchable, with the raw rule text and a link to its alerts
+- **Services › Rules** (modelled on Suricata's pfSense page): enable or disable whole rule files on the Categories tab, toggle single SIDs and press Apply (with Reset All / Reset Current / Disable All / Enable All), and edit `custom.rules` with per-line syntax errors. Changes are stored in `rules/state.yaml` and the running engine reloads them within a few seconds. Write actions need the `NIDS_API_KEY` environment variable on the API server; the browser asks for the key once.
 - Attack data is always rendered as plain text, so payloads never run as HTML
 
 **REST API**
@@ -217,7 +217,12 @@ Main endpoints:
 | `GET` | `/api/alerts/stats` | Totals by priority and top attack types |
 | `GET` | `/api/alerts/timeline` | Alert counts per time bucket, split into NIDS and honeypot |
 | `GET` | `/api/alerts/attackers` | Per-IP honeypot events and NIDS alerts |
-| `GET` | `/api/rules/` | Loaded rules (read-only) |
+| `GET` | `/api/rules/` | Rules with category and enabled state. Filters: `category`, `enabled`, `q` |
+| `GET`, `PUT` | `/api/rules/categories` | List rule files / save which ones are loaded |
+| `POST` | `/api/rules/sids` | Enable/disable SIDs (`{"enable": [...], "disable": [...]}`) |
+| `POST` | `/api/rules/sids/reset` | Drop SID overrides for one category or all |
+| `POST` | `/api/rules/categories/{name}/all` | Enable All / Disable All in one file |
+| `GET`, `PUT` | `/api/rules/custom` | Read / replace `custom.rules` (rejected with line numbers if invalid) |
 | `GET` | `/health` | Health check |
 
 ### 3. Honeypots
@@ -229,13 +234,13 @@ python -m nids.honeypot http         # HTTP honeypot on port 8080
 
 ### 4. Adding or changing rules
 
-All rules live in `rules/local.rules`, written in Snort 3 syntax:
+Built-in rules live in one file per group under `rules/`, written in Snort 3 syntax:
 
 ```text
 alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK SQL Injection - UNION SELECT detected"; flow:to_server,established; http_uri; content:"union",nocase; content:"select",nocase,distance 0; service:http; classtype:web-application-attack; priority:1; sid:1000001; rev:2;)
 ```
 
-Pick a free SID in the right group's range, add a positive and a negative test plus a demo attack in `lab/attacker/attack_demo.py`, then restart the engine. Rules are loaded only at startup. The full authoring guide is in [`.claude/rules/snort-rules.md`](.claude/rules/snort-rules.md).
+Pick a free SID in the right group's range, add a positive and a negative test plus a demo attack in `lab/attacker/attack_demo.py`, The running engine reloads rule files and `rules/state.yaml` within a few seconds, no restart needed. The full authoring guide is in [`.claude/rules/snort-rules.md`](.claude/rules/snort-rules.md).
 
 ### 5. Running the tests
 
