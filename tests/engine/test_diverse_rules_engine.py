@@ -114,7 +114,7 @@ def make_http_packet(
 
 @pytest.fixture(scope="module")
 def real_engine():
-    """Khởi tạo DetectionEngine nạp toàn bộ tập luật thực tế từ rules/local.rules."""
+    """Khởi tạo DetectionEngine nạp toàn bộ tập luật thực tế từ rules/ (các category mặc định)."""
     manager = RuleManager("rules")
     manager.load_all_rules()
     # Tắt threshold để kiểm thử so khớp thuần túy

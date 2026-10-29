@@ -1,7 +1,12 @@
 import logging
+import os
 import re
+import shutil
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+import yaml
+
 from nids.engine.rule import (
     SnortRule,
     ContentMatch,
@@ -18,32 +23,79 @@ METADATA_OPTIONS = {"reference", "metadata", "gid", "service"}
 
 PCRE_FLAGS = {"i": re.IGNORECASE, "s": re.DOTALL, "m": re.MULTILINE, "x": re.VERBOSE}
 
+STATE_FILE = "state.yaml"
+VENDOR_DIR = "vendor"
+CUSTOM_CATEGORY = "custom"
+CUSTOM_SID_MIN = 2000000
+
+# Dòng "# alert ..." là rule bị tắt sẵn (kiểu bộ rule vendor), không phải comment thường
+COMMENTED_RULE = re.compile(r"#\s*((?:alert|log|pass|drop|reject|sdrop)\s.*)$")
+
 
 class RuleManager:
     """
     Quản lý tập luật (.rules).
-    Nguồn nạp duy nhất là file .rules trên disk: load_all_rules().
+    Mỗi file .rules là một category: file ở gốc rules_dir mặc định bật, file trong rules_dir/vendor/ mặc định tắt.
+    Category bật/tắt và override theo SID lưu trong rules_dir/state.yaml (thiếu file = mặc định).
     """
 
     def __init__(self, rules_dir: str = "rules"):
         self.rules_dir = Path(rules_dir)
-        self.rules: List[SnortRule] = []
+        self.state_path = self.rules_dir / STATE_FILE
+        self.rules: List[SnortRule] = []                # Rule đang bật, đưa vào DetectionEngine
         self.rules_by_sid: Dict[int, SnortRule] = {}
+        self.catalog: Dict[str, List[SnortRule]] = {}   # Mọi rule đã parse theo category, kể cả rule đang tắt
+        self.category_paths: Dict[str, Path] = {}
+        self.enabled_categories: set = set()
 
     # ── LOAD FROM FILE ───────────────────────────────────────
 
+    def category_files(self) -> Dict[str, Path]:
+        """Category -> file: tên file bỏ đuôi .rules, file vendor có tiền tố vendor/."""
+        files: Dict[str, Path] = {}
+        if self.rules_dir.exists():
+            for path in sorted(self.rules_dir.glob("*.rules")):
+                files[path.stem] = path
+            for path in sorted((self.rules_dir / VENDOR_DIR).glob("*.rules")):
+                files[f"{VENDOR_DIR}/{path.stem}"] = path
+        return files
+
     def load_all_rules(self) -> int:
-        """Đọc và parse tất cả file .rules trong thư mục rules_dir."""
+        """Parse mọi file .rules vào catalog, chỉ đưa rule đang bật (theo state.yaml) vào self.rules."""
         self.rules.clear()
         self.rules_by_sid.clear()
+        self.catalog = {}
+        self.category_paths = self.category_files()
 
-        if self.rules_dir.exists():
-            for rule_file in sorted(self.rules_dir.glob("*.rules")):
-                self.load_rule_file(rule_file)
+        state = self.load_state()
+        enabled = state.get("enabled_categories")
+        if enabled is None:
+            self.enabled_categories = {c for c in self.category_paths if not c.startswith(VENDOR_DIR + "/")}
+        else:
+            self.enabled_categories = set(enabled)
+            for missing in sorted(self.enabled_categories - set(self.category_paths)):
+                logger.warning("Category %s được bật trong %s nhưng không có file rule", missing, STATE_FILE)
+        overrides = state.get("sid_overrides") or {}
+        force_on, force_off = set(overrides.get("enable") or []), set(overrides.get("disable") or [])
+
+        seen: Dict[int, str] = {}
+        for category, path in self.category_paths.items():
+            self.catalog[category] = []
+            for rule in self._parse_file(path, category, seen):
+                on = rule.sid in force_on or (rule.default_enabled and rule.sid not in force_off)
+                rule.enabled = category in self.enabled_categories and on
+                self.catalog[category].append(rule)
+                if rule.enabled:
+                    self._register(rule)
 
         total = len(self.rules)
         if total:
             logger.info("Đã nạp %d rule từ %s", total, self.rules_dir)
+            loaded = ", ".join(
+                f"{c} {sum(r.enabled for r in rs)}" for c, rs in self.catalog.items() if c in self.enabled_categories
+            )
+            disabled = ", ".join(c for c in self.catalog if c not in self.enabled_categories) or "không có"
+            logger.info("Theo category: %s; category đang tắt: %s", loaded, disabled)
         else:
             logger.warning(
                 "Không nạp được rule nào từ %s, engine sẽ không phát hiện được tấn công nào",
@@ -56,30 +108,179 @@ class RuleManager:
             )
         return total
 
-    def load_rule_file(self, filepath: Path) -> None:
+    def _parse_file(self, filepath: Path, category: str, seen: Dict[int, str]) -> List[SnortRule]:
+        rules: List[SnortRule] = []
         with open(filepath, "r", encoding="utf-8") as f:
             for line_no, line in enumerate(f, 1):
                 line = line.strip()
-                if not line or line.startswith("#"):
+                commented = COMMENTED_RULE.match(line)
+                if not line or (line.startswith("#") and not commented):
                     continue
+                location = f"dòng {line_no} trong {filepath.name}"
                 try:
-                    rule = self.parse_rule_line(line)
-                    if rule:
-                        self._register(rule, f"dòng {line_no} trong {filepath.name}")
+                    rule = self.parse_rule_line(commented.group(1) if commented else line)
                 except Exception as e:
-                    logger.warning("Lỗi dòng %d trong %s: %s", line_no, filepath.name, e)
+                    # Rule bị comment sẵn hoặc thuộc category đang tắt: lỗi parse không ảnh hưởng engine, chỉ ghi DEBUG
+                    quiet = commented or category not in self.enabled_categories
+                    (logger.debug if quiet else logger.warning)("Lỗi dòng %d trong %s: %s", line_no, filepath.name, e)
+                    continue
+                if not rule:
+                    continue
+                if rule.sid in seen:
+                    logger.warning("Bỏ qua SID trùng %d (%s, đã có ở %s)", rule.sid, location, seen[rule.sid])
+                    continue
+                seen[rule.sid] = location
+                rule.category = category
+                rule.default_enabled = not commented
+                rules.append(rule)
+        return rules
 
-    def _register(self, rule: SnortRule, location: str) -> None:
-        if rule.sid in self.rules_by_sid:
-            logger.warning("Bỏ qua SID trùng %d (%s)", rule.sid, location)
-            return
+    def _register(self, rule: SnortRule) -> None:
         if rule.unsupported_options:
             logger.debug(
-                "SID %d: bỏ qua option không hỗ trợ %s (%s)",
-                rule.sid, rule.unsupported_options, location,
+                "SID %d: bỏ qua option không hỗ trợ %s (category %s)",
+                rule.sid, rule.unsupported_options, rule.category,
             )
         self.rules.append(rule)
         self.rules_by_sid[rule.sid] = rule
+
+    def signature(self) -> Tuple[Tuple[str, int], ...]:
+        """Dấu thời gian sửa đổi của các file rule và state.yaml, để engine biết khi nào cần nạp lại."""
+        paths = list(self.category_files().values()) + [self.state_path]
+        return tuple((str(p), p.stat().st_mtime_ns) for p in paths if p.exists())
+
+    # ── TRẠNG THÁI BẬT/TẮT (state.yaml) ──────────────────────
+
+    def load_state(self) -> Dict[str, Any]:
+        if not self.state_path.exists():
+            return {}
+        try:
+            data = yaml.safe_load(self.state_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.error("Không đọc được %s, dùng trạng thái mặc định: %s", self.state_path, e)
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def save_state(self, state: Dict[str, Any]) -> None:
+        self._write_atomic(self.state_path, yaml.safe_dump(state, allow_unicode=True, sort_keys=False))
+
+    @staticmethod
+    def _write_atomic(path: Path, text: str) -> None:
+        # Ghi file tạm rồi đổi tên để engine không bao giờ đọc phải file ghi dở
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+
+    def all_rules(self) -> List[SnortRule]:
+        return [r for rules in self.catalog.values() for r in rules]
+
+    def list_categories(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "name": c,
+                "enabled": c in self.enabled_categories,
+                "rule_count": len(rules),
+                "active_count": sum(r.enabled for r in rules),
+                "vendor": c.startswith(VENDOR_DIR + "/"),
+                "editable": c == CUSTOM_CATEGORY,
+            }
+            for c, rules in self.catalog.items()
+        ]
+
+    def category_rules(self, category: str) -> List[SnortRule]:
+        if category not in self.catalog:
+            raise KeyError(category)
+        return self.catalog[category]
+
+    def set_enabled_categories(self, names: Iterable[str]) -> None:
+        names = set(names)
+        unknown = names - set(self.catalog)
+        if unknown:
+            raise ValueError(f"category không tồn tại: {', '.join(sorted(unknown))}")
+        state = self.load_state()
+        state["enabled_categories"] = [c for c in self.catalog if c in names]
+        self.save_state(state)
+        self.load_all_rules()
+
+    def set_sid_state(self, enable: Iterable[int] = (), disable: Iterable[int] = ()) -> None:
+        """Ghi override; SID được đặt về đúng trạng thái mặc định thì xoá override cho gọn."""
+        changes = [(sid, True) for sid in enable] + [(sid, False) for sid in disable]
+        known = {r.sid: r for r in self.all_rules()}
+        unknown = sorted({sid for sid, _ in changes if sid not in known})
+        if unknown:
+            raise ValueError(f"SID không tồn tại: {', '.join(map(str, unknown))}")
+        state = self.load_state()
+        overrides = state.get("sid_overrides") or {}
+        on, off = set(overrides.get("enable") or []), set(overrides.get("disable") or [])
+        for sid, want in changes:
+            on.discard(sid)
+            off.discard(sid)
+            if want != known[sid].default_enabled:
+                (on if want else off).add(sid)
+        self._save_overrides(state, on, off)
+
+    def reset_overrides(self, category: Optional[str] = None) -> None:
+        """Xoá override của mọi SID (Reset All) hoặc chỉ của một category (Reset Current)."""
+        state = self.load_state()
+        overrides = state.get("sid_overrides") or {}
+        on, off = set(overrides.get("enable") or []), set(overrides.get("disable") or [])
+        if category is None:
+            on, off = set(), set()
+        else:
+            sids = {r.sid for r in self.category_rules(category)}
+            on, off = on - sids, off - sids
+        self._save_overrides(state, on, off)
+
+    def set_category_rules(self, category: str, enabled: bool) -> None:
+        """Enable All / Disable All trong một category."""
+        sids = [r.sid for r in self.category_rules(category)]
+        self.set_sid_state(enable=sids if enabled else (), disable=() if enabled else sids)
+
+    def _save_overrides(self, state: Dict[str, Any], on: set, off: set) -> None:
+        state["sid_overrides"] = {"enable": sorted(on), "disable": sorted(off)}
+        self.save_state(state)
+        self.load_all_rules()
+
+    # ── CUSTOM RULES (sửa từ web) ────────────────────────────
+
+    @property
+    def custom_path(self) -> Path:
+        return self.rules_dir / f"{CUSTOM_CATEGORY}.rules"
+
+    def validate_custom(self, text: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Kiểm tra nội dung custom.rules, trả về (lỗi, cảnh báo) theo số dòng."""
+        errors: List[Dict[str, Any]] = []
+        warnings: List[Dict[str, Any]] = []
+        others = {r.sid: c for c, rules in self.catalog.items() if c != CUSTOM_CATEGORY for r in rules}
+        seen: set = set()
+        for line_no, line in enumerate(text.splitlines(), 1):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            try:
+                rule = self.parse_rule_line(line)
+                if rule is None:
+                    raise ValueError("rule phải có dạng: header (option; option;)")
+            except Exception as e:
+                errors.append({"line": line_no, "error": str(e)})
+                continue
+            if rule.sid < CUSTOM_SID_MIN:
+                errors.append({"line": line_no, "error": f"SID {rule.sid} nằm ngoài dải custom (≥ {CUSTOM_SID_MIN})"})
+            elif rule.sid in seen:
+                errors.append({"line": line_no, "error": f"SID {rule.sid} bị trùng trong custom.rules"})
+            elif rule.sid in others:
+                errors.append({"line": line_no, "error": f"SID {rule.sid} đã có trong category {others[rule.sid]}"})
+            seen.add(rule.sid)
+            if rule.unsupported_options:
+                warnings.append({"line": line_no, "warning": "option chưa hỗ trợ: " + ", ".join(rule.unsupported_options)})
+        return errors, warnings
+
+    def write_custom(self, text: str) -> None:
+        """Ghi custom.rules (đã validate), giữ bản trước ở custom.rules.bak."""
+        if self.custom_path.exists():
+            shutil.copyfile(self.custom_path, self.custom_path.with_name(self.custom_path.name + ".bak"))
+        self._write_atomic(self.custom_path, text)
+        self.load_all_rules()
 
     # ── PARSER (cú pháp Snort 3) ─────────────────────────────
 

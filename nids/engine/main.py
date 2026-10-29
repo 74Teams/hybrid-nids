@@ -63,6 +63,37 @@ class DropCounter:
         return None
 
 
+class RuleReloader:
+    """Nạp lại rule khi file .rules hoặc state.yaml đổi (web ghi từ process API), kiểm tra tối đa mỗi `interval` giây.
+
+    Gọi từ chính worker thread nên không cần khoá: không có gói nào được đánh giá trong lúc dựng lại index.
+    """
+
+    def __init__(self, rule_manager: RuleManager, engine: DetectionEngine, interval: float = 2.0):
+        self.rule_manager = rule_manager
+        self.engine = engine
+        self.interval = interval
+        self._signature = rule_manager.signature()
+        self._checked_at = time.monotonic()
+
+    def check(self, now: float) -> bool:
+        if now - self._checked_at < self.interval:
+            return False
+        self._checked_at = now
+        try:
+            signature = self.rule_manager.signature()
+            if signature == self._signature:
+                return False
+            self._signature = signature
+            self.rule_manager.load_all_rules()
+            self.engine.rebuild_index()
+        except Exception as e:
+            logger.error("Không nạp lại được rule, giữ tập rule cũ: %s", e)
+            return False
+        logger.info("Rule đã thay đổi, đã nạp lại %d rule", len(self.rule_manager.rules))
+        return True
+
+
 class HoneypotIPCache:
     """Tập IP đã chạm honeypot, làm mới từ CSDL tối đa một lần mỗi `ttl` giây (honeypot ghi từ process khác)."""
 
@@ -142,9 +173,12 @@ def main():
             if dropped:
                 logger.warning("Queue đầy, đã bỏ %d gói", dropped)
 
+    reloader = RuleReloader(rule_manager, detection_engine)
+
     # Luồng worker xử lý phân tích
     def worker_loop():
         while True:
+            reloader.check(time.monotonic())
             try:
                 packet = packet_queue.get(timeout=1.0)
                 detection_engine.evaluate_packet(packet)

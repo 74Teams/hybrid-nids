@@ -76,3 +76,21 @@ def test_no_print_calls_left():
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "print":
                 offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}")
     assert offenders == []
+
+
+def test_rule_reloader_picks_up_state_change(tmp_path):
+    from nids.engine.detector import DetectionEngine
+    from nids.engine.main import RuleReloader
+    from nids.engine.rule_manager import RuleManager
+
+    (tmp_path / "web.rules").write_text(
+        'alert tcp any any -> any 80 (msg:"a"; content:"aaa"; sid:1; rev:1;)\n', encoding="utf-8")
+    manager = RuleManager(str(tmp_path))
+    manager.load_all_rules()
+    engine = DetectionEngine(manager)
+    reloader = RuleReloader(manager, engine, interval=1.0)
+    assert not reloader.check(now=reloader._checked_at + 5)  # chưa có gì đổi
+    RuleManager(str(tmp_path)).save_state({"sid_overrides": {"enable": [], "disable": [1]}})
+    assert not reloader.check(now=reloader._checked_at + 0.5)  # chưa tới lượt kiểm tra
+    assert reloader.check(now=reloader._checked_at + 5)
+    assert engine.rules_by_proto["tcp"] == []

@@ -42,3 +42,9 @@ $RECYCLE.BIN/
 .superpowers
 .docs
 data/
+
+# Trạng thái bật/tắt rule do web ghi ra (rules/state.yaml) và bản sao lưu custom.rules
+rules/state.yaml
+rules/*.tmp
+rules/*.bak
+.env

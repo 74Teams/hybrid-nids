@@ -75,3 +75,8 @@ class SnortRule:
     unsupported_options: List[str] = field(default_factory=list)
 
     raw_rule: str = ""
+
+    # Trạng thái quản lý (RuleManager gán khi nạp)
+    category: str = ""                   # Tên file .rules nguồn, file vendor có tiền tố vendor/
+    default_enabled: bool = True         # False khi rule bị comment sẵn trong file (# alert ...)
+    enabled: bool = True                 # Trạng thái hiệu lực sau khi áp category và override

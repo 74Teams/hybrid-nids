@@ -1,0 +1,13 @@
+# =============================================================================
+# HYBRID NIDS - RECON - thăm dò qua UDP / ICMP (SID 10005xx, cú pháp Snort 3)
+# Quy tắc viết rule: .claude/rules/snort-rules.md
+# =============================================================================
+
+alert udp any any -> any 161 (msg:"RECON SNMP public community string probe"; content:"|04 06|public",depth 16; classtype:attempted-recon; priority:2; sid:1000501; rev:2;)
+alert udp any any -> any 53 (msg:"RECON DNS Tunneling suspicious domain query"; content:"c2tunnel",nocase; classtype:trojan-activity; priority:1; sid:1000502; rev:2;)
+alert icmp any any -> any any (msg:"RECON ICMP Timestamp request scan"; itype:13; icode:0; classtype:attempted-recon; priority:3; sid:1000503; rev:2;)
+alert icmp any any -> any any (msg:"RECON ICMP Address Mask request scan"; itype:17; icode:0; classtype:attempted-recon; priority:3; sid:1000504; rev:1;)
+alert udp any any -> any 137 (msg:"RECON NetBIOS name query (nbtstat)"; content:"CKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"; classtype:attempted-recon; priority:2; sid:1000505; rev:1;)
+alert tcp any any -> any 53 (msg:"RECON DNS zone transfer (AXFR) attempt"; flow:to_server,established; content:"|00 00 FC 00 01|"; classtype:attempted-recon; priority:2; sid:1000506; rev:1;)
+alert udp any any -> any 1900 (msg:"RECON SSDP M-SEARCH discovery"; content:"M-SEARCH",depth 8; classtype:attempted-recon; priority:3; sid:1000507; rev:1;)
+alert udp any any -> any 53 (msg:"RECON DNS version.bind query"; content:"|07|version|04|bind|00|",nocase; classtype:attempted-recon; priority:2; sid:1000508; rev:1;)

@@ -1,0 +1,12 @@
+# =============================================================================
+# HYBRID NIDS - AUTH - dò mật khẩu / đăng nhập (SID 10003xx, cú pháp Snort 3)
+# Quy tắc viết rule: .claude/rules/snort-rules.md
+# =============================================================================
+
+alert tcp any any -> any 22 (msg:"AUTH SSH probe banner attempt"; flow:to_server,established; content:"SSH-2.0",depth 7; classtype:attempted-recon; priority:2; sid:1000301; rev:2;)
+alert tcp any any -> any 21 (msg:"AUTH FTP anonymous login attempt"; flow:to_server,established; content:"USER anonymous",nocase,depth 14; classtype:attempted-recon; priority:2; sid:1000302; rev:2;)
+alert tcp any any -> any $HTTP_PORTS (msg:"AUTH HTTP Basic Authorization header detected"; flow:to_server,established; http_header:field authorization; content:"Basic ",nocase,depth 6; service:http; classtype:attempted-admin; priority:2; sid:1000303; rev:2;)
+alert tcp any any -> any $HTTP_PORTS (msg:"AUTH Web Admin Login Submission"; flow:to_server,established; http_method; content:"POST"; http_uri; content:"/admin/login",nocase; service:http; classtype:attempted-admin; priority:1; sid:1000304; rev:2;)
+alert tcp any any -> any 22 (msg:"AUTH SSH brute force (repeated connection attempts)"; flow:stateless; flags:S,CE; detection_filter:track by_src, count 5, seconds 30; classtype:attempted-admin; priority:1; sid:1000305; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"AUTH Web login brute force (repeated POST /login)"; flow:to_server,established; http_method; content:"POST"; http_uri; content:"/login",nocase; detection_filter:track by_src, count 5, seconds 30; service:http; classtype:attempted-admin; priority:1; sid:1000306; rev:1;)
+alert tcp any any -> any 21 (msg:"AUTH FTP brute force (repeated PASS)"; flow:to_server,established; content:"PASS ",depth 5; detection_filter:track by_src, count 5, seconds 30; classtype:attempted-admin; priority:1; sid:1000307; rev:1;)
