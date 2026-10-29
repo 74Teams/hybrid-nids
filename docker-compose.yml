@@ -127,6 +127,8 @@ services:
       NIDS_DB_NAME: "nids_db"
       NIDS_DB_USER: "nids_app"
       NIDS_DB_PASSWORD: "nids_app_password"
+      # Khoá cho thao tác sửa rule trên web; đặt trong shell hoặc file .env, để trống thì trang Rules chỉ xem
+      NIDS_API_KEY: "${NIDS_API_KEY:-}"
     restart: unless-stopped
 
   # Máy tấn công: image Kali riêng (nmap, hping3, hydra, ...), chạy

@@ -4,11 +4,18 @@ from sqlalchemy.orm import Session
 from nids.db.models import Base, EventModel
 
 
-def test_rules_api_is_read_only():
+def test_rules_api_routes():
     from nids.api.main import app
     paths = app.openapi()["paths"]
     rule_paths = {p: set(ops) for p, ops in paths.items() if p.startswith("/api/rules")}
-    assert rule_paths == {"/api/rules/": {"get"}}
+    assert rule_paths == {
+        "/api/rules/": {"get"},
+        "/api/rules/categories": {"get", "put"},
+        "/api/rules/sids": {"post"},
+        "/api/rules/sids/reset": {"post"},
+        "/api/rules/categories/{name}/all": {"post"},
+        "/api/rules/custom": {"get", "put"},
+    }
     assert "/api/alerts/" in paths
     assert "/health" in paths
 

@@ -2,7 +2,8 @@
 Điểm khởi chạy ứng dụng FastAPI – Hybrid NIDS API Server.
 
 Luồng khởi động (startup lifespan): init_db() tạo bảng trong CSDL nếu chưa có.
-Rule chỉ đọc từ rules/local.rules bởi process engine (nids/engine), không đi qua API.
+Rule nằm trong các file rules/*.rules (mỗi file một category). API chỉ ghi trạng thái bật/tắt
+(rules/state.yaml) và rules/custom.rules; process engine tự nạp lại khi thấy file đổi.
 """
 import logging
 from contextlib import asynccontextmanager
@@ -90,5 +91,5 @@ def health_check():
 
 @app.get("/rules", include_in_schema=False)
 def rules_page():
-    """Trang Services › Rules: xem (chỉ đọc) tập rule đang nạp từ rules/."""
+    """Trang Services › Rules: bật/tắt category và SID, sửa custom.rules."""
     return FileResponse(STATIC_DIR / "rules.html")
