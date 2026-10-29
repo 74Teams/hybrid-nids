@@ -1,0 +1,36 @@
+# =============================================================================
+# HYBRID NIDS - WEB-ATTACK - tấn công ứng dụng web (SID 10000xx, cú pháp Snort 3)
+# Quy tắc viết rule: .claude/rules/snort-rules.md
+# =============================================================================
+
+# SQL Injection
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK SQL Injection - UNION SELECT detected"; flow:to_server,established; http_uri; content:"union",nocase; content:"select",nocase,distance 0; service:http; classtype:web-application-attack; priority:1; sid:1000001; rev:2;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK SQL Injection - Classic OR boolean bypass"; flow:to_server,established; http_uri; content:"or",nocase; pcre:"/\bor[\s+]+[\x27\x22]?\d+[\x27\x22]?[\s+]*(=|%3d)[\s+]*[\x27\x22]?\d+/i"; service:http; classtype:web-application-attack; priority:1; sid:1000002; rev:2;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK SQL Injection - SQL comment execution (--)"; flow:to_server,established; http_uri; content:"--"; service:http; classtype:web-application-attack; priority:2; sid:1000003; rev:2;)
+
+# Cross-Site Scripting (XSS)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Cross-Site Scripting - SCRIPT tag attempt"; flow:to_server,established; http_uri; content:"<script",nocase; service:http; classtype:web-application-attack; priority:1; sid:1000010; rev:2;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Cross-Site Scripting - Javascript URI handler"; flow:to_server,established; http_uri; content:"javascript:",nocase; service:http; classtype:web-application-attack; priority:2; sid:1000011; rev:2;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Cross-Site Scripting - Event handler payload"; flow:to_server,established; http_client_body; pcre:"/on(error|load|mouseover)\s*=/i"; service:http; classtype:web-application-attack; priority:1; sid:1000012; rev:2;)
+
+# Path Traversal / LFI
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Path Traversal - Directory traversal attempt (../)"; flow:to_server,established; http_uri; content:"../"; service:http; classtype:web-application-attack; priority:1; sid:1000020; rev:2;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Sensitive File Access - /etc/passwd access attempt"; flow:to_server,established; http_uri; content:"/etc/passwd"; service:http; classtype:attempted-admin; priority:1; sid:1000021; rev:2;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Sensitive File Access - Windows win.ini access"; flow:to_server,established; http_uri; content:"win.ini",nocase; service:http; classtype:attempted-admin; priority:1; sid:1000022; rev:2;)
+
+# Command Injection (RCE)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Command Injection - Chained commands execution"; flow:to_server,established; http_uri; pcre:"/(\|[\s+]*id\b|\x3b[\s+]*cat[\s+]|&[\s+]*whoami)/i"; service:http; classtype:web-application-attack; priority:1; sid:1000030; rev:2;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK SQL Injection - Time-based blind (sleep)"; flow:to_server,established; http_uri; content:"sleep(",nocase; service:http; classtype:web-application-attack; priority:1; sid:1000031; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK SQL Injection - information_schema enumeration"; flow:to_server,established; http_uri; content:"information_schema",nocase; service:http; classtype:web-application-attack; priority:1; sid:1000032; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK SQL Injection - DROP TABLE"; flow:to_server,established; http_uri; content:"drop",nocase; pcre:"/drop(\s|\+|%20)+table/i"; service:http; classtype:web-application-attack; priority:1; sid:1000033; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Cross-Site Scripting - document.cookie theft"; flow:to_server,established; http_uri; content:"document.cookie",nocase; service:http; classtype:web-application-attack; priority:2; sid:1000034; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Cross-Site Scripting - IFRAME injection"; flow:to_server,established; http_uri; content:"<iframe",nocase; service:http; classtype:web-application-attack; priority:2; sid:1000035; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Path Traversal - URL-encoded ../ (%2e%2e%2f)"; flow:to_server,established; http_uri; content:"%2e%2e%2f",nocase; service:http; classtype:web-application-attack; priority:1; sid:1000036; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Local File Inclusion - php://filter wrapper"; flow:to_server,established; http_uri; content:"php://filter",nocase; service:http; classtype:web-application-attack; priority:1; sid:1000037; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Remote File Inclusion - external URL in parameter"; flow:to_server,established; http_uri; content:"=http",nocase; pcre:"/=(https?|ftp)(:|%3a)(\/\/|%2f%2f)/i"; service:http; classtype:web-application-attack; priority:1; sid:1000038; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Log4Shell JNDI lookup in header"; flow:to_server,established; http_header; content:"${jndi:",nocase; service:http; classtype:attempted-admin; priority:1; sid:1000039; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Shellshock function definition in header"; flow:to_server,established; http_header; content:"() {"; service:http; classtype:attempted-admin; priority:1; sid:1000040; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK XXE external entity in request body"; flow:to_server,established; http_client_body; content:"<!ENTITY",nocase; content:"SYSTEM",distance 0; service:http; classtype:web-application-attack; priority:1; sid:1000041; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK SSRF cloud metadata endpoint (169.254.169.254)"; flow:to_server,established; http_uri; content:"169.254.169.254"; service:http; classtype:web-application-attack; priority:1; sid:1000042; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Sensitive File Access - exposed .git directory"; flow:to_server,established; http_uri; content:"/.git/"; service:http; classtype:attempted-recon; priority:2; sid:1000043; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK Sensitive File Access - .env configuration file"; flow:to_server,established; http_uri; content:"/.env"; service:http; classtype:attempted-recon; priority:2; sid:1000044; rev:1;)

@@ -20,7 +20,7 @@ Kiểm tra nhanh toàn bộ chuỗi (30 giây): `docker exec -it nids_attacker p
 
 | Bước | Nói gì | Lệnh | Kết quả mong đợi |
 |---|---|---|---|
-| 1. Kiến trúc | Hai process dùng chung CSDL: engine (capture → decode → Aho-Corasick → kiểm tra chi tiết → threshold) và API/dashboard. Rule viết theo cú pháp Snort 3, nạp từ `rules/local.rules`. | (chỉ trình bày sơ đồ trong README) | |
+| 1. Kiến trúc | Hai process dùng chung CSDL: engine (capture → decode → Aho-Corasick → kiểm tra chi tiết → threshold) và API/dashboard. Rule viết theo cú pháp Snort 3, chia thành nhiều file trong `rules/` (mỗi file một category, bật/tắt được trên trang Rules). | (chỉ trình bày sơ đồ trong README) | |
 | 2. Lưu lượng bình thường | Truy cập victim bình thường thì không có cảnh báo. | `docker exec -it nids_attacker python -c "import urllib.request as u; print(u.urlopen('http://172.28.0.50/').status)"` | In `200`, dashboard vẫn 0 cảnh báo |
 | 3. Tấn công web | SQLi, XSS, traversal, Log4Shell, XXE, SSRF… đi qua HTTP thật. | `docker exec -it nids_attacker python lab/attacker/attack_demo.py web` | Mỗi đòn hiện một dòng log có màu, SID khớp dòng "kỳ vọng SID" của attacker |
 | 4. Quét mạng | Nmap Xmas/Null/FIN và quét cổng SYN dựa trên cờ TCP. | `... attack_demo.py scan` | SID 1000100–1000107 |
@@ -122,6 +122,6 @@ Bảng dưới gõ trực tiếp trong container attacker (`docker exec -it nids
 
 **Bộ rule lấy từ đâu?** 67 rule tự viết, chia theo nhóm SID (WEB, SCAN, DOS, AUTH, MALWARE/C2, RECON). Có sẵn bộ community của Snort ở `rules/vendor/` nhưng mặc định không nạp.
 
-**Thêm rule mới thế nào?** Sửa `rules/local.rules` rồi khởi động lại engine. Mỗi rule mới cần test positive/negative và một đòn trong `lab/attacker/attack_demo.py` (có test kiểm tra rule nào cũng có đòn trình diễn).
+**Thêm rule mới thế nào?** Rule built-in: thêm vào file của nhóm (`rules/<nhóm>.rules`); rule tạm: viết trong `custom.rules` ngay trên trang Services › Rules. Engine tự nạp lại sau vài giây, không cần khởi động lại. Mỗi rule mới cần test positive/negative và một đòn trong `lab/attacker/attack_demo.py` (có test kiểm tra rule nào cũng có đòn trình diễn).
 
 **Hiệu năng và rớt gói?** Capture đẩy vào hàng đợi có giới hạn (`queue_max_size`), worker xử lý song song; nếu đầy thì bỏ gói và ghi cảnh báo `Queue đầy` kèm tổng số gói bị bỏ.

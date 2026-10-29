@@ -1,0 +1,13 @@
+# =============================================================================
+# HYBRID NIDS - SCAN - quét cổng / quét mạng (SID 10001xx, cú pháp Snort 3)
+# Quy tắc viết rule: .claude/rules/snort-rules.md
+# =============================================================================
+
+alert tcp any any -> any any (msg:"SCAN Nmap Xmas Scan detected (FUP flags)"; flow:stateless; flags:FUP; classtype:attempted-recon; priority:2; sid:1000100; rev:2;)
+alert tcp any any -> any any (msg:"SCAN Nmap Null Scan detected (No flags)"; flow:stateless; flags:0; classtype:attempted-recon; priority:2; sid:1000101; rev:2;)
+alert tcp any any -> any any (msg:"SCAN Nmap FIN Scan detected"; flow:stateless; flags:F; classtype:attempted-recon; priority:2; sid:1000102; rev:2;)
+alert tcp any any -> any any (msg:"SCAN Suspicious SYN-FIN packet detected"; flow:stateless; flags:SF+; classtype:attempted-recon; priority:1; sid:1000103; rev:2;)
+alert tcp any any -> any any (msg:"SCAN Suspicious SYN-RST packet detected"; flow:stateless; flags:SR+; classtype:attempted-recon; priority:1; sid:1000104; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"SCAN Nmap Scripting Engine User-Agent"; flow:to_server,established; http_header:field user-agent; content:"Nmap Scripting Engine",nocase; service:http; classtype:attempted-recon; priority:2; sid:1000105; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"SCAN masscan User-Agent"; flow:to_server,established; http_header:field user-agent; content:"masscan",nocase; service:http; classtype:attempted-recon; priority:2; sid:1000106; rev:1;)
+alert tcp any any -> any any (msg:"SCAN TCP SYN port scan (many SYN from one source)"; flow:stateless; flags:S,CE; detection_filter:track by_src, count 20, seconds 2; classtype:attempted-recon; priority:2; sid:1000107; rev:1;)

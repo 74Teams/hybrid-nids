@@ -1,0 +1,14 @@
+# =============================================================================
+# HYBRID NIDS - DOS - từ chối dịch vụ (SID 10002xx, cú pháp Snort 3)
+# Quy tắc viết rule: .claude/rules/snort-rules.md
+# =============================================================================
+
+alert tcp any any -> any $HTTP_PORTS (msg:"DOS SYN Flood attempt to HTTP port"; flow:stateless; flags:S,CE; detection_filter:track by_dst, count 10, seconds 1; classtype:denial-of-service; priority:1; sid:1000201; rev:2;)
+alert tcp any any -> any $HTTP_PORTS (msg:"DOS Slowloris HTTP header probe detected"; flow:to_server,established; http_header; content:"X-a: b",nocase; service:http; classtype:denial-of-service; priority:2; sid:1000202; rev:2;)
+alert icmp any any -> any any (msg:"DOS Large ICMP echo request (Ping of Death)"; itype:8; dsize:>800; classtype:denial-of-service; priority:1; sid:1000203; rev:2;)
+alert udp any any -> any 123 (msg:"DOS NTP monlist query attempt"; content:"|17 00 03 2A|",depth 4; classtype:denial-of-service; priority:2; sid:1000204; rev:2;)
+alert udp any any -> any any (msg:"DOS UDP flood (high packet rate to one target)"; detection_filter:track by_dst, count 50, seconds 1; classtype:denial-of-service; priority:1; sid:1000205; rev:1;)
+alert icmp any any -> any any (msg:"DOS ICMP echo flood"; itype:8; detection_filter:track by_dst, count 20, seconds 1; classtype:denial-of-service; priority:1; sid:1000206; rev:1;)
+alert udp any any -> any 53 (msg:"DOS DNS ANY query (amplification)"; content:"|00 00 FF 00 01|"; classtype:denial-of-service; priority:2; sid:1000207; rev:1;)
+alert udp any any -> any 11211 (msg:"DOS Memcached stats amplification request"; content:"stats",offset 8,depth 5; classtype:denial-of-service; priority:2; sid:1000208; rev:1;)
+alert tcp any any -> any $HTTP_PORTS (msg:"DOS HTTP GET flood (many requests from one source)"; flow:to_server,established; http_method; content:"GET"; detection_filter:track by_src, count 30, seconds 1; service:http; classtype:denial-of-service; priority:1; sid:1000209; rev:1;)

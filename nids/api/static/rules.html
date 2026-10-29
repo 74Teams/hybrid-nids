@@ -17,30 +17,98 @@
 </nav>
 <div class="crumb-wrap"><div class="breadcrumb"><a href="/rules">Services</a><span class="sep">/</span><a href="/rules">NIDS</a><span class="sep">/</span><span class="cur">Rules</span></div></div>
 <main>
-  <section class="panel">
-    <h2>Nhóm rule</h2>
+  <nav class="tabs">
+    <a href="/rules" id="tab-rules">Rules</a>
+    <a href="/rules?tab=categories" id="tab-categories">Categories</a>
+  </nav>
+  <div id="flash" class="flash" hidden></div>
+
+  <!-- Tab Categories: chọn file rule nào được nạp -->
+  <section class="panel" id="categories-view" hidden>
+    <h2>Rule Categories</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>Category</th><th>File</th><th>Đang chạy / tổng</th><th></th></tr></thead>
+        <tbody id="cat-rows"></tbody>
+      </table>
+    </div>
     <div class="panel-body">
-      <div class="form-row"><label for="group">Nhóm</label><select id="group"></select></div>
-      <div class="form-row"><label for="q">Tìm kiếm</label><input id="q" placeholder="SID, mô tả hoặc classtype"></div>
-      <div class="actions"><span class="grow"></span><button type="button" id="all" class="btn-success">Xem tất cả</button></div>
-      <p class="note">Rule được đọc từ <b>rules/local.rules</b>. Trang này chỉ để xem; muốn thêm hoặc sửa rule, sửa file rồi khởi động lại engine.</p>
+      <div class="actions">
+        <button type="button" id="cat-all">Select All</button>
+        <button type="button" id="cat-none">Unselect All</button>
+        <span class="grow"></span>
+        <button type="button" id="cat-save" class="btn-primary">Save</button>
+      </div>
+      <p class="note">Chỉ category được tick mới được engine nạp. Bộ rule trong <b>rules/vendor/</b> mặc định tắt.</p>
     </div>
   </section>
 
-  <section class="panel">
+  <!-- Tab Rules -->
+  <section class="panel" id="rules-view-cat">
+    <h2>Available Rule Categories</h2>
+    <div class="panel-body">
+      <div class="form-row"><label for="cat">Category</label><select id="cat"></select></div>
+      <div class="form-row"><label for="q">Tìm kiếm</label><input id="q" placeholder="SID, mô tả hoặc classtype"></div>
+      <div class="actions"><span class="grow"></span><button type="button" id="viewall" class="btn-success">View All</button></div>
+      <p class="note">Chọn category để xem và quản lý rule. <span id="cat-warn" class="warn-text"></span></p>
+      <pre id="rawall" hidden></pre>
+    </div>
+  </section>
+
+  <section class="panel" id="rules-view-sid">
+    <h2>Rule Signature ID (SID) Enable/Disable Overrides</h2>
+    <div class="panel-body">
+      <div class="actions">
+        <button type="button" id="apply" class="btn-primary">Apply</button>
+        <button type="button" id="reset-all" class="btn-warning">Reset All</button>
+        <button type="button" id="reset-cur" class="btn-warning">Reset Current</button>
+        <button type="button" id="disable-all" class="btn-danger">Disable All</button>
+        <button type="button" id="enable-all" class="btn-success">Enable All</button>
+      </div>
+      <p class="note">Bấm biểu tượng trạng thái để bật/tắt từng SID. Khi xong, bấm <b>APPLY</b> để lưu và gửi thay đổi cho engine.</p>
+    </div>
+  </section>
+
+  <section class="panel" id="custom-view" hidden>
+    <h2>Defined Custom Rules</h2>
+    <div class="panel-body">
+      <ul id="custom-msgs" class="msgs"></ul>
+      <textarea id="custom" spellcheck="false" rows="16" aria-label="Nội dung custom.rules"></textarea>
+      <div class="actions">
+        <span class="grow"></span>
+        <button type="button" id="custom-save" class="btn-primary">Save</button>
+        <button type="button" id="custom-cancel" class="btn-warning">Cancel</button>
+        <button type="button" id="custom-clear" class="btn-danger">Clear</button>
+      </div>
+      <p class="note">Mỗi dòng một rule cú pháp Snort 3, ví dụ:
+        <code>alert icmp any any -&gt; any any (msg:"ICMP lớn"; dsize:&gt;1000; sid:2000001; rev:1;)</code>.
+        SID từ <b>2000000</b> trở lên. Dòng bắt đầu bằng <code>#</code> là comment.</p>
+    </div>
+  </section>
+
+  <section class="panel" id="rules-view-table">
     <div class="panel-head"><span class="grow" id="title">Rules</span></div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>SID</th><th>Proto</th><th>Src</th><th>SPort</th><th>Dst</th><th>DPort</th><th>Pri</th><th>Classtype</th><th>Mô tả</th><th></th></tr></thead>
+        <thead><tr><th>Trạng thái</th><th>SID</th><th>Proto</th><th>Src</th><th>SPort</th><th>Dst</th><th>DPort</th><th>Pri</th><th>Mô tả</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
       <div id="empty" class="empty">Không có rule nào khớp.</div>
+    </div>
+    <div class="panel-body legend-states">
+      <span><span class="state on">✔</span> bật mặc định</span>
+      <span><span class="state off">✖</span> tắt mặc định</span>
+      <span><span class="state on ovr">✔</span> bật do override</span>
+      <span><span class="state off ovr">✖</span> tắt do override</span>
+      <span><span class="changed-swatch"></span> chưa Apply</span>
     </div>
   </section>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
-let rules = [];
+const params = new URLSearchParams(location.search);
+const tab = params.get("tab") === "categories" ? "categories" : "rules";
+let categories = [], rules = [], pending = new Map(), customSaved = "";
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -57,27 +125,141 @@ function priIcon(sev) {
   s.append(t, p);
   return s;
 }
+function flash(kind, text) {
+  const f = $("flash");
+  f.className = "flash " + kind; f.textContent = text; f.hidden = false;
+  f.scrollIntoView({ block: "nearest" });
+}
+
+// ── Gọi API; thao tác ghi gửi kèm X-API-Key (hỏi một lần, nhớ trong trình duyệt) ──
+function storedKey() { try { return localStorage.getItem("nidsApiKey") || ""; } catch (e) { return ""; } }
+function storeKey(k) { try { localStorage.setItem("nidsApiKey", k); } catch (e) { /* bỏ qua: private mode */ } }
+
+async function api(method, url, body, text) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const headers = { "X-API-Key": storedKey() };
+    if (body !== undefined) headers["Content-Type"] = text ? "text/plain; charset=utf-8" : "application/json";
+    const r = await fetch(url, { method, headers, body: body === undefined ? undefined : text ? body : JSON.stringify(body) });
+    if (r.status === 401 && attempt === 0) {
+      const k = prompt("Nhập API key (biến môi trường NIDS_API_KEY của server) để sửa rule:", "");
+      if (!k) throw new Error("Cần API key để sửa rule");
+      storeKey(k);
+      continue;
+    }
+    const data = (r.headers.get("content-type") || "").includes("json") ? await r.json() : await r.text();
+    if (!r.ok) { const err = new Error(typeof data.detail === "string" ? data.detail : "Lỗi " + r.status); err.data = data; throw err; }
+    return data;
+  }
+}
+async function write(method, url, body, okText) {
+  try {
+    const res = await api(method, url, body);
+    flash("ok", okText + (res && res.reload === "pending" ? " Engine sẽ áp dụng sau khi nạp lại (vài giây)." : ""));
+    return res;
+  } catch (e) {
+    flash("err", e.message);
+    return null;
+  }
+}
+
+// ── Tab Categories ──
+function renderCategories() {
+  const body = $("cat-rows");
+  body.replaceChildren();
+  for (const c of categories) {
+    const tr = el("tr");
+    const box = el("input"); box.type = "checkbox"; box.checked = c.enabled; box.value = c.name; box.id = "c-" + c.name;
+    const lbl = el("label", "", c.name); lbl.htmlFor = box.id;
+    const tags = el("td");
+    if (c.vendor) tags.append(el("span", "tag", "vendor"));
+    if (c.editable) tags.append(el("span", "tag", "sửa được"));
+    const cb = el("td"); cb.append(box);
+    const name = el("td"); name.append(lbl);
+    const link = el("a", "", "Xem rule"); link.href = "/rules?category=" + encodeURIComponent(c.name);
+    tr.append(cb, name, el("td", "nw", "rules/" + c.name + ".rules"), el("td", "nw", `${c.active_count} / ${c.rule_count}`), tags);
+    tr.lastChild.append(" ", link);
+    body.append(tr);
+  }
+}
+function setAllCats(on) { for (const b of $("cat-rows").querySelectorAll("input")) b.checked = on; }
+$("cat-all").addEventListener("click", () => setAllCats(true));
+$("cat-none").addEventListener("click", () => setAllCats(false));
+$("cat-save").addEventListener("click", async () => {
+  const enabled = [...$("cat-rows").querySelectorAll("input:checked")].map((b) => b.value);
+  const res = await write("PUT", "/api/rules/categories", { enabled }, `Đã lưu ${enabled.length} category được nạp.`);
+  if (res) { categories = res.categories; renderCategories(); }
+});
+
+// ── Tab Rules ──
+const currentCat = () => $("cat").value;
+const catInfo = (name) => categories.find((c) => c.name === name);
+
+function fillCategorySelect(selected) {
+  const sel = $("cat");
+  sel.replaceChildren(new Option("Active Rules", ""));
+  for (const c of categories) {
+    const o = new Option(`${c.name}.rules (${c.active_count}/${c.rule_count})${c.enabled ? "" : " (tắt)"}`, c.name);
+    if (!c.enabled) o.className = "muted";
+    sel.append(o);
+  }
+  sel.value = catInfo(selected) ? selected : "";
+}
+
+async function loadRules() {
+  const cat = currentCat();
+  rules = await api("GET", cat ? "/api/rules/?category=" + encodeURIComponent(cat) : "/api/rules/?enabled=true");
+  pending.clear();
+  const info = catInfo(cat);
+  $("cat-warn").textContent = info && !info.enabled ? "Category này đang tắt: rule sẽ không chạy dù bật SID. Bật ở tab Categories." : "";
+  for (const id of ["reset-cur", "disable-all", "enable-all"]) $(id).disabled = !cat;
+  $("custom-view").hidden = !(info && info.editable);
+  if (info && info.editable) await loadCustom();
+  $("rawall").hidden = true;
+  render();
+}
+
+function stateOf(r) {
+  const on = pending.has(r.sid) ? pending.get(r.sid) : r.enabled;
+  const ovr = pending.has(r.sid) ? on !== r.default_enabled : r.overridden;
+  return { on, ovr };
+}
+function stateButton(r) {
+  const { on, ovr } = stateOf(r);
+  const b = el("button", "state " + (on ? "on" : "off") + (ovr ? " ovr" : ""), on ? "✔" : "✖");
+  b.type = "button";
+  b.title = (on ? "Đang bật" : "Đang tắt") + (ovr ? " (override)" : " (mặc định)") + " – bấm để đổi";
+  b.setAttribute("aria-label", `SID ${r.sid}: ${b.title}`);
+  b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const next = !stateOf(r).on;
+    if (next === r.enabled) pending.delete(r.sid); else pending.set(r.sid, next);
+    render();
+  });
+  return b;
+}
 
 function render() {
-  const g = $("group").value, q = $("q").value.trim().toLowerCase();
-  const list = rules.filter((r) => (!g || r.group === g) &&
-    (!q || String(r.sid).includes(q) || r.msg.toLowerCase().includes(q) || r.classtype.toLowerCase().includes(q)));
-  $("title").textContent = `Rules (${list.length}/${rules.length})`;
+  const q = $("q").value.trim().toLowerCase();
+  const list = rules.filter((r) => !q || String(r.sid).includes(q) || r.msg.toLowerCase().includes(q) || r.classtype.toLowerCase().includes(q));
+  const cat = currentCat();
+  $("title").textContent = `${cat ? cat + ".rules" : "Active Rules"} (${list.length}/${rules.length})`;
+  $("apply").textContent = pending.size ? `Apply (${pending.size})` : "Apply";
   $("empty").style.display = list.length ? "none" : "block";
   const body = $("rows");
   body.replaceChildren();
   for (const r of list) {
     const sev = [1, 2, 3].includes(r.severity) ? r.severity : 2;
-    const tr = el("tr", "clickable");
+    const tr = el("tr", "clickable" + (pending.has(r.sid) ? " changed" : ""));
     tr.id = "sid-" + r.sid;
+    const st = el("td"); st.append(stateButton(r));
     const pri = el("td"); pri.append(priIcon(sev));
     const log = el("a", "btn", "Xem log"); log.href = "/logs?sid=" + r.sid;
     log.addEventListener("click", (e) => e.stopPropagation());
     const logCell = el("td", "nw"); logCell.append(log);
     const desc = el("td", "msg", r.msg);
     if (r.unsupported_options.length) desc.append(el("span", "sub", "⚠ option chưa hỗ trợ: " + r.unsupported_options.join(", ")));
-    tr.append(el("td", "nw", r.sid), el("td", "", r.protocol.toUpperCase()), el("td", "", r.src_ip), el("td", "", r.src_port),
-      el("td", "", r.dst_ip), el("td", "", r.dst_port), pri, el("td", "", r.classtype), desc, logCell);
+    tr.append(st, el("td", "nw", r.sid), el("td", "", r.protocol.toUpperCase()), el("td", "", r.src_ip), el("td", "", r.src_port),
+      el("td", "", r.dst_ip), el("td", "", r.dst_port), pri, desc, logCell);
     const detail = el("tr");
     detail.hidden = true;
     const cell = el("td"); cell.colSpan = 10; cell.append(el("pre", "", r.raw_rule));
@@ -85,13 +267,113 @@ function render() {
     tr.addEventListener("click", () => { detail.hidden = !detail.hidden; });
     body.append(tr, detail);
   }
-  focusHash();
 }
 
-// /rules#sid=1000001: cuộn tới, tô sáng và mở sẵn rule đó
-function focusHash() {
+async function refreshAll() {
+  categories = await api("GET", "/api/rules/categories");
+  fillCategorySelect(currentCat());
+  await loadRules();
+}
+
+function discardPending() {
+  return !pending.size || confirm(`Bỏ ${pending.size} thay đổi chưa Apply?`);
+}
+
+$("cat").addEventListener("focus", () => { $("cat").dataset.prev = $("cat").value; });
+$("cat").addEventListener("change", async () => {
+  if (!discardPending()) { $("cat").value = $("cat").dataset.prev || ""; return; }
+  const u = new URL(location.href);
+  if (currentCat()) u.searchParams.set("category", currentCat()); else u.searchParams.delete("category");
+  history.replaceState(null, "", u);
+  await loadRules();
+});
+$("q").addEventListener("input", render);
+$("viewall").addEventListener("click", () => {
+  const pre = $("rawall");
+  pre.textContent = rules.map((r) => (r.enabled ? "" : "# ") + r.raw_rule).join("\n") || "(trống)";
+  pre.hidden = !pre.hidden;
+});
+
+$("apply").addEventListener("click", async () => {
+  if (!pending.size) { flash("warn", "Chưa có thay đổi nào để Apply."); return; }
+  const enable = [...pending].filter(([, on]) => on).map(([sid]) => sid);
+  const disable = [...pending].filter(([, on]) => !on).map(([sid]) => sid);
+  if (await write("POST", "/api/rules/sids", { enable, disable }, `Đã áp dụng ${pending.size} thay đổi.`)) await refreshAll();
+});
+$("reset-all").addEventListener("click", async () => {
+  if (!confirm("Xoá mọi override SID ở tất cả category, đưa rule về trạng thái mặc định trong file?")) return;
+  if (await write("POST", "/api/rules/sids/reset", {}, "Đã reset mọi override.")) await refreshAll();
+});
+$("reset-cur").addEventListener("click", async () => {
+  const cat = currentCat();
+  if (!cat || !discardPending()) return;
+  if (await write("POST", "/api/rules/sids/reset", { category: cat }, `Đã reset override của ${cat}.`)) await refreshAll();
+});
+for (const [id, on] of [["disable-all", false], ["enable-all", true]]) {
+  $(id).addEventListener("click", async () => {
+    const cat = currentCat();
+    if (!cat || !confirm(`${on ? "Bật" : "Tắt"} toàn bộ ${rules.length} rule trong ${cat}?`)) return;
+    if (await write("POST", `/api/rules/categories/${cat}/all`, { enabled: on }, `Đã ${on ? "bật" : "tắt"} toàn bộ ${cat}.`)) await refreshAll();
+  });
+}
+
+// ── custom.rules ──
+async function loadCustom() {
+  customSaved = await api("GET", "/api/rules/custom");
+  $("custom").value = customSaved;
+  $("custom-msgs").replaceChildren();
+}
+function showCustomMsgs(errors, warnings) {
+  const ul = $("custom-msgs");
+  ul.replaceChildren();
+  for (const e of errors) ul.append(el("li", "err", `Dòng ${e.line}: ${e.error}`));
+  for (const w of warnings) ul.append(el("li", "warn", `Dòng ${w.line}: ${w.warning}`));
+}
+function selectLine(n) {
+  const ta = $("custom"), lines = ta.value.split("\n");
+  const start = lines.slice(0, n - 1).join("\n").length + (n > 1 ? 1 : 0);
+  ta.focus();
+  ta.setSelectionRange(start, start + (lines[n - 1] || "").length);
+  ta.scrollTop = Math.max(0, (n - 3) * 18);
+}
+$("custom-save").addEventListener("click", async () => {
+  try {
+    const res = await api("PUT", "/api/rules/custom", $("custom").value, true);
+    showCustomMsgs([], res.warnings);
+    flash("ok", `Đã lưu custom.rules (${res.rules} rule). Engine sẽ áp dụng sau khi nạp lại (vài giây).`);
+    const keep = $("custom").value;
+    await refreshAll();
+    $("custom").value = keep; customSaved = keep;
+    showCustomMsgs([], res.warnings);
+  } catch (e) {
+    const d = e.data && e.data.detail;
+    if (d && d.errors) {
+      showCustomMsgs(d.errors, d.warnings || []);
+      flash("err", `custom.rules có ${d.errors.length} dòng lỗi, chưa được lưu.`);
+      selectLine(d.errors[0].line);
+    } else flash("err", e.message);
+  }
+});
+$("custom-cancel").addEventListener("click", () => { $("custom").value = customSaved; $("custom-msgs").replaceChildren(); });
+$("custom-clear").addEventListener("click", () => {
+  if (confirm("Xoá toàn bộ nội dung trong ô? File chỉ thay đổi khi bấm Save.")) $("custom").value = "";
+});
+
+window.addEventListener("beforeunload", (e) => {
+  if (pending.size || $("custom").value !== customSaved) { e.preventDefault(); e.returnValue = ""; }
+});
+
+// /rules#sid=1000001: mở đúng category của SID đó, cuộn tới và mở sẵn rule
+async function focusHash() {
   const m = location.hash.match(/^#sid=(\d+)/);
-  const row = m && $("sid-" + m[1]);
+  if (!m) return;
+  if (!$("sid-" + m[1])) {
+    const hit = (await api("GET", "/api/rules/?q=" + m[1])).find((r) => String(r.sid) === m[1]);
+    if (!hit) return;
+    $("cat").value = hit.category;
+    await loadRules();
+  }
+  const row = $("sid-" + m[1]);
   if (!row) return;
   row.classList.add("hl");
   row.nextElementSibling.hidden = false;
@@ -99,23 +381,21 @@ function focusHash() {
 }
 
 async function init() {
+  $("tab-" + tab).classList.add("active");
+  for (const id of ["rules-view-cat", "rules-view-sid", "rules-view-table"]) $(id).hidden = tab !== "rules";
+  $("categories-view").hidden = tab !== "categories";
   try {
-    const r = await fetch("/api/rules/");
-    if (!r.ok) throw new Error(r.status);
-    rules = await r.json();
+    categories = await api("GET", "/api/rules/categories");
     $("status").textContent = "Đã kết nối"; $("dot").className = "dot ok";
   } catch (e) {
     $("status").textContent = "Mất kết nối tới API";
+    return;
   }
-  const groups = [...new Set(rules.map((r) => r.group))];
-  $("group").append(new Option("Tất cả", ""));
-  for (const g of groups) $("group").append(new Option(`${g} (${rules.filter((r) => r.group === g).length})`, g));
-  render();
+  if (tab === "categories") { renderCategories(); return; }
+  fillCategorySelect(params.get("category") || "");
+  await loadRules();
+  await focusHash();
 }
-
-$("group").addEventListener("change", render);
-$("q").addEventListener("input", render);
-$("all").addEventListener("click", () => { $("group").value = ""; $("q").value = ""; render(); });
 init();
 </script>
 </body>

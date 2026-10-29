@@ -1,5 +1,5 @@
 ---
-description: Thêm một rule phát hiện kiểu Snort vào rules/local.rules kèm test positive/negative. Dùng khi cần phát hiện một dấu hiệu tấn công mới.
+description: Thêm một rule phát hiện kiểu Snort vào file rule của nhóm (rules/<nhóm>.rules) kèm test positive/negative. Dùng khi cần phát hiện một dấu hiệu tấn công mới.
 argument-hint: <mô tả tấn công cần phát hiện>
 ---
 
@@ -7,7 +7,7 @@ Yêu cầu: $ARGUMENTS
 
 Ngữ cảnh đã nhúng sẵn (đọc kỹ trước khi làm):
 - Tài liệu cú pháp, option được hỗ trợ, dải SID và giới hạn engine: @.claude/rules/snort-rules.md
-- Toàn bộ rule hiện có (để chọn nhóm và SID kế tiếp): @rules/local.rules
+- Rule hiện có theo nhóm (để chọn nhóm và SID kế tiếp): @rules/web-attack.rules @rules/scan.rules @rules/dos.rules @rules/auth.rules @rules/malware-c2.rules @rules/recon.rules
 
 Bạn đang thêm một rule phát hiện cho dự án NIDS này. Tuân thủ đúng `.claude/rules/snort-rules.md` ở trên — nó là nguồn chân lý về cú pháp. Làm tuần tự các bước sau, không bỏ bước.
 
@@ -20,7 +20,7 @@ Bạn đang thêm một rule phát hiện cho dự án NIDS này. Tuân thủ đ
    - **SID mới = SID lớn nhất đang dùng _trong chính nhóm đó_ + 1** (không phải max toàn cục + 1). Ví dụ nhóm WEB cao nhất là `1000030` thì SID mới là `1000031`.
    - Nếu nhóm đã hết chỗ trong dải `xx` → **DỪNG và báo**, không lấn sang dải nhóm khác.
 
-3. **Viết rule** vào `rules/local.rules`, đặt trong **đúng section của nhóm**, giữ SID tăng dần. Yêu cầu:
+3. **Viết rule** vào **đúng file của nhóm** (`rules/web-attack.rules`, `scan.rules`, `dos.rules`, `auth.rules`, `malware-c2.rules`, `recon.rules`), giữ SID tăng dần. Yêu cầu:
    - `rev:1`; `msg` bắt đầu bằng tiền tố nhóm (`WEB-ATTACK`/`SCAN`/`DOS`/`AUTH`/`MALWARE`/`C2`/`RECON`).
    - Theo đúng thứ tự option chuẩn: `msg; flow; [flags|itype/icode|dsize]; [buffer; content...; pcre...]; [detection_filter]; [service]; classtype; priority; sid; rev;`.
    - **Chỉ dùng option có trong bảng "Option được hỗ trợ".** Nếu dấu hiệu bắt buộc cần một option chưa hỗ trợ (`byte_test`, `isdataat`, `threshold`, `http_method:"..."`, `severity:`, `nocase;` đứng riêng, pcre flag `R`, danh sách/dải/phủ định cổng...) → **DỪNG và báo rõ option còn thiếu**, không tự chế hay xấp xỉ bằng cách sai.

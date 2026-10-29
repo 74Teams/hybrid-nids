@@ -1,4 +1,4 @@
-"""Bảng lệnh demo thủ công trong docs/demo/kich-ban-demo.md phải khớp với SID có thật trong rules/local.rules."""
+"""Bảng lệnh demo thủ công trong docs/demo/kich-ban-demo.md phải khớp với SID có thật trong rules/."""
 import re
 from pathlib import Path
 
@@ -30,7 +30,7 @@ def test_manual_command_sids_exist_in_ruleset():
     manager.load_all_rules()
     sids = _manual_command_sids()
     missing = sids - set(manager.rules_by_sid)
-    assert not missing, f"SID trong bảng lệnh demo không có trong rules/local.rules: {sorted(missing)}"
+    assert not missing, f"SID trong bảng lệnh demo không có trong rules/: {sorted(missing)}"
 
 
 def test_manual_command_section_is_non_empty():

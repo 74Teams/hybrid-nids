@@ -7,13 +7,13 @@ paths:
 
 # Quy tắc viết rule (Snort 3)
 
-Mọi rule nằm trong **một file duy nhất**: `rules/local.rules`. Cú pháp là **Snort 3**, nhưng engine chỉ hiểu một tập con: chỉ dùng các option liệt kê ở mục "Option được hỗ trợ". Rule viết đúng theo tài liệu này cũng chạy được trên Snort 3 thật.
+Rule built-in chia theo nhóm, mỗi nhóm một file: `rules/web-attack.rules`, `scan.rules`, `dos.rules`, `auth.rules`, `malware-c2.rules`, `recon.rules` (xem bảng SID). Rule tự viết qua web nằm trong `rules/custom.rules`. Cú pháp là **Snort 3**, nhưng engine chỉ hiểu một tập con: chỉ dùng các option liệt kê ở mục "Option được hỗ trợ". Rule viết đúng theo tài liệu này cũng chạy được trên Snort 3 thật.
 
 ## Quy trình thêm hoặc sửa rule
 
-1. Chọn SID còn trống trong dải của nhóm (bảng SID bên dưới). Đặt rule vào đúng section của nhóm đó, giữ thứ tự SID tăng dần.
+1. Chọn SID còn trống trong dải của nhóm (bảng SID bên dưới). Đặt rule vào đúng file của nhóm đó, giữ thứ tự SID tăng dần.
 2. Viết rule theo **thứ tự option chuẩn**.
-3. Rule mới: `rev:1`. Sửa rule đã có: **tăng `rev` thêm 1**. Việc tăng `rev` chỉ để ghi nhận rule đã đổi. Thay đổi có hiệu lực sau khi khởi động lại engine.
+3. Rule mới: `rev:1`. Sửa rule đã có: **tăng `rev` thêm 1**. Việc tăng `rev` chỉ để ghi nhận rule đã đổi. Engine đang chạy tự nạp lại trong vài giây sau khi file đổi.
 4. Thêm test trong `tests/engine/test_diverse_rules_engine.py`: một gói tấn công làm rule bắn, và một gói hợp lệ gần giống mà rule **không** bắn.
 5. Xong khi: `pytest` xanh, và khi nạp file không có dòng `WARNING rules` nào (dòng này nghĩa là lỗi cú pháp, SID trùng hoặc có option bị bỏ qua; đặt `system.log_level: DEBUG` để xem chi tiết từng rule).
 
@@ -101,16 +101,17 @@ Dùng `priority` để đặt mức độ. Cú pháp Snort 2 không được h�
 
 ## SID
 
-| Dải | Nhóm |
-|---|---|
-| `10000xx` | WEB-ATTACK |
-| `10001xx` | SCAN |
-| `10002xx` | DOS |
-| `10003xx` | AUTH |
-| `10004xx` | MALWARE, C2 |
-| `10005xx` | RECON (UDP / ICMP) |
+| Dải | Nhóm | File |
+|---|---|---|
+| `10000xx` | WEB-ATTACK | `rules/web-attack.rules` |
+| `10001xx` | SCAN | `rules/scan.rules` |
+| `10002xx` | DOS | `rules/dos.rules` |
+| `10003xx` | AUTH | `rules/auth.rules` |
+| `10004xx` | MALWARE, C2 | `rules/malware-c2.rules` |
+| `10005xx` | RECON (UDP / ICMP) | `rules/recon.rules` |
+| `≥ 2000000` | Rule tự viết trên web | `rules/custom.rules` |
 
-Mỗi SID chỉ xuất hiện một lần. Nếu trùng, parser giữ rule nạp trước và bỏ rule sau.
+Mỗi SID chỉ xuất hiện một lần trong mọi file. Nếu trùng, parser giữ rule nạp trước (file xếp theo tên) và bỏ rule sau.
 
 ## Giới hạn của engine
 
