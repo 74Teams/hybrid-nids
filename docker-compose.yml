@@ -10,24 +10,18 @@ services:
     image: mysql:8.0
     container_name: nids_mysql
     environment:
-      MYSQL_ROOT_PASSWORD: "010305"
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?đặt trong .env}"
       MYSQL_DATABASE: nids_db
       MYSQL_USER: nids_app
-      MYSQL_PASSWORD: "nids_app_password"
+      MYSQL_PASSWORD: "${NIDS_DB_PASSWORD:?đặt trong .env}"
     networks:
       nids_isolated_net:
         ipv4_address: 172.28.0.10
     healthcheck:
       test:
         [
-          "CMD",
-          "mysqladmin",
-          "ping",
-          "-h",
-          "localhost",
-          "-u",
-          "root",
-          "-p010305",
+          "CMD-SHELL",
+          "mysqladmin ping -h localhost -u root -p\"$$MYSQL_ROOT_PASSWORD\"",
         ]
       interval: 5s
       timeout: 5s
@@ -62,7 +56,7 @@ services:
       NIDS_DB_PORT: "3306"
       NIDS_DB_NAME: "nids_db"
       NIDS_DB_USER: "nids_app"
-      NIDS_DB_PASSWORD: "nids_app_password"
+      NIDS_DB_PASSWORD: "${NIDS_DB_PASSWORD:?đặt trong .env}"
     restart: unless-stopped
 
   # Honeypot chạy chung network với victim: NIDS sniff được cả traffic tới honeypot,
@@ -85,7 +79,7 @@ services:
       NIDS_DB_PORT: "3306"
       NIDS_DB_NAME: "nids_db"
       NIDS_DB_USER: "nids_app"
-      NIDS_DB_PASSWORD: "nids_app_password"
+      NIDS_DB_PASSWORD: "${NIDS_DB_PASSWORD:?đặt trong .env}"
     restart: unless-stopped
 
   honeypot_http:
@@ -126,7 +120,7 @@ services:
       NIDS_DB_PORT: "3306"
       NIDS_DB_NAME: "nids_db"
       NIDS_DB_USER: "nids_app"
-      NIDS_DB_PASSWORD: "nids_app_password"
+      NIDS_DB_PASSWORD: "${NIDS_DB_PASSWORD:?đặt trong .env}"
       # Khoá cho thao tác sửa rule trên web; đặt trong shell hoặc file .env, để trống thì trang Rules chỉ xem
       NIDS_API_KEY: "${NIDS_API_KEY:-}"
     restart: unless-stopped
