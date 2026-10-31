@@ -1,15 +1,21 @@
 import os
 import yaml
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from urllib.parse import quote_plus
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 CONFIG_DIR = ROOT_DIR / "config"
 DEFAULT_SETTINGS_PATH = CONFIG_DIR / "settings.yaml"
+EXAMPLE_SETTINGS_PATH = CONFIG_DIR / "settings.example.yaml"
 
-def load_settings(path: Path = DEFAULT_SETTINGS_PATH) -> Dict[str, Any]:
+def load_settings(path: Optional[Path] = None) -> Dict[str, Any]:
     """Tải file cấu hình YAML."""
+    if path is None:
+        path = DEFAULT_SETTINGS_PATH
+        # Bản clone mới/CI chưa có settings.yaml (đã bỏ khỏi git) nên dùng file mẫu
+        if not path.exists():
+            path = EXAMPLE_SETTINGS_PATH
     if not path.exists():
         raise FileNotFoundError(f"Không tìm thấy file cấu hình tại: {path}")
     with open(path, "r", encoding="utf-8") as f:

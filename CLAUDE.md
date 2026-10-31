@@ -26,7 +26,7 @@ Lệnh luôn chạy từ thư mục gốc repo (`pytest.ini` đặt `pythonpath 
 - `nids/db/` — `models.py` (`events`, `event_payloads`), `repository.py` (`EventRepository`)
 - `nids/ai.py` — `AITrafficWorker` (stub); `nids/config.py` — `SETTINGS`, `get_db_url()`; `nids/logger.py` — `setup_logging`
 - `rules/` — file `.rules` theo category, `custom.rules`, `vendor/`, `state.yaml` (gitignore)
-- `config/settings.yaml` — cấu hình duy nhất
+- `config/settings.example.yaml` — file mẫu được commit; `config/settings.yaml` — cấu hình local (bị git ignore, thiếu thì dùng file mẫu)
 - `lab/` — Docker lab: `attacker/attack_demo.py`, `victim/`
 - `tests/` — chia theo khu vực: `engine/`, `api/`, `honeypot/`, `lab/`
 - `docs/` — `demo/kich-ban-demo.md` (kịch bản thuyết trình), `ai/` (thiết kế AI worker)
@@ -69,7 +69,7 @@ Các process (engine, API, mỗi honeypot một process) chạy riêng và chỉ
 
 ## Known Issues / Gotchas
 
-- `settings.yaml` đã commit mặc định dùng `capture_mode: "live"`, interface `eth0` và MySQL của Docker. Khi chạy local thì chuyển sang `sqlite` (và `offline` kèm `pcap_file` nếu cần).
+- File mẫu `settings.example.yaml` được commit; `settings.yaml` là file local bị ignore, mật khẩu Docker nằm ở `.env`. Mặc định của file mẫu dùng `capture_mode: "live"`, interface `eth0` và MySQL của Docker. Khi chạy local thì chuyển sang `sqlite` (và `offline` kèm `pcap_file` nếu cần).
 - Biến trong rule được hard-code: `$HTTP_PORTS` xử lý trong `_match_port`, còn `decoder.HTTP_PORTS` quyết định payload nào được parse thành HTTP. Thêm port hoặc biến mới thì phải sửa cả hai chỗ.
 - Parser chỉ hiểu cú pháp Snort 3. Cú pháp Snort 2 (`nocase;` đứng riêng, `severity:`, `http_method:"POST"`) không được hỗ trợ.
 - Engine sniff cả kết nối của chính nó tới MySQL. Nếu bỏ port 3306 khỏi BPF filter, câu INSERT chứa chuỗi tấn công sẽ sinh alert mới thành vòng lặp.

@@ -48,3 +48,4 @@ rules/state.yaml
 rules/*.tmp
 rules/*.bak
 .env
+config/settings.yaml
