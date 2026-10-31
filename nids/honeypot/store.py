@@ -17,6 +17,7 @@ SEVERITY = {
     "ssh.auth.attempt": 3,
     "ssh.command": 2,
     "ssh.exec": 2,
+    "ssh.download": 1,
     "http.login": 2,
     "http.login.sqli": 1,
 }
