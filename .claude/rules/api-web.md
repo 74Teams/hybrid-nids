@@ -19,6 +19,8 @@ paths:
 - `/api/rules/` — danh sách rule kèm category và trạng thái bật/tắt; `categories`, `sids`, `sids/reset`, `categories/{name}/all`, `custom` để bật/tắt category, override SID và sửa `custom.rules`.
 - `/health`.
 
+Thời gian: API trả ISO 8601 UTC kèm `Z` (`2026-10-31T14:00:00Z`, hàm `iso_utc`). `since`/`until` nhận giờ có múi (`+07:00`, `Z`) và được đổi về UTC; giờ không kèm múi coi là UTC. Trang web đổi sang giờ máy người xem bằng `new Date(iso)`; ô `datetime-local` ở bộ lọc phải đổi sang `toISOString()` trước khi gửi. Test múi giờ nằm ở `tests/api/test_timezone_utc.py`.
+
 Thao tác ghi rule cần header `X-API-Key` khớp biến môi trường `NIDS_API_KEY`; chưa đặt biến thì thao tác ghi bị khoá. Không được nới điều kiện này.
 
 ## Web UI

@@ -1,14 +1,26 @@
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Optional
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
+
+def utc_now() -> datetime:
+    """Giờ UTC hiện tại, dạng naive (không kèm múi giờ) vì CSDL luôn lưu UTC."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def iso_utc(value: Optional[datetime], timespec: str = "auto") -> Optional[str]:
+    """Chuỗi ISO 8601 kèm `Z` cho giá trị UTC naive, để trình duyệt tự đổi sang giờ người xem."""
+    return value.isoformat(timespec=timespec) + "Z" if value else None
+
+
 class EventModel(Base):
     __tablename__ = "events"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    timestamp = Column(DateTime, default=utc_now, nullable=False, index=True)
     sid = Column(Integer, nullable=True)
     source_type = Column(String(20), default="RULE_ENGINE")  
     attack_type = Column(String(100), nullable=False)

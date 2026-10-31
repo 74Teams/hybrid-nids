@@ -1,8 +1,9 @@
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from typing import List, Dict, Any, Optional
+from nids.db.models import iso_utc
 from nids.db.repository import EventRepository
 
 router = APIRouter(prefix="/api/alerts", tags=["Alerts"])
@@ -18,13 +19,20 @@ def log_filters(source_type: Optional[str] = None, protocol: Optional[str] = Non
                 src_ip: Optional[str] = None, dst_ip: Optional[str] = None, sid: Optional[int] = None,
                 severity: Optional[int] = None, since: Optional[datetime] = None,
                 until: Optional[datetime] = None, q: Optional[str] = None) -> Dict[str, Any]:
-    """Bộ lọc dùng chung cho danh sách, xoá và xuất CSV; chuỗi rỗng coi như không lọc."""
-    return {k: (v or None) if isinstance(v, str) else v for k, v in locals().items()}
+    """Bộ lọc dùng chung cho danh sách, xoá và xuất CSV; chuỗi rỗng coi như không lọc.
+
+    `since`/`until` được đổi về UTC naive để so với cột timestamp (CSDL lưu UTC); giờ không kèm múi giờ coi là UTC.
+    """
+    filters = {k: (v or None) if isinstance(v, str) else v for k, v in locals().items()}
+    for key in ("since", "until"):
+        if filters[key] is not None and filters[key].tzinfo is not None:
+            filters[key] = filters[key].astimezone(timezone.utc).replace(tzinfo=None)
+    return filters
 
 
 def _to_dict(e) -> Dict[str, Any]:
     d = {f: getattr(e, f) for f in FIELDS}
-    d["timestamp"] = e.timestamp.isoformat() if e.timestamp else None
+    d["timestamp"] = iso_utc(e.timestamp)
     return d
 
 

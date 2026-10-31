@@ -125,7 +125,12 @@ const pageSize = () => Number($("filter").elements.limit.value);
 // Bộ lọc hiện tại (tab + form) dưới dạng query string, không gồm limit/offset
 function filterQuery() {
   const p = new URLSearchParams(TABS[tabKey()].params);
-  for (const [k, v] of new FormData($("filter"))) if (k !== "limit" && v !== "") p.set(k, v);
+  for (const [k, v] of new FormData($("filter"))) {
+    if (k === "limit" || v === "") continue;
+    // Ô datetime-local là giờ máy người xem; API và CSDL dùng UTC nên đổi sang ISO UTC trước khi gửi
+    const t = (k === "since" || k === "until") ? new Date(v) : null;
+    p.set(k, t && !isNaN(t) ? t.toISOString() : v);
+  }
   return p;
 }
 
@@ -228,7 +233,8 @@ async function showDetail(id) {
   for (const k of ["timestamp", "source_type", "attack_type", "severity", "sid", "src_ip", "src_port",
                    "dst_ip", "dst_port", "protocol", "http_method", "http_uri", "status"]) {
     if (a[k] == null || a[k] === "") continue;
-    dl.append(el("dt", "", k), el("dd", "", a[k]));
+    // timestamp là ISO UTC kèm Z, đổi sang giờ máy người xem cho khớp với bảng
+    dl.append(el("dt", "", k), el("dd", "", k === "timestamp" ? new Date(a[k]).toLocaleString("vi-VN") : a[k]));
   }
   const body = $("d-body");
   body.replaceChildren(dl);

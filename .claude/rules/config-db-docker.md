@@ -18,6 +18,7 @@ paths:
 ## Database
 
 - Chỉ có hai bảng: `events`, `event_payloads`. Engine và honeypot cùng ghi vào `events`, phân biệt bằng `source_type` (`RULE_ENGINE` / `HONEYPOT`).
+- Cột `events.timestamp` luôn lưu **UTC naive** (không kèm múi giờ), bất kể múi giờ của máy chạy engine hay API. Dùng `nids.db.models.utc_now()` để lấy giờ hiện tại và `datetime.fromtimestamp(ts, timezone.utc).replace(tzinfo=None)` để đổi epoch; không dùng `datetime.now()`, `datetime.utcnow()` hay `fromtimestamp` không có `tz`.
 - `init_db()` thử lại tối đa 15 lần, mỗi lần cách 2s, vì MySQL khởi động chậm trong Docker.
 
 ## Docker
