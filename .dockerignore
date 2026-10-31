@@ -1,0 +1,16 @@
+# Dockerfile dùng COPY . . nên mọi thứ dưới đây sẽ lọt vào image (và registry) nếu không loại
+.git
+.env
+.env.*
+config/settings.yaml
+data
+*.db
+*.sqlite3
+
+# Không cần trong image
+.github
+.claude
+.superpowers
+.pytest_cache
+__pycache__
+*.py[cod]
