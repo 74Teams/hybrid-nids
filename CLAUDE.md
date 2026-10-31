@@ -20,10 +20,10 @@ Hybrid NIDS + honeypot (đồ án PBL4): hệ thống phát hiện xâm nhập m
 
 Lệnh luôn chạy từ thư mục gốc repo (`pytest.ini` đặt `pythonpath = .`).
 
-- `nids/engine/` — process engine (`python -m nids.engine`): capture, decode, rule parser, Aho-Corasick, detection, threshold
+- `nids/engine/` — process engine (`python -m nids.engine`): capture, decode, rule parser, Aho-Corasick, detection, threshold, `flow.py` (gom flow)
 - `nids/api/` — process FastAPI: `routes/` (alerts, rules), `static/` (dashboard, logs, rules page)
 - `nids/honeypot/` — honeypot SSH và HTTP (`python -m nids.honeypot ssh|http`), `store.py` ghi sự kiện
-- `nids/db/` — `models.py` (`events`, `event_payloads`), `repository.py` (`EventRepository`)
+- `nids/db/` — `models.py` (`events`, `event_payloads`, `flows`), `repository.py` (`EventRepository`)
 - `nids/ai.py` — `AITrafficWorker` (stub); `nids/config.py` — `SETTINGS`, `get_db_url()`; `nids/logger.py` — `setup_logging`
 - `rules/` — file `.rules` theo category, `custom.rules`, `vendor/`, `state.yaml` (gitignore)
 - `config/settings.example.yaml` — file mẫu được commit; `config/settings.yaml` — cấu hình local (bị git ignore, thiếu thì dùng file mẫu)
@@ -46,7 +46,7 @@ Các process (engine, API, mỗi honeypot một process) chạy riêng và chỉ
 
 - KHÔNG chạy `git commit`/`git push` khi chưa được người dùng cho phép rõ ràng. Không bao giờ commit, push hay merge thẳng vào `main`: tạo nhánh mới, push nhánh đó và mở pull request (xem `.claude/rules/git-workflow.md`).
 - Honeypot không bao giờ thực thi input của attacker. Lỗi ghi CSDL không được làm sập sensor.
-- DB chỉ lưu sự kiện cảnh báo. Rule chỉ nằm trong file `rules/`, không nạp rule từ DB.
+- DB chỉ lưu dữ liệu quan sát được: sự kiện cảnh báo (`events`) và flow log (`flows`, một dòng cho mỗi flow, không ghi từng gói). Rule chỉ nằm trong file `rules/`, không nạp rule từ DB.
 - Thao tác ghi rule qua API phải kiểm tra header `X-API-Key` khớp `NIDS_API_KEY`. Chưa đặt biến môi trường thì thao tác ghi bị khoá.
 - Thêm rule mới thì phải thêm đòn tương ứng trong `lab/attacker/attack_demo.py`, nếu không `tests/lab/test_attack_demo.py` sẽ fail. Trước khi thêm hoặc sửa rule, đọc `.claude/rules/snort-rules.md`.
 - Không bỏ port 3306 khỏi `network.bpf_filter` (lý do ở mục Known Issues).

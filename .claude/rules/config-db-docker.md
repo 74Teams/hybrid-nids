@@ -17,8 +17,9 @@ paths:
 
 ## Database
 
-- Chỉ có hai bảng: `events`, `event_payloads`. Engine và honeypot cùng ghi vào `events`, phân biệt bằng `source_type` (`RULE_ENGINE` / `HONEYPOT`).
-- Cột `events.timestamp` luôn lưu **UTC naive** (không kèm múi giờ), bất kể múi giờ của máy chạy engine hay API. Dùng `nids.db.models.utc_now()` để lấy giờ hiện tại và `datetime.fromtimestamp(ts, timezone.utc).replace(tzinfo=None)` để đổi epoch; không dùng `datetime.now()`, `datetime.utcnow()` hay `fromtimestamp` không có `tz`.
+- Ba bảng: `events`, `event_payloads`, `flows`. Engine và honeypot cùng ghi vào `events`, phân biệt bằng `source_type` (`RULE_ENGINE` / `HONEYPOT`).
+- `flows` là flow log của engine: mỗi dòng là một flow đã kết thúc (số gói/byte hai chiều, cờ TCP, `end_reason`, `alert_count`; `alert_count = 0` nghĩa là không khớp rule nào). Engine ghi theo lô và tự xoá flow cũ hơn `flow.retention_hours` theo cột `created_at` (thời điểm ghi, không phải giờ của gói). Cấu hình ở mục `flow` trong `settings.yaml`.
+- Mọi cột thời gian (`events.timestamp`, `flows.*`) luôn lưu **UTC naive** (không kèm múi giờ), bất kể múi giờ của máy chạy engine hay API. Dùng `nids.db.models.utc_now()` để lấy giờ hiện tại và `utc_from_epoch(ts)` để đổi epoch; không dùng `datetime.now()`, `datetime.utcnow()` hay `fromtimestamp` không có `tz`.
 - `init_db()` thử lại tối đa 15 lần, mỗi lần cách 2s, vì MySQL khởi động chậm trong Docker.
 
 ## Docker

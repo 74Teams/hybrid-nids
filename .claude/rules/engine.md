@@ -38,6 +38,14 @@ paths:
 
 IP đã chạm honeypot trong 1 giờ gần nhất chắc chắn là attacker. `main.py::handle_alert` gọi `enrich_alert`: cảnh báo rule engine từ IP đó được nâng một bậc priority (tối đa P1) và gắn `[honeypot-confirmed]`. Danh sách IP đọc từ CSDL qua `HoneypotIPCache` (TTL 5 giây vì honeypot ghi từ process khác).
 
+## Flow log
+
+- `nids/engine/flow.py` (`Flow`, `FlowTracker`, `flow_key`) gom gói theo 5-tuple chuẩn hoá hai chiều; module thuần, không biết CSDL, để AI worker (#22) dùng lại. Bên gửi gói đầu là nguồn (SYN-ACK đầu tiên thì đảo chiều). Mốc thời gian lấy từ `packet.timestamp`, nên replay pcap cho kết quả lặp lại được.
+- Flow TCP đóng bằng FIN hai chiều hoặc RST thì chờ `closing_timeout` rồi mới xuất (để ACK cuối không thành flow riêng). Ngoài ra xuất khi idle, active timeout, bảng đầy (`max_flows`, đẩy flow lâu không có gói nhất) hoặc khi engine dừng.
+- `main.py::FlowLog` bọc `FlowTracker`: gom flow đã kết thúc rồi ghi theo lô qua `EventRepository.save_flows`. Worker thread gọi `flow_log.on_packet(packet, len(matched))` **sau** `evaluate_packet`; `len(matched)` là số rule khớp (kể cả cảnh báo bị `ThresholdManager` chặn), nên `alert_count` có thể lớn hơn số dòng trong `events`.
+- Chế độ live: khi queue trống worker gọi `flow_log.tick(time.time())` để flow hết hạn. Khi dừng (hết pcap hoặc Ctrl+C), `main()` đặt `stop_event` và worker tự gọi `flow_log.close()` để ghi nốt flow còn mở; chỉ worker thread được đụng vào bảng flow.
+- Lỗi CSDL khi ghi flow chỉ được log, batch đó bị bỏ, engine vẫn chạy. Traffic cổng 3306 không có trong flow vì BPF filter loại nó.
+
 ## AI worker
 
 `nids/ai.py` (`AITrafficWorker`) mới là stub. Nó được khởi tạo với cùng callback `handle_alert` như rule engine, nên khi làm phần AI chỉ sửa bên trong `nids/ai.py`. Thiết kế nằm ở `docs/ai/`.

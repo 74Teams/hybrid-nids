@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import BigInteger, Column, Float, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -9,6 +9,11 @@ Base = declarative_base()
 def utc_now() -> datetime:
     """Giờ UTC hiện tại, dạng naive (không kèm múi giờ) vì CSDL luôn lưu UTC."""
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def utc_from_epoch(ts: float) -> datetime:
+    """Đổi epoch (giây) sang UTC naive để lưu CSDL."""
+    return datetime.fromtimestamp(ts, timezone.utc).replace(tzinfo=None)
 
 
 def iso_utc(value: Optional[datetime], timespec: str = "auto") -> Optional[str]:
@@ -36,6 +41,29 @@ class EventModel(Base):
     status = Column(String(20), default="NEW")
 
     payload = relationship("EventPayloadModel", back_populates="event", uselist=False)
+
+class FlowModel(Base):
+    """Một flow đã kết thúc (mọi traffic, không chỉ traffic có cảnh báo)."""
+    __tablename__ = "flows"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    first_seen = Column(DateTime, nullable=False, index=True)
+    last_seen = Column(DateTime, nullable=False)
+    duration = Column(Float, nullable=False)  # giây, giữ cả phần lẻ vì DateTime của MySQL chỉ đến giây
+    protocol = Column(String(10), nullable=False)
+    src_ip = Column(String(45), nullable=False, index=True)
+    src_port = Column(Integer, nullable=True)
+    dst_ip = Column(String(45), nullable=False, index=True)
+    dst_port = Column(Integer, nullable=True, index=True)
+    fwd_packets = Column(Integer, nullable=False, default=0)
+    bwd_packets = Column(Integer, nullable=False, default=0)
+    fwd_bytes = Column(BigInteger, nullable=False, default=0)
+    bwd_bytes = Column(BigInteger, nullable=False, default=0)
+    tcp_flags = Column(String(16), nullable=False, default="")
+    alert_count = Column(Integer, nullable=False, default=0, index=True)  # 0 = không khớp rule nào
+    end_reason = Column(String(16), nullable=False, default="")
+    created_at = Column(DateTime, default=utc_now, nullable=False, index=True)  # dọn flow cũ theo mốc này
+
 
 class EventPayloadModel(Base):
     __tablename__ = "event_payloads"

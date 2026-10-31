@@ -4,7 +4,7 @@
 
 ### Giai đoạn 1: Flow và đặc trưng ([#22](https://github.com/74Teams/intrusion-detection-system/issues/22))
 
-- Tạo package `nids/ai/` gồm `flow.py` (`FlowKey`, `Flow`, `FlowTable`) và `features.py` (`FEATURE_NAMES`, `extract_features`).
+- Tạo package `nids/ai/` gồm `features.py` (`FEATURE_NAMES`, `extract_features`). Phần gom flow đã có sẵn ở `nids/engine/flow.py` (`Flow`, `FlowTracker`, issue #39), dùng lại và bổ sung bộ đếm nếu cần.
 - `AITrafficWorker` gom flow và log ở mức DEBUG khi một flow đóng; chưa có mô hình.
 - Test trong `tests/ai/`, tự dựng `DecodedPacket` giống cách làm trong `tests/engine/`:
   - TCP handshake cộng FIN đóng đúng một flow, đếm đúng gói và byte theo cả hai chiều;

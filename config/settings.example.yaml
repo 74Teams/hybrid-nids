@@ -18,6 +18,16 @@ detection:
   enable_ai_worker: true
   queue_max_size: 10000
 
+flow:
+  # Gom gói thành flow và ghi flow log vào bảng flows (mọi traffic, không chỉ traffic có cảnh báo)
+  idle_timeout: 30        # giây không có gói thì flow kết thúc
+  active_timeout: 120     # giây, flow sống lâu hơn thì cắt thành nhiều dòng
+  closing_timeout: 2      # giây chờ ACK cuối sau FIN/RST trước khi xuất flow
+  max_flows: 100000       # số flow giữ trong bộ nhớ; đầy thì đẩy flow cũ nhất ra
+  batch_size: 500         # ghi CSDL khi gom đủ ngần này flow
+  flush_interval: 5       # giây, hoặc khi quá thời gian này
+  retention_hours: 24     # xoá flow cũ hơn ngần này giờ (0 = giữ mãi)
+
 database:
   # Doi type thanh "mysql" de dung MySQL, "sqlite" cho dev nhanh
   type: "mysql"
