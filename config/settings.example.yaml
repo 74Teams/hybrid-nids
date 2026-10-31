@@ -23,8 +23,8 @@ database:
   type: "mysql"
   host: "172.28.0.10"
   port: 3306
-  user: "root"
-  password: "010305"
+  user: "nids_app"
+  password: ""
   name: "nids_db"
 
 api:
