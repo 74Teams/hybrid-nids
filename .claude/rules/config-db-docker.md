@@ -13,7 +13,7 @@ paths:
 
 - `config/settings.yaml` được load một lần lúc import vào `nids.config.SETTINGS`.
 - `get_db_url()` dựng URL từ mục `database`; các biến môi trường `NIDS_DB_HOST/PORT/NAME/USER/PASSWORD` ghi đè (docker-compose dựa vào điều này). `type: sqlite` dùng `db_url`.
-- `settings.yaml` đã commit mặc định dùng `capture_mode: "live"`, interface `eth0` và IP MySQL của Docker. Khi chạy local thì chuyển sang `sqlite` (và `offline` kèm `pcap_file` nếu có file pcap riêng).
+- File mẫu `settings.example.yaml` được commit; `settings.yaml` là file local bị ignore (thiếu thì dùng file mẫu), mật khẩu Docker nằm ở `.env`. Mặc định của file mẫu dùng `capture_mode: "live"`, interface `eth0` và IP MySQL của Docker. Khi chạy local thì chuyển sang `sqlite` (và `offline` kèm `pcap_file` nếu có file pcap riêng).
 
 ## Database
 

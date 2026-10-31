@@ -148,9 +148,10 @@ The engine, the API and each honeypot run as **separate processes** and talk to 
 git clone https://github.com/74Teams/intrusion-detection-system.git
 cd intrusion-detection-system
 pip install -r requirements.txt
+cp config/settings.example.yaml config/settings.yaml
 ```
 
-Then edit `config/settings.yaml`. The committed defaults target the Docker lab (live capture on `eth0`, MySQL at `172.28.0.10`). For a local run, point `interface` at your network card and switch to SQLite:
+Then create your local config (git-ignored) from the template and edit it (`copy` instead of `cp` on Windows). If `config/settings.yaml` is missing, the program falls back to `config/settings.example.yaml`. The template defaults target the Docker lab (live capture on `eth0`, MySQL at `172.28.0.10`). For a local run, point `interface` at your network card and switch to SQLite:
 
 ```yaml
 system:
@@ -263,7 +264,10 @@ pytest
 | `nids_api` | API and web console, published on `localhost:8000` | `172.28.0.20` |
 | `attacker` | Kali Linux with nmap, hping3, hydra, sqlmap, nikto | `172.28.0.100` |
 
+Create `.env` first and fill in the two passwords (compose refuses to start without them). `openssl rand -hex 24` generates a good value:
+
 ```bash
+cp .env.example .env     # set MYSQL_ROOT_PASSWORD and NIDS_DB_PASSWORD
 docker compose up --build -d
 docker logs -f nids_engine                                        # wait for "Đã nạp 67 rule"
 ```
