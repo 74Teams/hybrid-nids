@@ -1,8 +1,8 @@
-from datetime import datetime
-from datetime import timedelta
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional, Set
 from sqlalchemy import case, func
-from nids.db.models import EventModel, EventPayloadModel
+from nids.db.models import EventModel, EventPayloadModel, iso_utc, utc_now
 
 
 # ─────────────────────────────────────────────────────────────
@@ -18,7 +18,8 @@ class EventRepository:
         session = SessionLocal()
         try:
             event = EventModel(
-                timestamp=datetime.fromtimestamp(alert_data.get("timestamp", datetime.utcnow().timestamp())),
+                # CSDL lưu UTC naive; fromtimestamp không có tz sẽ ra giờ máy nên phải truyền timezone.utc
+                timestamp=datetime.fromtimestamp(alert_data.get("timestamp", time.time()), timezone.utc).replace(tzinfo=None),
                 sid=alert_data.get("sid"),
                 source_type=alert_data.get("source_type", "RULE_ENGINE"),
                 attack_type=alert_data.get("classtype") or "UNKNOWN_ATTACK",
@@ -117,7 +118,7 @@ class EventRepository:
         from nids.db import SessionLocal
         session = SessionLocal()
         try:
-            since = datetime.utcnow() - timedelta(seconds=window_seconds)
+            since = utc_now() - timedelta(seconds=window_seconds)
             rows = (session.query(EventModel.src_ip)
                     .filter(EventModel.source_type == "HONEYPOT", EventModel.timestamp >= since)
                     .distinct().all())
@@ -143,7 +144,7 @@ class EventRepository:
             )
             return [
                 {"src_ip": r.src_ip, "honeypot_events": int(r.hp or 0), "nids_alerts": r.n - int(r.hp or 0),
-                 "first_seen": r.first.isoformat(), "last_seen": r.last.isoformat()}
+                 "first_seen": iso_utc(r.first), "last_seen": iso_utc(r.last)}
                 for r in rows
             ]
         finally:
@@ -154,14 +155,14 @@ class EventRepository:
         """Số cảnh báo NIDS / honeypot trong `minutes` phút gần nhất, chia đều thành `buckets` cột (cột trống = 0)."""
         from nids.db import SessionLocal
         step = minutes * 60 / buckets
-        start = datetime.now() - timedelta(minutes=minutes)  # timestamp lưu giờ máy (datetime.fromtimestamp)
+        start = utc_now() - timedelta(minutes=minutes)
         session = SessionLocal()
         try:
             rows = (session.query(EventModel.timestamp, EventModel.source_type)
                     .filter(EventModel.timestamp >= start).all())
         finally:
             session.close()
-        cols = [{"t": (start + timedelta(seconds=i * step)).isoformat(timespec="seconds"), "nids": 0, "honeypot": 0}
+        cols = [{"t": iso_utc(start + timedelta(seconds=i * step), "seconds"), "nids": 0, "honeypot": 0}
                 for i in range(buckets)]
         for ts, source in rows:
             i = min(int((ts - start).total_seconds() // step), buckets - 1)
