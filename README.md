@@ -272,6 +272,8 @@ docker compose up --build -d
 docker logs -f nids_engine                                        # wait for "Đã nạp 67 rule"
 ```
 
+Use hex-only values (no `$`, quotes or backticks). Both passwords only take effect when MySQL first creates its data directory: a lab that already has a database keeps its old passwords. Either run `ALTER USER` for `root@'localhost'`, `root@'%'` and `nids_app@'%'` inside the `nids_mysql` container (connect with the old password) and then `docker compose up -d`, or recreate the DB volume (data in `events` is lost).
+
 Open http://localhost:8000/, then launch attacks from the attacker container:
 
 ```bash
