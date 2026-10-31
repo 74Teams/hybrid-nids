@@ -5,13 +5,23 @@ import threading
 
 import paramiko
 
+from .fake_shell import FakeShell
 from .settings import settings
 from .store import log_event
 
 logger = logging.getLogger("nids.honeypot")
 
 SSH_BANNER = settings.ssh_banner
-PROMPT = settings.ssh_prompt.encode()
+
+
+def fake_response(cmd):
+    """Trả về (output, exit status) giả cho một lệnh trong một phiên shell giả mới."""
+    return FakeShell().run(cmd)
+
+
+def crlf(text):
+    """Terminal PTY ở chế độ raw không tự đổi \\n thành \\r\\n."""
+    return text.replace('\n', '\r\n').encode()
 
 
 def load_host_key(path=None):
@@ -25,22 +35,26 @@ def load_host_key(path=None):
 
 
 # emulated shell
-def emulated_shell(channel, conn):
-    channel.send(PROMPT)
+def emulated_shell(channel, conn, shell=None):
+    shell = shell or FakeShell()
+    channel.send(shell.prompt().encode())
     command = b''
     while True:
         char = channel.recv(1)
         if not char:                               # client ngắt kết nối
             break
 
-        if char in (b'\x7f', b'\x08'):             # backspace
+        if char in (b'\x7f', b'\x08'):             # backspace: xoá trọn một ký tự UTF-8 (bộ gõ tiếng Việt gửi ký tự nhiều byte rồi backspace)
             if command:
-                command = command[:-1]
+                end = len(command) - 1
+                while end > 0 and 0x80 <= command[end] < 0xC0:   # lùi qua các byte nối tiếp
+                    end -= 1
+                command = command[:end]
                 channel.send(b'\b \b')
             continue
 
         if char == b'\x03':                        # Ctrl+C
-            channel.send(b'^C\r\n' + PROMPT)
+            channel.send(b'^C\r\n' + shell.prompt().encode())
             command = b''
             continue
 
@@ -76,23 +90,12 @@ def emulated_shell(channel, conn):
         if cmd == 'exit':
             channel.send(b'\r\nlogout\r\n')
             break
-        elif cmd == 'pwd':
-            response = '/usr/local'
-        elif cmd == 'whoami':
-            response = 'corpuser1'
-        elif cmd == 'ls':
-            response = 'jumpbox1.conf'
-        elif cmd == 'cat jumpbox1.conf':
-            response = 'HI, How are you today?'
-        elif cmd == '':
-            response = None
-        else:
-            response = f'bash: {cmd.split()[0]}: command not found'
+        response, _ = shell.run(cmd)
 
         channel.send(b'\r\n')
         if response:
-            channel.send(response.encode() + b'\r\n')
-        channel.send(PROMPT)
+            channel.send(crlf(response) + b'\r\n')
+        channel.send(shell.prompt().encode())
 
     channel.close()
 
@@ -104,6 +107,8 @@ class Server(paramiko.ServerInterface):
         self.conn = conn
         self.input_username = input_username
         self.input_password = input_password
+        self.exec_command = None
+        self.username = None
 
     def check_channel_request(self, kind, chanid):
         if kind == 'session':
@@ -117,9 +122,9 @@ class Server(paramiko.ServerInterface):
         logger.info("Đăng nhập SSH từ %s: %s / %s", self.conn["src_ip"], username, password)
         log_event('ssh', 'ssh.auth.attempt', username=username, password=password, **self.conn)
         if self.input_username is not None and self.input_password is not None:
-            if username == self.input_username and password == self.input_password:
-                return paramiko.AUTH_SUCCESSFUL
-            return paramiko.AUTH_FAILED
+            if username != self.input_username or password != self.input_password:
+                return paramiko.AUTH_FAILED
+        self.username = username
         return paramiko.AUTH_SUCCESSFUL
 
     def check_channel_shell_request(self, channel):
@@ -134,13 +139,10 @@ class Server(paramiko.ServerInterface):
             command = command.decode(errors='replace')
         logger.info('Lệnh exec "%s" từ %s', command, self.conn["src_ip"])
         log_event('ssh', 'ssh.exec', command=command, **self.conn)
-        try:
-            name = command.split()[0] if command.split() else ''
-            channel.send(f'bash: {name}: command not found\r\n'.encode())
-            channel.send_exit_status(127)
-            channel.close()
-        except Exception:
-            pass
+        # chỉ ghi nhận ở đây: gửi output và đóng channel trước khi paramiko trả lời
+        # request thì client nhận "Channel closed"; client_handle sẽ trả lời sau
+        self.exec_command = command
+        self.event.set()
         return True
 
 
@@ -163,13 +165,25 @@ def client_handle(client, addr, username, password, host_key):
             logger.debug("Không có channel nào được mở")
             return
 
-        # chỉ vào shell khi client yêu cầu shell (exec đã được xử lý riêng)
+        # chờ client yêu cầu shell hoặc exec
         if not server.event.wait(10):
+            return
+
+        shell = FakeShell(server.username or 'corpuser1',
+                          on_event=lambda kind, detail: log_event('ssh', kind, command=detail, **conn))
+
+        if server.exec_command is not None:
+            response, status = shell.run(server.exec_command)
+            if response:
+                channel.send(response.encode() + b'\n')
+            channel.send_exit_status(status)
+            channel.close()
+            transport.join(5)                      # chờ client nhận exit status và tự ngắt
             return
 
         standard_banner = settings.ssh_motd + "\r\n\r\n"
         channel.send(standard_banner.encode())
-        emulated_shell(channel, conn)
+        emulated_shell(channel, conn, shell)
 
     except Exception as e:
         logger.warning("Lỗi phiên SSH: %s", e)

@@ -87,6 +87,37 @@ def test_importing_sensors_has_no_side_effects():
     assert not settings.host_key_path.exists()
 
 
+class FakeChannel:
+    def __init__(self, data):
+        self.data, self.sent = list(data), b""
+
+    def recv(self, _):
+        return bytes([self.data.pop(0)]) if self.data else b""
+
+    def send(self, data):
+        self.sent += data
+
+    def close(self):
+        pass
+
+
+def test_shell_backspace_removes_whole_utf8_char(monkeypatch):
+    """Bộ gõ Telex gõ 'w' thành 'ư' (2 byte) rồi backspace: lệnh vẫn phải khớp."""
+    from nids.honeypot import ssh_honeypot
+    monkeypatch.setattr(ssh_honeypot, "log_event", lambda *a, **k: None)
+    channel = FakeChannel("ư".encode() + b"\x7fwhoami\rexit\r")
+    ssh_honeypot.emulated_shell(channel, {"src_ip": "10.0.0.9"})
+    assert b"corpuser1" in channel.sent and b"command not found" not in channel.sent
+
+
+def test_fake_response_recon_commands():
+    from nids.honeypot.ssh_honeypot import fake_response
+    out, status = fake_response("uname  -a")
+    assert status == 0 and out.startswith("Linux corporate-jumpbox2 6.8.0-45-generic")
+    assert fake_response("nmap") == ("bash: nmap: command not found", 127)
+    assert fake_response("  ") == (None, 0)
+
+
 def test_host_key_generated_once(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "host_key_path", tmp_path / "server.key")
     from nids.honeypot.ssh_honeypot import load_host_key
