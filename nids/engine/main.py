@@ -3,13 +3,16 @@ import queue
 import threading
 import time
 from collections import Counter
-from typing import Optional
+from datetime import timedelta
+from typing import List, Optional
 
 from nids.config import SETTINGS
 from nids.logger import setup_logging
 from nids.db import init_db
+from nids.db.models import utc_now
 from nids.db.repository import EventRepository
 from nids.engine.decoder import PacketDecoder
+from nids.engine.flow import Flow, FlowTracker
 from nids.engine.capture import PacketCapture
 from nids.engine.rule_manager import RuleManager
 from nids.engine.detector import DetectionEngine
@@ -94,6 +97,75 @@ class RuleReloader:
         return True
 
 
+class FlowLog:
+    """Gom gói thành flow và ghi flow đã kết thúc vào CSDL theo lô (không ghi từng gói).
+
+    Gọi từ chính worker thread nên không cần khoá. Lỗi CSDL chỉ được log, không làm sập engine.
+    """
+
+    CLEANUP_INTERVAL = 3600.0
+
+    def __init__(self, tracker: FlowTracker, batch_size: int = 500, flush_interval: float = 5.0,
+                 retention_hours: float = 24.0):
+        self.tracker = tracker
+        self.batch_size = batch_size
+        self.flush_interval = flush_interval
+        self.retention_hours = retention_hours
+        self._pending: List[Flow] = []
+        self._last_flush = time.monotonic()
+        self._last_cleanup: Optional[float] = None
+
+    def on_packet(self, packet, alert_count: int = 0) -> None:
+        """Cộng gói vào flow; `alert_count` là số rule vừa khớp gói này."""
+        try:
+            self._pending += self.tracker.update(packet, alert_count)
+        except Exception as e:
+            logger.error("Không gom được flow: %s", e)
+        self._maybe_flush()
+
+    def tick(self, now: float) -> None:
+        """Cho flow hết hạn khi không có gói mới (mạng yên lặng); `now` là epoch."""
+        try:
+            self._pending += self.tracker.expire(now)
+        except Exception as e:
+            logger.error("Không xử lý được timeout flow: %s", e)
+        self._maybe_flush()
+
+    def close(self) -> None:
+        """Xuất mọi flow còn mở rồi ghi nốt, gọi khi engine dừng hoặc đọc hết pcap."""
+        self._pending += self.tracker.flush()
+        self._write()
+
+    def _maybe_flush(self) -> None:
+        if self._pending and (len(self._pending) >= self.batch_size
+                              or time.monotonic() - self._last_flush >= self.flush_interval):
+            self._write()
+
+    def _write(self) -> None:
+        batch, self._pending = self._pending, []
+        self._last_flush = time.monotonic()
+        if batch:
+            try:
+                EventRepository.save_flows(batch)
+            except Exception as e:
+                logger.error("Không thể lưu %d flow vào CSDL: %s", len(batch), e)
+        self._cleanup()
+
+    def _cleanup(self) -> None:
+        if self.retention_hours <= 0:
+            return
+        now = time.monotonic()
+        if self._last_cleanup is not None and now - self._last_cleanup < self.CLEANUP_INTERVAL:
+            return
+        self._last_cleanup = now
+        try:
+            deleted = EventRepository.delete_flows_before(utc_now() - timedelta(hours=self.retention_hours))
+            if deleted:
+                logger.info("Đã dọn %d flow cũ hơn %s giờ", deleted, self.retention_hours)
+        except Exception as e:
+            logger.error("Không dọn được flow cũ: %s", e)
+
+
 class HoneypotIPCache:
     """Tập IP đã chạm honeypot, làm mới từ CSDL tối đa một lần mỗi `ttl` giây (honeypot ghi từ process khác)."""
 
@@ -155,6 +227,14 @@ def main():
     detection_engine = DetectionEngine(rule_manager, alert_callback=handle_alert)
     ai_worker = AITrafficWorker(alert_callback=handle_alert)
 
+    flow_cfg = SETTINGS.get("flow", {})
+    flow_log = FlowLog(
+        FlowTracker(idle_timeout=flow_cfg.get("idle_timeout", 30), active_timeout=flow_cfg.get("active_timeout", 120),
+                    closing_timeout=flow_cfg.get("closing_timeout", 2), max_flows=flow_cfg.get("max_flows", 100000)),
+        batch_size=flow_cfg.get("batch_size", 500), flush_interval=flow_cfg.get("flush_interval", 5),
+        retention_hours=flow_cfg.get("retention_hours", 24),
+    )
+
     # Hàng đợi đệm bất đồng bộ giữa luồng bắt gói và luồng phân tích, chống rớt gói
     packet_queue = queue.Queue(maxsize=SETTINGS.get("detection", {}).get("queue_max_size", 10000))
     drops = DropCounter()
@@ -175,17 +255,26 @@ def main():
 
     reloader = RuleReloader(rule_manager, detection_engine)
 
+    stop_event = threading.Event()
+    live = capture_mode != "offline"
+
     # Luồng worker xử lý phân tích
     def worker_loop():
-        while True:
+        while not stop_event.is_set():
             reloader.check(time.monotonic())
             try:
                 packet = packet_queue.get(timeout=1.0)
-                detection_engine.evaluate_packet(packet)
-                ai_worker.analyze_packet(packet)
-                packet_queue.task_done()
             except queue.Empty:
+                if live:
+                    flow_log.tick(time.time())  # mạng yên lặng vẫn phải cho flow hết hạn
                 continue
+            try:
+                matched = detection_engine.evaluate_packet(packet)
+                ai_worker.analyze_packet(packet)
+                flow_log.on_packet(packet, len(matched))  # sau evaluate_packet để biết gói có khớp rule
+            finally:
+                packet_queue.task_done()
+        flow_log.close()  # thread này là nơi duy nhất đụng vào bảng flow nên đóng ở đây
 
     worker_thread = threading.Thread(target=worker_loop, daemon=True)
     worker_thread.start()
@@ -214,6 +303,10 @@ def main():
         logger.info("Dừng hệ thống NIDS")
     except Exception as e:
         logger.error("Lỗi khi bắt gói tin: %s", e)
+    finally:
+        # sniff có thể nuốt Ctrl+C và trả về bình thường nên phải dừng worker ở đây để flow còn mở được ghi nốt
+        stop_event.set()
+        worker_thread.join(timeout=10)
 
 
 if __name__ == "__main__":

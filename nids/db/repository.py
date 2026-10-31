@@ -1,8 +1,9 @@
 import time
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, List, Optional, Set
+from datetime import datetime, timedelta
+from typing import Dict, Any, Iterable, List, Optional, Set
 from sqlalchemy import case, func
-from nids.db.models import EventModel, EventPayloadModel, iso_utc, utc_now
+from nids.db.models import EventModel, EventPayloadModel, FlowModel, iso_utc, utc_from_epoch, utc_now
+from nids.engine.flow import Flow
 
 
 # ─────────────────────────────────────────────────────────────
@@ -18,8 +19,7 @@ class EventRepository:
         session = SessionLocal()
         try:
             event = EventModel(
-                # CSDL lưu UTC naive; fromtimestamp không có tz sẽ ra giờ máy nên phải truyền timezone.utc
-                timestamp=datetime.fromtimestamp(alert_data.get("timestamp", time.time()), timezone.utc).replace(tzinfo=None),
+                timestamp=utc_from_epoch(alert_data.get("timestamp", time.time())),
                 sid=alert_data.get("sid"),
                 source_type=alert_data.get("source_type", "RULE_ENGINE"),
                 attack_type=alert_data.get("classtype") or "UNKNOWN_ATTACK",
@@ -191,6 +191,42 @@ class EventRepository:
                 "by_severity": by_severity,
                 "top_attacks": [{"summary": r.summary, "sid": r.sid, "count": r.n} for r in rows],
             }
+        finally:
+            session.close()
+
+    @staticmethod
+    def save_flows(flows: Iterable[Flow]) -> int:
+        """Ghi một lô flow đã kết thúc trong một giao dịch; trả về số flow đã ghi."""
+        from nids.db import SessionLocal
+        rows = [
+            FlowModel(
+                first_seen=utc_from_epoch(f.first_seen), last_seen=utc_from_epoch(f.last_seen),
+                duration=f.duration, protocol=f.protocol, src_ip=f.src_ip, src_port=f.src_port,
+                dst_ip=f.dst_ip, dst_port=f.dst_port, fwd_packets=f.fwd_packets, bwd_packets=f.bwd_packets,
+                fwd_bytes=f.fwd_bytes, bwd_bytes=f.bwd_bytes, tcp_flags=f.tcp_flags,
+                alert_count=f.alert_count, end_reason=f.end_reason,
+            )
+            for f in flows
+        ]
+        if not rows:
+            return 0
+        session = SessionLocal()
+        try:
+            session.add_all(rows)
+            session.commit()
+            return len(rows)
+        finally:
+            session.close()
+
+    @staticmethod
+    def delete_flows_before(cutoff: datetime) -> int:
+        """Xoá flow được ghi trước `cutoff` (UTC naive); tính theo thời điểm ghi, không theo giờ của gói."""
+        from nids.db import SessionLocal
+        session = SessionLocal()
+        try:
+            deleted = session.query(FlowModel).filter(FlowModel.created_at < cutoff).delete()
+            session.commit()
+            return deleted
         finally:
             session.close()
 

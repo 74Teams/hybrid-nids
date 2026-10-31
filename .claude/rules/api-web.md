@@ -8,7 +8,7 @@ paths:
 
 ## Process
 
-`nids/api/main.py` là process FastAPI riêng. Khi khởi động, nó chỉ tạo bảng. DB chỉ lưu sự kiện cảnh báo (bảng `events`, `event_payloads`), không lưu rule; API chỉ ghi file trong `rules/` (`state.yaml`, `custom.rules`).
+`nids/api/main.py` là process FastAPI riêng. Khi khởi động, nó chỉ tạo bảng. DB chỉ lưu cảnh báo và flow log (bảng `events`, `event_payloads`, `flows`), không lưu rule; API chưa có endpoint đọc `flows` (issue #40); API chỉ ghi file trong `rules/` (`state.yaml`, `custom.rules`).
 
 ## Endpoint
 

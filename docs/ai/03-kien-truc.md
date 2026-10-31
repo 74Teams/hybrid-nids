@@ -42,6 +42,8 @@ models/              # file mô hình .joblib (không commit file lớn)
 
 ### `flow.py`
 
+> **Cập nhật (issue #39):** engine đã có `nids/engine/flow.py` (`Flow`, `FlowTracker`, `flow_key`) gom gói theo flow và ghi flow log vào bảng `flows`. AI worker nên dùng lại `FlowTracker` này (thêm các bộ đếm còn thiếu như IAT, min/max độ dài gói) thay vì viết `FlowTable` riêng, và đọc các tham số timeout từ mục `flow` trong `settings.yaml` thay vì mục `ai`. Phần mô tả dưới đây là thiết kế ban đầu.
+
 - `FlowKey`: 5-tuple đã chuẩn hoá hai chiều (sắp xếp hai đầu mút `(ip, port)`) cộng với protocol. Mỗi flow ghi nhớ bên khởi tạo để phân biệt chiều fwd và bwd.
 - `Flow`: chỉ lưu **bộ đếm tăng dần**, không lưu gói: `first_ts`, `last_ts`, count/sum/sum²/min/max của độ dài payload và IAT theo từng chiều, cộng số lần xuất hiện mỗi cờ TCP. Phương thức `update(packet)` có độ phức tạp O(1).
 - `FlowTable`:
