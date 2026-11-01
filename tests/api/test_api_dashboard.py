@@ -109,6 +109,18 @@ def test_logs_page_and_stylesheet_are_served(client):
     assert client.get("/static/style.css").status_code == 200
 
 
+def test_logs_page_updates_live_by_default(client):
+    html = client.get("/logs").text
+    assert 'id="auto" checked' in html  # tắt mặc định thì cảnh báo mới chỉ hiện khi tải lại trang
+    assert "syncLive();" in html
+
+
+def test_live_script_is_served_and_loaded_by_both_pages(client):
+    assert client.get("/static/live.js").status_code == 200
+    assert "/static/live.js" in client.get("/").text
+    assert "/static/live.js" in client.get("/logs").text
+
+
 def test_delete_single_alert_removes_payload_too(client):
     _seed()
     sqli = client.get("/api/alerts/?sid=1").json()[0]

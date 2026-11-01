@@ -76,10 +76,11 @@
   </section>
 </main>
 <script src="/static/charts.js"></script>
+<script src="/static/live.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const seen = new Set();
-let firstLoad = true;
+let firstLoad = true, live = false, connected = false;
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -163,8 +164,10 @@ function renderTimeline(t) {
 }
 
 function setStatus(ok) {
+  connected = ok;
   $("dot").className = "dot" + (ok ? " ok" : "");
-  $("status").textContent = ok ? "Đã kết nối – tự làm mới mỗi 2 giây" : "Mất kết nối tới API";
+  $("status").textContent = !ok ? "Mất kết nối tới API"
+    : live ? "Đã kết nối – cập nhật tức thì" : "Đã kết nối – tự làm mới mỗi 2 giây";
 }
 
 async function refresh() {
@@ -191,8 +194,7 @@ $("clear").addEventListener("click", async () => {
 
 $("range").addEventListener("change", refresh);
 Charts.legend($("legend-time")); Charts.legend($("legend-ip"));
-refresh();
-setInterval(refresh, 2000);
+liveAlerts(refresh, 2000, (mode) => { live = mode === "live"; if (connected) setStatus(true); });
 </script>
 </body>
 </html>
