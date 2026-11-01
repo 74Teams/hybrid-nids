@@ -131,11 +131,20 @@ def clear_alerts(filters: Dict[str, Any] = Depends(log_filters)) -> Dict[str, in
 
 
 @router.get("/")
-def get_alerts(response: Response, limit: int = 50, offset: int = 0,
+def get_alerts(response: Response, limit: int = 50, offset: int = 0, by_session: bool = False,
                filters: Dict[str, Any] = Depends(log_filters)) -> List[Dict[str, Any]]:
-    """Danh sách cảnh báo mới nhất theo bộ lọc; tổng số khớp nằm ở header X-Total-Count."""
-    response.headers["X-Total-Count"] = str(EventRepository.count_events(**filters))
-    return [_to_dict(e) for e in EventRepository.get_recent_events(limit=limit, offset=offset, **filters)]
+    """Danh sách cảnh báo mới nhất theo bộ lọc; tổng số khớp nằm ở header X-Total-Count.
+
+    `by_session=true` gom sự kiện cùng phiên thành một dòng (kèm `event_count`, `last_timestamp`,
+    `severity` nặng nhất); X-Total-Count khi đó là số dòng sau khi gom.
+    """
+    if not by_session:
+        response.headers["X-Total-Count"] = str(EventRepository.count_events(**filters))
+        return [_to_dict(e) for e in EventRepository.get_recent_events(limit=limit, offset=offset, **filters)]
+    response.headers["X-Total-Count"] = str(EventRepository.count_session_groups(**filters))
+    return [{**_to_dict(g["event"]), "severity": g["severity"], "event_count": g["event_count"],
+             "last_timestamp": iso_utc(g["last_timestamp"])}
+            for g in EventRepository.get_session_groups(limit=limit, offset=offset, **filters)]
 
 
 @router.get("/export.csv")
@@ -158,6 +167,21 @@ def get_session(session_id: str) -> List[Dict[str, Any]]:
     if not events:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiên")
     return [_to_dict(e) for e in events]
+
+
+@router.get("/sessions/{session_id}/raw")
+def get_session_raw(session_id: str) -> Response:
+    """Raw log của một phiên: mỗi sự kiện một dòng kèm bằng chứng đầy đủ (hassh, tool, lệnh không bị cắt)."""
+    events = EventRepository.get_session_events(session_id, limit=SESSION_EVENT_LIMIT)
+    if not events:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiên")
+    lines = []
+    for e in events:
+        evidence = (e.payload.matched_content if e.payload and e.payload.matched_content else e.summary) or ""
+        # lệnh do attacker gõ có thể chứa xuống dòng để giả một dòng log khác
+        evidence = evidence.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n")
+        lines.append(f"{iso_utc(e.timestamp)} {e.attack_type} {e.src_ip}:{e.src_port} -> {e.dst_ip}:{e.dst_port} {evidence}")
+    return Response("\n".join(lines) + "\n", media_type="text/plain; charset=utf-8")
 
 
 @router.get("/{event_id}")

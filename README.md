@@ -215,7 +215,7 @@ Main endpoints:
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/alerts/` | List alerts. Filters: `source_type`, `protocol`, `src_ip`, `dst_ip`, `sid`, `severity`, `since`, `until`, `q`; paging: `limit`, `offset` |
+| `GET` | `/api/alerts/` | List alerts. Filters: `source_type`, `protocol`, `src_ip`, `dst_ip`, `sid`, `severity`, `since`, `until`, `q`; paging: `limit`, `offset`; `by_session=true` collapses each honeypot session into one row (with `event_count`, `last_timestamp`) |
 | `GET` | `/api/alerts/{id}` | Alert detail with raw payload |
 | `DELETE` | `/api/alerts/{id}` | Delete one alert |
 | `DELETE` | `/api/alerts/` | Delete alerts matching the same filters (no filter = delete all) |
@@ -224,6 +224,7 @@ Main endpoints:
 | `GET` | `/api/alerts/timeline` | Alert counts per time bucket, split into NIDS and honeypot |
 | `GET` | `/api/alerts/attackers` | Per-IP honeypot events and NIDS alerts |
 | `GET` | `/api/alerts/sessions/{session_id}` | Events of one honeypot session, oldest first |
+| `GET` | `/api/alerts/sessions/{session_id}/raw` | Raw log of one session (plain text, one event per line) |
 | `WS` | `/api/alerts/ws` | Pushes the id of each new alert (via Redis); the browser then reloads over REST. Closes with code 1013 when Redis is off or down |
 | `GET` | `/api/rules/` | Rules with category and enabled state. Filters: `category`, `enabled`, `q` |
 | `GET`, `PUT` | `/api/rules/categories` | List rule files / save which ones are loaded |
