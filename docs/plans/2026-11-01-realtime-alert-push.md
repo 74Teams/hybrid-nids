@@ -203,7 +203,7 @@ Nhánh: `feature/30-realtime-alert-push`, tạo từ `main` sau khi nhánh `chor
 - [x] Thêm service Redis và biến môi trường vào `docker-compose.yml`, `.env.example`, kèm test compose
 - [x] Cập nhật tài liệu ở mục 7
 - [x] Chạy `pytest` (285 passed, 34 skipped), xác minh theo mục 9 trong lab thật bằng WebSocket client và container tạm thay `attacker` (image Kali không build được: BuildKit sập vì thiếu RAM). Chưa xem bằng trình duyệt thật
-- [ ] Tạo PR, cập nhật bảng tổng hợp
+- [x] Tạo PR ([#57](https://github.com/74Teams/hybrid-nids/pull/57)), cập nhật bảng tổng hợp
 
 ## 12. Quyết định và nhật ký
 
