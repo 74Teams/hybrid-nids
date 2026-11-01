@@ -4,6 +4,7 @@ import logging
 import socket
 import threading
 import time
+import uuid
 
 import paramiko
 
@@ -215,7 +216,8 @@ class Server(paramiko.ServerInterface):
 
 def client_handle(client, addr, username, password, host_key):
     local_ip, local_port = client.getsockname()[:2]
-    conn = {"src_ip": addr[0], "src_port": addr[1], "dst_ip": local_ip, "dst_port": local_port}
+    conn = {"src_ip": addr[0], "src_port": addr[1], "dst_ip": local_ip, "dst_port": local_port,
+            "session_id": uuid.uuid4().hex}
     logger.info("%s kết nối tới SSH honeypot", addr[0])
     transport = None
 

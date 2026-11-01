@@ -8,12 +8,13 @@ paths:
 
 ## Process
 
-`nids/api/main.py` là process FastAPI riêng. Khi khởi động, nó chỉ tạo bảng. DB chỉ lưu cảnh báo và flow log (bảng `events`, `event_payloads`, `flows`), không lưu rule; API chưa có endpoint đọc `flows` (issue #40); API chỉ ghi file trong `rules/` (`state.yaml`, `custom.rules`).
+`nids/api/main.py` là process FastAPI riêng. Khi khởi động, nó chỉ gọi `init_db()` để tạo bảng và thêm cột còn thiếu. DB chỉ lưu cảnh báo và flow log (bảng `events`, `event_payloads`, `flows`), không lưu rule; API chưa có endpoint đọc `flows` (issue #40); API chỉ ghi file trong `rules/` (`state.yaml`, `custom.rules`).
 
 ## Endpoint
 
 - `GET /api/alerts` — danh sách; lọc theo `source_type/protocol/src_ip/dst_ip/sid/severity/since/until/q`, phân trang `limit/offset`, tổng ở header `X-Total-Count`. `source_type` là `HONEYPOT` hoặc `RULE_ENGINE`.
 - `GET /api/alerts/{id}` (kèm payload), `/api/alerts/export.csv`, `/api/alerts/stats`, `/api/alerts/attackers`.
+- `GET /api/alerts/sessions/{session_id}` — tối đa `SESSION_EVENT_LIMIT` (1000) sự kiện đầu tiên của một phiên honeypot, cũ đến mới, không kèm payload; không có phiên thì 404.
 - `GET /api/alerts/timeline?minutes&buckets` — số cảnh báo NIDS/honeypot theo cột thời gian.
 - `WS /api/alerts/ws` — gửi id mỗi cảnh báo mới (tin lấy từ Redis kênh `nids:alerts`); trình duyệt chỉ coi đó là tín hiệu rồi tải lại qua REST. Mỗi kết nối giữ một subscriber riêng, tối đa `MAX_WS_CLIENTS` (20). Redis tắt, lỗi hoặc hết chỗ thì đóng với code 1013 trước khi accept; subscribe phải xong trước `accept()` để không lỡ cảnh báo. Endpoint không xác thực, nhưng chỉ lộ id, không lộ thêm dữ liệu so với `GET /api/alerts`.
 - `DELETE /api/alerts/` (cùng bộ lọc; không lọc = xoá hết), `DELETE /api/alerts/{id}`.

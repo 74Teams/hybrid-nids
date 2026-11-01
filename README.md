@@ -223,6 +223,7 @@ Main endpoints:
 | `GET` | `/api/alerts/stats` | Totals by priority and top attack types |
 | `GET` | `/api/alerts/timeline` | Alert counts per time bucket, split into NIDS and honeypot |
 | `GET` | `/api/alerts/attackers` | Per-IP honeypot events and NIDS alerts |
+| `GET` | `/api/alerts/sessions/{session_id}` | Events of one honeypot session, oldest first |
 | `WS` | `/api/alerts/ws` | Pushes the id of each new alert (via Redis); the browser then reloads over REST. Closes with code 1013 when Redis is off or down |
 | `GET` | `/api/rules/` | Rules with category and enabled state. Filters: `category`, `enabled`, `q` |
 | `GET`, `PUT` | `/api/rules/categories` | List rule files / save which ones are loaded |

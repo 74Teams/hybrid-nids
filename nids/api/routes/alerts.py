@@ -20,8 +20,11 @@ _ws_clients = 0
 # shortcut: CSV xuất tối đa ngần này dòng trong bộ nhớ; cần nhiều hơn thì chuyển sang StreamingResponse theo trang
 EXPORT_LIMIT = 10000
 
+# Số sự kiện đầu tiên trả về khi xem một phiên honeypot
+SESSION_EVENT_LIMIT = 1000
+
 FIELDS = ["id", "timestamp", "sid", "source_type", "attack_type", "severity", "src_ip", "src_port",
-          "dst_ip", "dst_port", "protocol", "http_method", "http_uri", "summary", "status"]
+          "dst_ip", "dst_port", "protocol", "http_method", "http_uri", "summary", "status", "session_id"]
 
 
 def log_filters(source_type: Optional[str] = None, protocol: Optional[str] = None,
@@ -146,6 +149,15 @@ def export_alerts(filters: Dict[str, Any] = Depends(log_filters)) -> Response:
     # BOM để Excel đọc đúng tiếng Việt
     return Response("﻿" + buf.getvalue(), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": 'attachment; filename="nids-logs.csv"'})
+
+
+@router.get("/sessions/{session_id}")
+def get_session(session_id: str) -> List[Dict[str, Any]]:
+    """Chuỗi sự kiện của một phiên honeypot, cũ đến mới."""
+    events = EventRepository.get_session_events(session_id, limit=SESSION_EVENT_LIMIT)
+    if not events:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiên")
+    return [_to_dict(e) for e in events]
 
 
 @router.get("/{event_id}")

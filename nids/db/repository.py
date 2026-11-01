@@ -33,7 +33,8 @@ class EventRepository:
                 http_method=alert_data.get("http_method"),
                 http_uri=alert_data.get("http_uri"),
                 summary=alert_data.get("msg", ""),
-                status="NEW"
+                status="NEW",
+                session_id=alert_data.get("session_id")
             )
             if alert_data.get("matched_content"):
                 event.payload = EventPayloadModel(matched_content=alert_data["matched_content"])
@@ -79,6 +80,17 @@ class EventRepository:
         try:
             query = EventRepository._apply_filters(session.query(EventModel), source_type=source_type, **filters)
             return query.order_by(EventModel.timestamp.desc(), EventModel.id.desc()).offset(offset).limit(limit).all()
+        finally:
+            session.close()
+
+    @staticmethod
+    def get_session_events(session_id: str, limit: int = 1000) -> List[EventModel]:
+        """Sự kiện của một phiên honeypot, cũ đến mới."""
+        from nids.db import SessionLocal
+        session = SessionLocal()
+        try:
+            return (session.query(EventModel).filter(EventModel.session_id == session_id)
+                    .order_by(EventModel.timestamp.asc(), EventModel.id.asc()).limit(limit).all())
         finally:
             session.close()
 

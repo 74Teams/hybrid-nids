@@ -1,7 +1,7 @@
 """
 Điểm khởi chạy ứng dụng FastAPI – Hybrid NIDS API Server.
 
-Luồng khởi động (startup lifespan): init_db() tạo bảng trong CSDL nếu chưa có.
+Luồng khởi động (startup lifespan): init_db() tạo bảng trong CSDL nếu chưa có và thêm cột còn thiếu.
 Rule nằm trong các file rules/*.rules (mỗi file một category). API chỉ ghi trạng thái bật/tắt
 (rules/state.yaml) và rules/custom.rules; process engine tự nạp lại khi thấy file đổi.
 """

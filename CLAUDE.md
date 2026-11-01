@@ -68,7 +68,7 @@ Các process (engine, API, mỗi honeypot một process) chạy riêng và chỉ
 - Quản lý rule nhiều file (branch `feature/rule-management`): category, override theo SID, sửa `custom.rules` trên trang Rules kiểu pfSense.
 - Thiết kế AI worker theo flow (`docs/ai/`) để thay stub trong `nids/ai.py` mà không phải sửa capture, decoder, DB hay API.
 - Cảnh báo realtime qua Redis pub/sub + WebSocket (branch `feature/30-realtime-alert-push`, PLAN-001, issue #30).
-- Phía honeypot chưa có session theo kết nối, route catch-all, giới hạn tài nguyên.
+- Phía honeypot chưa có route catch-all, giới hạn tài nguyên.
 
 ## Known Issues / Gotchas
 

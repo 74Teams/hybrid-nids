@@ -29,6 +29,37 @@ def client(monkeypatch):
     return TestClient(app)
 
 
+def test_session_returns_events_oldest_first_without_other_sessions(client):
+    a, b = "a" * 32, "b" * 32
+    for msg, session_id in (("ls", a), ("whoami", b), ("id", a)):
+        EventRepository.save_alert({**_alert(None, msg, 2), "timestamp": 1000.0, "session_id": session_id})
+    EventRepository.save_alert({**_alert(None, "cuối", 2), "timestamp": 2000.0, "session_id": a})
+    EventRepository.save_alert({**_alert(None, "đầu", 2), "timestamp": 500.0, "session_id": a})
+    events = client.get(f"/api/alerts/sessions/{a}").json()
+    assert [e["summary"] for e in events] == ["đầu", "ls", "id", "cuối"]
+    assert {e["session_id"] for e in events} == {a}
+
+
+def test_session_not_found_returns_404(client):
+    EventRepository.save_alert(_alert(1, "SQLi", 1))     # cảnh báo rule engine không có phiên
+    assert client.get("/api/alerts/sessions/" + "0" * 32).status_code == 404
+
+
+def test_session_stops_at_limit(client, monkeypatch):
+    from nids.api.routes import alerts
+    monkeypatch.setattr(alerts, "SESSION_EVENT_LIMIT", 2)
+    for msg in ("một", "hai", "ba"):
+        EventRepository.save_alert({**_alert(None, msg, 2), "session_id": "a" * 32})
+    assert [e["summary"] for e in client.get("/api/alerts/sessions/" + "a" * 32).json()] == ["một", "hai"]
+
+
+def test_detail_and_csv_include_session_id(client):
+    event = EventRepository.save_alert({**_alert(None, "ls", 2), "session_id": "a" * 32})
+    assert client.get(f"/api/alerts/{event.id}").json()["session_id"] == "a" * 32
+    header, row = client.get("/api/alerts/export.csv").text.lstrip("﻿").strip().splitlines()
+    assert header.endswith(",session_id") and row.endswith("a" * 32)
+
+
 def test_stats_empty(client):
     data = client.get("/api/alerts/stats").json()
     assert data["total"] == 0

@@ -31,6 +31,8 @@ Kiểm tra nhanh toàn bộ chuỗi (30 giây): `docker exec -it nids_attacker p
 
 Mỗi lệnh `attack_demo.py` nghỉ 1,5 giây giữa các đòn để khán giả theo dõi kịp (đổi bằng `--delay`). Chạy lại sau khi bấm **Xoá dữ liệu** để lặp lại phần nào đó.
 
+Xem lại một phiên SSH: `docker exec -it nids_attacker ssh -p 2222 -o StrictHostKeyChecking=no root@172.28.0.50`, nhập mật khẩu bất kỳ, gõ vài lệnh rồi `exit`. Trên [http://localhost:8000/logs](http://localhost:8000/logs), tab Honeypot SSH, mở một sự kiện `ssh.command` và bấm **Xem cả phiên** để thấy toàn bộ chuỗi đăng nhập và lệnh theo thứ tự.
+
 Nếu hết giờ, chạy một lệnh duy nhất: `docker exec -it nids_attacker python lab/attacker/attack_demo.py all --delay 0.5`.
 
 ## Demo gõ lệnh thủ công

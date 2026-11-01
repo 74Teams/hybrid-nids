@@ -232,19 +232,46 @@ async function showDetail(id) {
   $("d-title").textContent = `Sự kiện #${a.id} – ${a.summary}`;
   const dl = el("dl");
   for (const k of ["timestamp", "source_type", "attack_type", "severity", "sid", "src_ip", "src_port",
-                   "dst_ip", "dst_port", "protocol", "http_method", "http_uri", "status"]) {
+                   "dst_ip", "dst_port", "protocol", "http_method", "http_uri", "status", "session_id"]) {
     if (a[k] == null || a[k] === "") continue;
     // timestamp là ISO UTC kèm Z, đổi sang giờ máy người xem cho khớp với bảng
     dl.append(el("dt", "", k), el("dd", "", k === "timestamp" ? new Date(a[k]).toLocaleString("vi-VN") : a[k]));
   }
   const body = $("d-body");
   body.replaceChildren(dl);
+  if (a.session_id) {
+    const btn = el("button", "btn-primary", "Xem cả phiên");
+    btn.type = "button";
+    btn.addEventListener("click", () => showSession(a.session_id));
+    body.append(btn);
+  }
   const p = a.payload || {};
   const parts = [["Matched content / evidence", p.matched_content], ["HTTP headers", p.http_headers],
                  ["HTTP body", p.http_body], ["Packet raw (hex)", p.packet_raw_hex]].filter(([, v]) => v);
   if (!parts.length) body.append(el("h3", "", "Không có payload"));
   for (const [title, v] of parts) body.append(el("h3", "", title), el("pre", "", v));
   $("detail").showModal();
+}
+
+async function showSession(sessionId) {
+  const r = await fetch("/api/alerts/sessions/" + encodeURIComponent(sessionId));
+  if (!r.ok) { alert("Không tải được phiên " + sessionId); return; }
+  const events = await r.json();
+  $("d-title").textContent = `Phiên ${sessionId} – ${events.length} sự kiện`;
+  const head = el("tr");
+  for (const title of ["Thời gian", "Loại", "Nội dung"]) head.append(el("th", "", title));
+  const thead = el("thead");
+  thead.append(head);
+  const rows = el("tbody");
+  for (const e of events) {
+    const row = el("tr");
+    row.append(el("td", "", new Date(e.timestamp).toLocaleString("vi-VN")),
+               el("td", "", e.attack_type), el("td", "", e.summary));
+    rows.append(row);
+  }
+  const table = el("table");
+  table.append(thead, rows);
+  $("d-body").replaceChildren(table);
 }
 
 async function deleteOne(id) {

@@ -22,6 +22,8 @@ paths:
 - Mọi cột thời gian (`events.timestamp`, `flows.*`) luôn lưu **UTC naive** (không kèm múi giờ), bất kể múi giờ của máy chạy engine hay API. Dùng `nids.db.models.utc_now()` để lấy giờ hiện tại và `utc_from_epoch(ts)` để đổi epoch; không dùng `datetime.now()`, `datetime.utcnow()` hay `fromtimestamp` không có `tz`.
 - Mục `redis` (`host`, `port`, `password`) cấu hình kênh đẩy cảnh báo realtime; `host` rỗng = tắt. Biến `NIDS_REDIS_HOST/PORT/PASSWORD` ghi đè (compose dựa vào đây), đọc qua `get_redis_settings()`. Mật khẩu Redis ở `.env` (`NIDS_REDIS_PASSWORD`), file mẫu để trống.
 - `init_db()` thử lại tối đa 15 lần, mỗi lần cách 2s, vì MySQL khởi động chậm trong Docker.
+- Repo không có migration. `create_all` không sửa bảng đã có, nên cột mới của `events` được thêm trong `_add_missing_columns()` (`nids/db/__init__.py`), kèm mọi index còn thiếu. Nhiều process cùng thêm thì process đến sau nhận lỗi trùng rồi retry; lỗi vĩnh viễn như thiếu quyền `ALTER` thì `init_db` `raise` sau hết lượt, có chủ ý: thiếu cột thì mọi lần ghi `events` đều hỏng.
+- `mysql_db` dùng volume ẩn danh: muốn giữ dữ liệu thì dùng `docker compose restart`, không dùng `docker compose down`.
 
 ## Docker
 
