@@ -4,6 +4,7 @@ from typing import Dict, Any, Iterable, List, Optional, Set
 from sqlalchemy import case, func
 from nids.db.models import EventModel, EventPayloadModel, FlowModel, iso_utc, utc_from_epoch, utc_now
 from nids.engine.flow import Flow
+from nids.realtime import publish_alert
 
 
 # ─────────────────────────────────────────────────────────────
@@ -39,6 +40,7 @@ class EventRepository:
             session.add(event)
             session.commit()
             session.refresh(event)
+            publish_alert(event.id)
             return event
         finally:
             session.close()

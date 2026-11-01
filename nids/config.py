@@ -41,3 +41,16 @@ def get_db_url() -> str:
         return f"mysql+pymysql://{auth}@{host}:{port}/{name}?charset=utf8mb4"
     
     return db_cfg.get("db_url", "sqlite:///./nids_events.db")
+
+
+def get_redis_settings() -> Optional[Dict[str, Any]]:
+    """Cấu hình Redis đẩy cảnh báo; None khi host rỗng (tắt). Biến môi trường NIDS_REDIS_* ghi đè settings."""
+    cfg = SETTINGS.get("redis") or {}
+    host = os.getenv("NIDS_REDIS_HOST", cfg.get("host", "")) or ""
+    if not host:
+        return None
+    return {
+        "host": host,
+        "port": int(os.getenv("NIDS_REDIS_PORT", cfg.get("port", 6379))),
+        "password": os.getenv("NIDS_REDIS_PASSWORD", cfg.get("password", "")) or None,
+    }
