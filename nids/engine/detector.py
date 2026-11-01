@@ -1,10 +1,11 @@
 import logging
 from collections import deque
-from typing import List, Optional, Callable, Dict, Tuple, Deque
+from typing import AbstractSet, List, Optional, Callable, Dict, Tuple, Deque
 from nids.engine.packet import DecodedPacket
 from nids.engine.rule import SnortRule, ContentMatch, PcreMatch, BUFFER_PKT_DATA
 from nids.engine.rule_manager import RuleManager
 from nids.engine.matcher import MultiPatternMatcher
+from nids.engine.stream import StreamView
 from nids.engine.threshold import ThresholdManager
 
 logger = logging.getLogger("nids.engine")
@@ -110,7 +111,21 @@ class DetectionEngine:
             groups.setdefault((p.buffer, p.field), ([], []))[1].append(p)
         return [(key, contents, pcres) for key, (contents, pcres) in groups.items()]
 
-    def evaluate_packet(self, packet: DecodedPacket) -> List[SnortRule]:
+    def evaluate_stream(self, view: StreamView) -> List[SnortRule]:
+        """Đánh giá dữ liệu đã ghép; SID đã bắn trên message này không báo lại."""
+        matched = self.evaluate_packet(view.packet, skip_sids=view.fired)
+        view.fired.update(rule.sid for rule in matched)
+        return matched
+
+    @staticmethod
+    def _stream_eligible(rule: SnortRule) -> bool:
+        """Rule xét được trên dữ liệu đã ghép: có nội dung, không dựa vào thuộc tính của một gói thật.
+
+        dsize và flags chỉ có nghĩa với gói thật; detection_filter đếm số lần khớp nên chạy thêm lượt ghép sẽ đếm đôi.
+        """
+        return bool(rule.contents or rule.pcres) and not (rule.dsize or rule.flags is not None or rule.detection_filter)
+
+    def evaluate_packet(self, packet: DecodedPacket, skip_sids: AbstractSet[int] = frozenset()) -> List[SnortRule]:
         """Đánh giá gói tin qua kiến trúc phễu lọc đa tầng."""
         pkt_proto = packet.protocol.lower()
 
@@ -148,6 +163,8 @@ class DetectionEngine:
 
         # Tầng 3: Đánh giá chi tiết (Detailed Qualification) trên các rule ứng viên
         for rule in candidate_rules.values():
+            if packet.reassembled and (rule.sid in skip_sids or not self._stream_eligible(rule)):
+                continue
             if not self._match_port(packet.dst_port, rule.dst_port):
                 continue
             if not self._match_port(packet.src_port, rule.src_port):

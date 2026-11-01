@@ -14,8 +14,10 @@ from nids.db.repository import EventRepository
 from nids.engine.decoder import PacketDecoder
 from nids.engine.flow import Flow, FlowTracker
 from nids.engine.capture import PacketCapture
+from nids.engine.rule import SnortRule
 from nids.engine.rule_manager import RuleManager
 from nids.engine.detector import DetectionEngine
+from nids.engine.stream import StreamReassembler
 from nids.ai import AITrafficWorker
 
 logger = logging.getLogger("nids.engine")
@@ -166,6 +168,20 @@ class FlowLog:
             logger.error("Không dọn được flow cũ: %s", e)
 
 
+def evaluate_with_stream(engine: DetectionEngine, reassembler: Optional[StreamReassembler], packet) -> List[SnortRule]:
+    """So khớp gói tin như cũ rồi so khớp thêm dữ liệu đã ghép (nếu có); lỗi khi ghép không làm mất kết quả từng gói."""
+    matched = engine.evaluate_packet(packet)
+    if reassembler is None:
+        return matched
+    try:
+        view = reassembler.feed(packet, matched)
+        if view is not None:
+            matched = matched + engine.evaluate_stream(view)
+    except Exception as e:
+        logger.error("Không tái hợp được luồng TCP: %s", e)
+    return matched
+
+
 class HoneypotIPCache:
     """Tập IP đã chạm honeypot, làm mới từ CSDL tối đa một lần mỗi `ttl` giây (honeypot ghi từ process khác)."""
 
@@ -227,6 +243,15 @@ def main():
     detection_engine = DetectionEngine(rule_manager, alert_callback=handle_alert)
     ai_worker = AITrafficWorker(alert_callback=handle_alert)
 
+    stream_cfg = SETTINGS.get("stream", {})
+    reassembler = None
+    if stream_cfg.get("enabled", True):
+        reassembler = StreamReassembler(
+            depth=stream_cfg.get("depth", 65536), max_total_bytes=stream_cfg.get("max_total_bytes", 67108864),
+            max_streams=stream_cfg.get("max_streams", 50000), idle_timeout=stream_cfg.get("idle_timeout", 30),
+            max_pending_segments=stream_cfg.get("max_pending_segments", 32),
+        )
+
     flow_cfg = SETTINGS.get("flow", {})
     flow_log = FlowLog(
         FlowTracker(idle_timeout=flow_cfg.get("idle_timeout", 30), active_timeout=flow_cfg.get("active_timeout", 120),
@@ -269,7 +294,7 @@ def main():
                     flow_log.tick(time.time())  # mạng yên lặng vẫn phải cho flow hết hạn
                 continue
             try:
-                matched = detection_engine.evaluate_packet(packet)
+                matched = evaluate_with_stream(detection_engine, reassembler, packet)
                 ai_worker.analyze_packet(packet)
                 flow_log.on_packet(packet, len(matched))  # sau evaluate_packet để biết gói có khớp rule
             finally:

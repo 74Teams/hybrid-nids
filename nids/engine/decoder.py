@@ -54,6 +54,7 @@ class PacketDecoder:
         src_port: Optional[int] = None
         dst_port: Optional[int] = None
         tcp_flags: dict = {}
+        tcp_seq: Optional[int] = None
         icmp_type: Optional[int] = None
         icmp_code: Optional[int] = None
 
@@ -62,6 +63,7 @@ class PacketDecoder:
             tcp = scapy_pkt[TCP]
             src_port = tcp.sport
             dst_port = tcp.dport
+            tcp_seq = tcp.seq
             flags = str(tcp.flags)  # Scapy trả về chuỗi: "S", "SA", "PA", "FUP"...
             tcp_flags = {
                 "SYN": "S" in flags,
@@ -100,6 +102,7 @@ class PacketDecoder:
             icmp_code=icmp_code,
             raw_payload=raw_payload,
             raw_packet=bytes(scapy_pkt),
+            tcp_seq=tcp_seq,
         )
 
         # Tầng L7: parse HTTP nếu là traffic Web

@@ -38,6 +38,17 @@ paths:
 
 IP đã chạm honeypot trong 1 giờ gần nhất chắc chắn là attacker. `main.py::handle_alert` gọi `enrich_alert`: cảnh báo rule engine từ IP đó được nâng một bậc priority (tối đa P1) và gắn `[honeypot-confirmed]`. Danh sách IP đọc từ CSDL qua `HoneypotIPCache` (TTL 5 giây vì honeypot ghi từ process khác).
 
+## Tái hợp luồng TCP
+
+- `nids/engine/stream.py` (`StreamReassembler`, `StreamView`) ghép payload chiều client → server theo `tcp_seq`, dùng lại `flow_key`. Module thuần, không biết CSDL hay `SETTINGS`; gói không có `tcp_seq` (gói tự dựng trong test) được bỏ qua.
+- So khớp từng gói giữ nguyên. `main.py::evaluate_with_stream` gọi `evaluate_packet`, rồi `reassembler.feed(packet, matched)`; nếu buffer có từ hai đoạn thì nhận gói ảo (`reassembled=True`) và gọi `DetectionEngine.evaluate_stream`.
+- Client là bên gửi SYN. Không thấy SYN thì bên có cổng đích nhỏ hơn được coi là client; khi đó không xử lý được đảo thứ tự ở đoạn đầu.
+- Đến sai thứ tự thì giữ ở `pending`; quá `max_pending_segments` thì coi như mất gói và ghép lại từ đoạn mới nhất. Chồng lấn: dữ liệu đến trước được giữ.
+- Không quét lại buffer ở mọi segment vì chi phí tăng theo bậc hai. Buffer tới `SCAN_EVERY_SEGMENT_BYTES` (4 KB) thì quét mỗi segment; lớn hơn thì chỉ quét khi gấp đôi lần trước, khi đủ một HTTP request, khi client gửi FIN/RST, hoặc ngay trước khi vượt `depth`. Dữ liệu chưa quét sẽ không được quét nếu stream hết idle timeout, bị đẩy khỏi bảng, hoặc do server đóng trước.
+- Bộ nhớ: mỗi stream tối đa `depth` byte (vượt thì dừng ghép stream đó), toàn bảng tối đa `max_total_bytes` và `max_streams` (vượt thì bỏ stream lâu nhất không có gói).
+- Chống báo trùng: mỗi stream nhớ tập SID đã bắn, tập được làm mới khi cắt xong một HTTP request (đủ header và `Content-Length`), nên request tấn công sau trên cùng kết nối vẫn được báo. `chunked` và pipelining chưa được tách ranh giới.
+- Cấu hình ở mục `stream` trong `settings.yaml`; `enabled: false` tắt hẳn bước ghép.
+
 ## Flow log
 
 - `nids/engine/flow.py` (`Flow`, `FlowTracker`, `flow_key`) gom gói theo 5-tuple chuẩn hoá hai chiều; module thuần, không biết CSDL, để AI worker (#22) dùng lại. Bên gửi gói đầu là nguồn (SYN-ACK đầu tiên thì đảo chiều). Mốc thời gian lấy từ `packet.timestamp`, nên replay pcap cho kết quả lặp lại được.
