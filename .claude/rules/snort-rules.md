@@ -119,5 +119,7 @@ Mỗi SID chỉ xuất hiện một lần trong mọi file. Nếu trùng, parser
 
 - `flow:established` được xấp xỉ: gói TCP có ACK và không có SYN. `to_server`/`from_server` chưa được kiểm tra.
 - Các content trong một buffer được khớp tham lam theo thứ tự, không quay lui. Hãy viết content theo đúng thứ tự xuất hiện trong dữ liệu.
-- Chưa có tái hợp luồng TCP: content bị chia qua hai gói sẽ không khớp.
+- Tái hợp luồng TCP chỉ làm cho chiều client → server và `stream.depth` byte đầu mỗi stream (mặc định 64 KB). Chiều server → client vẫn so khớp từng gói, nên rule `to_client`/`from_server` không bắt được chuỗi bị chia gói.
+- Lượt so khớp trên dữ liệu đã ghép chỉ xét rule có `content`/`pcre` và không có `dsize`, `flags`, `detection_filter`. Rule có các option này chỉ khớp trên từng gói.
+- Rule đã bắn trên một gói hoặc trên dữ liệu đã ghép thì không báo lại cho cùng HTTP request (với traffic không phải HTTP là cả stream).
 - `detection_filter` đếm theo `packet.timestamp`, nên trong test các gói dựng sẵn phải có timestamp nằm trong cửa sổ `seconds`.

@@ -15,9 +15,13 @@ class DecodedPacket:
     icmp_code: Optional[int] = None
     raw_payload: bytes = b""
     raw_packet: bytes = b""
+    tcp_seq: Optional[int] = None  # Sequence number của TCP; None nếu không phải TCP hoặc gói tự dựng trong test
 
     # Trường do HTTP Parser điền bổ sung (L7)
     http_data: Optional["ParsedHTTPRequest"] = None
+
+    # True nếu đây là gói ảo chứa payload đã ghép từ nhiều segment (xem stream.py)
+    reassembled: bool = False
 
 @dataclass
 class ParsedHTTPRequest:

@@ -19,6 +19,15 @@ detection:
   enable_ai_worker: true
   queue_max_size: 10000
 
+stream:
+  # Tái hợp luồng TCP chiều client → server để bắt chuỗi tấn công bị chia qua nhiều gói
+  enabled: true
+  depth: 65536                # byte đầu mỗi stream được ghép; vượt thì chỉ còn so khớp từng gói
+  max_total_bytes: 67108864   # tổng bộ nhớ buffer (64 MB); vượt thì bỏ stream lâu nhất không có gói
+  max_streams: 50000          # số stream giữ trong bộ nhớ
+  idle_timeout: 30            # giây không có gói thì bỏ stream
+  max_pending_segments: 32    # số đoạn đến sai thứ tự chờ lấp khoảng trống
+
 flow:
   # Gom gói thành flow và ghi flow log vào bảng flows (mọi traffic, không chỉ traffic có cảnh báo)
   idle_timeout: 30        # giây không có gói thì flow kết thúc

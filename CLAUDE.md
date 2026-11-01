@@ -21,7 +21,7 @@ Hybrid NIDS + honeypot (đồ án PBL4): hệ thống phát hiện xâm nhập m
 
 Lệnh luôn chạy từ thư mục gốc repo (`pytest.ini` đặt `pythonpath = .`).
 
-- `nids/engine/` — process engine (`python -m nids.engine`): capture, decode, rule parser, Aho-Corasick, detection, threshold, `flow.py` (gom flow)
+- `nids/engine/` — process engine (`python -m nids.engine`): capture, decode, rule parser, Aho-Corasick, detection, threshold, `flow.py` (gom flow), `stream.py` (tái hợp TCP)
 - `nids/api/` — process FastAPI: `routes/` (alerts, rules), `static/` (dashboard, logs, rules page)
 - `nids/honeypot/` — honeypot SSH và HTTP (`python -m nids.honeypot ssh|http`), `store.py` ghi sự kiện
 - `nids/db/` — `models.py` (`events`, `event_payloads`, `flows`), `repository.py` (`EventRepository`)
