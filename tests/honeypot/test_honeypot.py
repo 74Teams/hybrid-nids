@@ -80,7 +80,9 @@ def test_settings_env_override(monkeypatch, tmp_path):
     assert s.ssh_port == 2022 and s.host_key_path == tmp_path.resolve() / "server.key"
 
 
-def test_importing_sensors_has_no_side_effects():
+def test_importing_sensors_has_no_side_effects(tmp_path, monkeypatch):
+    # Trỏ vào thư mục tạm để data/server.key có sẵn trên máy dev không làm test fail
+    monkeypatch.setattr(settings, "host_key_path", tmp_path / "server.key")
     import nids.honeypot.ssh_honeypot as ssh, nids.honeypot.web_honeypot as web
     importlib.reload(ssh)
     importlib.reload(web)
