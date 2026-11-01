@@ -1,7 +1,9 @@
 # Thư viện
+import hashlib
 import logging
 import socket
 import threading
+import time
 
 import paramiko
 
@@ -12,6 +14,13 @@ from .store import log_event
 logger = logging.getLogger("nids.honeypot")
 
 SSH_BANNER = settings.ssh_banner
+
+# HASSH đo được trong lab; HASSH theo thư viện nên công cụ khác dùng libssh cũng có thể trùng hydra
+KNOWN_HASSH = {
+    "015322ee8471fa8338c558a918183b11": "hydra/libssh",   # hydra 9.7, libssh 0.12.2
+    "eeca2460550b9ded084ecf2f70a75356": "OpenSSH",        # OpenSSH 10.2 và 10.6
+    "4c94058d5e9e31659879f79fd5b46084": "paramiko",       # paramiko 5.1.0
+}
 
 
 def fake_response(cmd):
@@ -32,6 +41,60 @@ def load_host_key(path=None):
         paramiko.RSAKey.generate(2048).write_private_key_file(str(path))
         logger.info("Đã sinh SSH host key mới tại %s", path)
     return paramiko.RSAKey(filename=str(path))
+
+
+def compute_hassh(kex, ciphers, macs, compression):
+    """HASSH: MD5 của danh sách thuật toán client đề xuất, dùng làm định danh chứ không để bảo mật."""
+    raw = ";".join(",".join(algos) for algos in (kex, ciphers, macs, compression))
+    return hashlib.md5(raw.encode(), usedforsecurity=False).hexdigest()
+
+
+def identify_client(hassh, banner):
+    """Tên công cụ: ưu tiên HASSH đã biết, không có thì dùng banner (do client tự khai, có thể giả)."""
+    return KNOWN_HASSH.get(hassh) or banner.removeprefix("SSH-2.0-")[:64] or "không rõ"
+
+
+class BruteForceTracker:
+    """Đếm lần đăng nhập theo key; hai lần cách nhau quá window giây thì tính là đợt mới."""
+
+    def __init__(self, threshold, window):
+        self.threshold = threshold
+        self.window = window
+        self.bursts = {}                           # key -> (số lần, thời điểm gần nhất)
+        self.lock = threading.Lock()
+
+    def hit(self, key, now=None):
+        """Ghi một lần đăng nhập; chỉ trả về True đúng lần chạm ngưỡng, mỗi đợt một cảnh báo."""
+        now = time.monotonic() if now is None else now
+        with self.lock:
+            # dọn đợt đã hết để attacker đổi IP liên tục không làm đầy bộ nhớ
+            self.bursts = {k: v for k, v in self.bursts.items() if now - v[1] <= self.window}
+            count = self.bursts.get(key, (0, now))[0] + 1
+            self.bursts[key] = (count, now)
+            return count == self.threshold
+
+
+bruteforce = BruteForceTracker(settings.ssh_bruteforce_threshold, settings.ssh_bruteforce_window)
+
+
+class HasshTransport(paramiko.Transport):
+    """Transport ghi HASSH của client vào conn, nên mọi sự kiện của kết nối đều mang giá trị này."""
+
+    def __init__(self, sock, conn):
+        super().__init__(sock)
+        self.conn = conn
+
+    def _really_parse_kex_init(self, m, ignore_first_byte=False):
+        # tính ở đây vì _parse_kex_init sẽ xoá ext-info-* và kex-strict-* khỏi danh sách kex
+        parsed = super()._really_parse_kex_init(m, ignore_first_byte)
+        if "hassh" not in self.conn:               # rekey không đổi fingerprint của kết nối
+            self.conn["hassh"] = compute_hassh(parsed["kex_algo_list"],
+                                               parsed["client_encrypt_algo_list"],
+                                               parsed["client_mac_algo_list"],
+                                               parsed["client_compress_algo_list"])
+            self.conn["client_tool"] = identify_client(self.conn["hassh"], self.remote_version)
+            logger.info("HASSH của %s: %s (%s)", self.conn["src_ip"], self.conn["hassh"], self.conn["client_tool"])
+        return parsed
 
 
 # emulated shell
@@ -121,6 +184,10 @@ class Server(paramiko.ServerInterface):
     def check_auth_password(self, username, password):
         logger.info("Đăng nhập SSH từ %s: %s / %s", self.conn["src_ip"], username, password)
         log_event('ssh', 'ssh.auth.attempt', username=username, password=password, **self.conn)
+        # theo cả HASSH: hydra mở kết nối mới cho mỗi mật khẩu, và một IP có thể chạy nhiều công cụ
+        if bruteforce.hit((self.conn["src_ip"], self.conn.get("hassh"))):
+            logger.warning("SSH brute force từ %s bằng %s", self.conn["src_ip"], self.conn.get("client_tool"))
+            log_event('ssh', 'ssh.bruteforce', command=f"từ {bruteforce.threshold} lần đăng nhập", **self.conn)
         if self.input_username is not None and self.input_password is not None:
             if username != self.input_username or password != self.input_password:
                 return paramiko.AUTH_FAILED
@@ -153,7 +220,7 @@ def client_handle(client, addr, username, password, host_key):
     transport = None
 
     try:
-        transport = paramiko.Transport(client)
+        transport = HasshTransport(client, conn)
         transport.local_version = SSH_BANNER
         server = Server(conn, input_username=username, input_password=password)
 
