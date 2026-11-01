@@ -1,5 +1,8 @@
 """Honeypot ghi vào CSDL chung của NIDS và làm giàu cảnh báo của engine."""
 import importlib
+import re
+import socket
+import threading
 
 import paramiko
 import pytest
@@ -125,3 +128,103 @@ def test_host_key_generated_once(monkeypatch, tmp_path):
     from nids.honeypot.ssh_honeypot import load_host_key
     k1, k2 = load_host_key(), load_host_key()
     assert isinstance(k1, paramiko.RSAKey) and k1.get_fingerprint() == k2.get_fingerprint()
+
+
+def test_compute_hassh_matches_known_md5():
+    from nids.honeypot.ssh_honeypot import compute_hassh
+    # md5sum của chuỗi "k1,k2;c1;m1,m2;none"
+    assert compute_hassh(["k1", "k2"], ["c1"], ["m1", "m2"], ["none"]) == "091e3b57f41272dfe6bf065e78a5cc52"
+
+
+def kexinit_message(kex):
+    """KEXINIT của client; thứ tự mỗi cặp danh sách là client→server rồi server→client."""
+    m = paramiko.Message()
+    m.add_bytes(bytes(16))
+    for algos in (kex, ["ssh-rsa"], ["c1"], ["c2"], ["m1"], ["m2"], ["none"], ["zlib"], [""], [""]):
+        m.add_list(algos)
+    m.add_boolean(False)
+    m.add_int(0)
+    m.rewind()
+    return m
+
+
+def test_hassh_keeps_extension_markers_and_ignores_rekey():
+    """Theo chuẩn HASSH, ext-info-* và kex-strict-* vẫn nằm trong danh sách kex."""
+    from nids.honeypot.ssh_honeypot import HasshTransport, compute_hassh
+    conn = {"src_ip": "10.0.0.9"}
+    left, right = socket.socketpair()
+    try:
+        transport = HasshTransport(left, conn)
+        transport._really_parse_kex_init(kexinit_message(["k1", "ext-info-c", "kex-strict-c-v00@openssh.com"]))
+        transport._really_parse_kex_init(kexinit_message(["k2"]))
+    finally:
+        left.close()
+        right.close()
+    assert conn["hassh"] == compute_hassh(["k1", "ext-info-c", "kex-strict-c-v00@openssh.com"],
+                                          ["c1"], ["m1"], ["none"])
+
+
+def test_identify_client_prefers_known_hassh_then_banner():
+    from nids.honeypot.ssh_honeypot import identify_client
+    assert identify_client("015322ee8471fa8338c558a918183b11", "SSH-2.0-OpenSSH_9.9") == "hydra/libssh"
+    assert identify_client("0" * 32, "SSH-2.0-Go") == "Go"
+    assert identify_client("0" * 32, "") == "không rõ"
+
+
+def test_bruteforce_tracker_alerts_once_per_burst_and_per_key():
+    from nids.honeypot.ssh_honeypot import BruteForceTracker
+    tracker = BruteForceTracker(threshold=3, window=60)
+    assert [tracker.hit("a", now=t) for t in (0, 10, 20, 30)] == [False, False, True, False]
+    assert tracker.hit("b", now=31) is False       # key khác đếm riêng
+    assert tracker.hit("a", now=91) is False       # đúng bằng window: vẫn cùng đợt
+    assert [tracker.hit("a", now=t) for t in (200, 210, 220)] == [False, False, True]   # đợt mới
+    assert "b" not in tracker.bursts               # đợt đã hết được dọn
+
+
+def test_repeated_logins_raise_one_bruteforce_event(monkeypatch):
+    from nids.honeypot import ssh_honeypot
+    monkeypatch.setattr(ssh_honeypot, "bruteforce", ssh_honeypot.BruteForceTracker(3, 60))
+    conn = {"src_ip": "10.0.0.9", "src_port": 5555, "dst_ip": "10.0.0.1", "dst_port": 2222,
+            "hassh": "0" * 32, "client_tool": "hydra/libssh"}
+    for password in ("a", "b", "c", "d"):          # mỗi mật khẩu một kết nối, như hydra
+        ssh_honeypot.Server(dict(conn)).check_auth_password("root", password)
+    events = [e for e in EventRepository.get_recent_events() if e.attack_type == "ssh.bruteforce"]
+    assert len(events) == 1 and events[0].severity == 2 and "[hydra/libssh]" in events[0].summary
+
+
+def ssh_session(disabled_algorithms=None):
+    """Chạy một phiên SSH thật vào client_handle: đăng nhập rồi exec một lệnh."""
+    from nids.honeypot.ssh_honeypot import client_handle
+    listener = socket.create_server(("127.0.0.1", 0))
+    port = listener.getsockname()[1]
+
+    def serve():
+        sock, addr = listener.accept()
+        client_handle(sock, addr, None, None, paramiko.RSAKey.generate(2048))
+
+    server = threading.Thread(target=serve, daemon=True)
+    server.start()
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect("127.0.0.1", port, username="root", password="toor", look_for_keys=False,
+                       allow_agent=False, disabled_algorithms=disabled_algorithms)
+        _, stdout, _ = client.exec_command("id")
+        stdout.read()
+    finally:
+        client.close()
+        server.join(10)
+        listener.close()
+
+
+def test_ssh_events_carry_hassh_that_differs_between_clients():
+    ssh_session()
+    ssh_session(disabled_algorithms={"ciphers": ["aes128-ctr"]})
+    import nids.db as db
+    with db.SessionLocal() as session:
+        evidence = [p.matched_content for p in
+                    session.query(models.EventPayloadModel).order_by(models.EventPayloadModel.id)]
+    hashes = [re.search(r"hassh=([0-9a-f]{32})", text).group(1) for text in evidence]
+    assert len(hashes) == 4                       # mỗi phiên có ssh.auth.attempt và ssh.exec
+    assert hashes[0] == hashes[1] and hashes[2] == hashes[3] and hashes[0] != hashes[2]
+    assert all("tool=paramiko" in text for text in evidence)   # HASSH lạ thì lấy tên từ banner
