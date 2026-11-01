@@ -1,6 +1,6 @@
 # Hybrid NIDS
 
-**A real-time network intrusion detection system that combines Snort 3–compatible signature rules with SSH/HTTP honeypots, and comes with a pfSense-style web console.**
+**A real-time network intrusion detection system that combines Snort 3–compatible signature rules with SSH/HTTP honeypots, and comes with a shadcn-style web console.**
 
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Scapy](https://img.shields.io/badge/Scapy-packet%20capture-2C3E50?style=for-the-badge&logo=wireshark&logoColor=white)
@@ -37,7 +37,7 @@ Hybrid NIDS sniffs traffic live from a network interface. It decodes every packe
 
 Signatures only catch attacks that are already known. To cover more, the system runs SSH and HTTP honeypots that write into the same database. Nobody legitimate ever touches a honeypot, so any IP that does is a confirmed attacker. Rule alerts from those IPs are raised one priority level and tagged `[honeypot-confirmed]`.
 
-All alerts and honeypot events end up in one database. A FastAPI service and a pfSense-style web console read from it, so you can watch alerts live, search the logs, inspect payloads and browse the loaded rules.
+All alerts and honeypot events end up in one database. A FastAPI service and a shadcn-style web console read from it, so you can watch alerts live, search the logs, inspect payloads and browse the loaded rules.
 
 ---
 

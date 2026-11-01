@@ -4,7 +4,7 @@ File này hướng dẫn Claude Code (claude.ai/code) khi làm việc với code
 
 ## Project Overview
 
-Hybrid NIDS + honeypot (đồ án PBL4): hệ thống phát hiện xâm nhập mạng kết hợp static rule tương thích Snort 3, một AI worker phát hiện bất thường theo flow và honeypot SSH/HTTP làm nguồn sự kiện thứ hai. Kèm theo là web console kiểu pfSense để xem cảnh báo và quản lý rule, cùng một môi trường Docker lab (attacker, victim) để trình diễn. Người dùng là nhóm sinh viên làm đồ án và giảng viên chấm, nên ưu tiên chạy được, demo được và dễ giải thích.
+Hybrid NIDS + honeypot (đồ án PBL4): hệ thống phát hiện xâm nhập mạng kết hợp static rule tương thích Snort 3, một AI worker phát hiện bất thường theo flow và honeypot SSH/HTTP làm nguồn sự kiện thứ hai. Kèm theo là web console kiểu shadcn/ui để xem cảnh báo và quản lý rule, cùng một môi trường Docker lab (attacker, victim) để trình diễn. Người dùng là nhóm sinh viên làm đồ án và giảng viên chấm, nên ưu tiên chạy được, demo được và dễ giải thích.
 
 ## Tech Stack
 
