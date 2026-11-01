@@ -29,8 +29,8 @@ Lệnh luôn chạy từ thư mục gốc repo (`pytest.ini` đặt `pythonpath 
 - `config/settings.example.yaml` — file mẫu được commit; `config/settings.yaml` — cấu hình local (bị git ignore, thiếu thì dùng file mẫu)
 - `lab/` — Docker lab: `attacker/attack_demo.py`, `victim/`
 - `tests/` — chia theo khu vực: `engine/`, `api/`, `honeypot/`, `lab/`
-- `docs/` — `demo/kich-ban-demo.md` (kịch bản thuyết trình), `ai/` (thiết kế AI worker)
-- `.claude/rules/` — quy tắc chi tiết theo khu vực; `.claude/commands/` — slash command (`them-rule`)
+- `docs/` — `demo/kich-ban-demo.md` (kịch bản thuyết trình), `ai/` (thiết kế AI worker), `plans/` (plan và bảng tổng hợp)
+- `.claude/rules/` — quy tắc chi tiết theo khu vực; `.claude/commands/` — slash command (`them-rule`); `.claude/skills/` — skill (`idea-to-plan`); `.claude/agents/` — subagent (`plan-critic`, `git-workflow`)
 
 Các process (engine, API, mỗi honeypot một process) chạy riêng và chỉ giao tiếp qua database chung cùng các file trong `rules/`.
 
@@ -78,4 +78,4 @@ Các process (engine, API, mỗi honeypot một process) chạy riêng và chỉ
 - Honeypot ghi từ process khác, nên cache IP honeypot trong engine có TTL 5 giây và cảnh báo có thể chưa được làm giàu ngay.
 - `nids/ai.py` mới là stub: đừng viết test hay demo giả định AI worker đã sinh cảnh báo.
 
-Quy tắc chi tiết: `.claude/rules/git-workflow.md`, `engine.md`, `api-web.md`, `honeypot.md`, `config-db-docker.md`, `logging.md`, `lab-demo.md`, `snort-rules.md`.
+Quy tắc chi tiết: `.claude/rules/git-workflow.md`, `planning.md`, `engine.md`, `api-web.md`, `honeypot.md`, `config-db-docker.md`, `logging.md`, `lab-demo.md`, `snort-rules.md`.
