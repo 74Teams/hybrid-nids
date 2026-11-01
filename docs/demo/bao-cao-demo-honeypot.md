@@ -162,7 +162,7 @@ curl -s "http://localhost:8000/api/alerts/attackers"
 
 - Honeypot giúp xác nhận ý đồ: không người dùng hợp lệ nào kết nối tới 2222/8080, nên IP chạm vào đó đáng tin là attacker; NIDS dùng thông tin này để tăng priority.
 - Cảnh báo đầu tiên từ một IP, trước khi IP đó chạm honeypot, không được nâng (như bước 2).
-- Honeypot SSH/HTTP còn đơn giản: shell giả chỉ có vài lệnh, chưa có session theo kết nối, chưa ghi mọi request HTTP, chưa chặn tài nguyên.
+- Honeypot SSH/HTTP còn đơn giản: shell giả chỉ có vài lệnh, chưa ghi mọi request HTTP, chưa chặn tài nguyên.
 - Chưa có chuyển hướng traffic đáng ngờ từ NIDS sang honeypot.
 
 ## 8. Dọn dẹp sau demo

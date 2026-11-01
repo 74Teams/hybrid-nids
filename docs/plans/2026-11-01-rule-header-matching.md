@@ -1,6 +1,6 @@
 ---
 type: PLAN
-plan_id: PLAN-002
+plan_id: PLAN-003
 title: So khớp header rule theo biến, cổng và IP
 status: IN_PROGRESS
 issue: 17, 18, 20, 21
@@ -9,7 +9,7 @@ created: 2026-11-01
 updated: 2026-11-01
 ---
 
-# PLAN-002: So khớp header rule theo biến, cổng và IP
+# PLAN-003: So khớp header rule theo biến, cổng và IP
 
 
 ## 1. Bối cảnh

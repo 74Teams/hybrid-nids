@@ -29,7 +29,8 @@ def log_event(protocol: str, event_type: str, src_ip: str, *, src_port: Optional
               password: Optional[str] = None, command: Optional[str] = None,
               user_agent: Optional[str] = None, http_method: Optional[str] = None,
               http_uri: Optional[str] = None, attack_tag: Optional[str] = None,
-              hassh: Optional[str] = None, client_tool: Optional[str] = None) -> None:
+              hassh: Optional[str] = None, client_tool: Optional[str] = None,
+              session_id: Optional[str] = None) -> None:
     """Ghi 1 sự kiện honeypot; nuốt mọi lỗi CSDL (chỉ ghi log)."""
     kind = f"{event_type}.{attack_tag}" if attack_tag else event_type
     detail = command if command is not None else f"{username}:{password}"
@@ -53,6 +54,7 @@ def log_event(protocol: str, event_type: str, src_ip: str, *, src_port: Optional
             "http_uri": http_uri,
             "msg": f"HONEYPOT {event_type}{tool} {detail}"[:500],
             "matched_content": evidence,
+            "session_id": session_id,
         })
     except Exception as e:
         logger.error("Không thể lưu sự kiện honeypot vào CSDL: %s", e)

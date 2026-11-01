@@ -39,6 +39,7 @@ class EventModel(Base):
     http_uri = Column(Text, nullable=True)
     summary = Column(Text, nullable=False)
     status = Column(String(20), default="NEW")
+    session_id = Column(String(32), nullable=True, index=True)   # phiên honeypot; NULL với cảnh báo rule engine
 
     payload = relationship("EventPayloadModel", back_populates="event", uselist=False)
 

@@ -3,6 +3,7 @@ import importlib
 import re
 import socket
 import threading
+from contextlib import contextmanager
 
 import paramiko
 import pytest
@@ -228,3 +229,95 @@ def test_ssh_events_carry_hassh_that_differs_between_clients():
     assert len(hashes) == 4                       # mỗi phiên có ssh.auth.attempt và ssh.exec
     assert hashes[0] == hashes[1] and hashes[2] == hashes[3] and hashes[0] != hashes[2]
     assert all("tool=paramiko" in text for text in evidence)   # HASSH lạ thì lấy tên từ banner
+
+
+@contextmanager
+def ssh_shell():
+    """Phiên shell SSH thật vào client_handle, mở suốt khối with."""
+    from nids.honeypot.ssh_honeypot import client_handle
+    listener = socket.create_server(("127.0.0.1", 0))
+
+    def serve():
+        sock, addr = listener.accept()
+        client_handle(sock, addr, None, None, paramiko.RSAKey.generate(2048))
+
+    server = threading.Thread(target=serve, daemon=True)
+    server.start()
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect("127.0.0.1", listener.getsockname()[1], username="root", password="toor",
+                       look_for_keys=False, allow_agent=False)
+        channel = client.invoke_shell()
+        channel.settimeout(10)
+        read_until_prompt(channel)
+        yield channel
+    finally:
+        client.close()
+        server.join(10)
+        listener.close()
+
+
+def read_until_prompt(channel):
+    """Shell giả ghi sự kiện rồi mới in prompt, nên thấy prompt nghĩa là sự kiện đã vào CSDL."""
+    output = b""
+    while not output.endswith((b"$ ", b"# ")):
+        chunk = channel.recv(4096)
+        assert chunk, "phiên SSH đóng trước khi có prompt"
+        output += chunk
+
+
+def run_command(channel, command):
+    channel.send(command + "\r")
+    read_until_prompt(channel)
+
+
+def test_all_events_of_ssh_session_share_one_id():
+    with ssh_shell() as channel:
+        for command in ("pwd", "id", "whoami"):
+            run_command(channel, command)
+    events = sorted(EventRepository.get_recent_events(), key=lambda e: e.id)
+    assert [e.attack_type for e in events] == ["ssh.auth.attempt"] + ["ssh.command"] * 3
+    assert len({e.session_id for e in events}) == 1 and re.fullmatch("[0-9a-f]{32}", events[0].session_id)
+    assert [e.summary.rsplit(" ", 1)[1] for e in events[1:]] == ["pwd", "id", "whoami"]
+
+
+def test_parallel_ssh_sessions_from_one_ip_are_not_mixed():
+    with ssh_shell() as first, ssh_shell() as second:
+        run_command(first, "pwd")
+        run_command(second, "id")
+        run_command(first, "whoami")
+        run_command(second, "uptime")
+    by_session = {}
+    for event in sorted(EventRepository.get_recent_events(), key=lambda e: e.id):
+        if event.attack_type == "ssh.command":
+            by_session.setdefault(event.session_id, []).append(event.summary.rsplit(" ", 1)[1])
+    assert sorted(by_session.values()) == [["id", "uptime"], ["pwd", "whoami"]]
+
+
+def web_login(client, **kwargs):
+    client.post("/wp-admin-login", data={"username": "admin", "password": "bad"}, **kwargs)
+    return EventRepository.get_recent_events(limit=1)[0].session_id
+
+
+def test_web_cookie_keeps_session_across_requests():
+    client = web_honeypot().test_client()
+    client.get("/")                                # cookie được cấp ngay ở trang login
+    cookie = client.get_cookie("wordpress_sess")
+    assert cookie.http_only and cookie.same_site == "Lax"
+    assert web_login(client) == web_login(client) == cookie.value
+    assert web_login(web_honeypot().test_client()) != cookie.value   # client khác là phiên khác
+
+
+@pytest.mark.parametrize("value", ["abc", "0" * 33, "Z" * 32, "'; DROP TABLE events; --"])
+def test_web_rejects_malformed_session_cookie(value):
+    client = web_honeypot().test_client()
+    client.set_cookie("wordpress_sess", value)
+    session_id = web_login(client)
+    assert re.fullmatch("[0-9a-f]{32}", session_id) and client.get_cookie("wordpress_sess").value == session_id
+
+
+def test_web_rejects_session_cookie_with_trailing_newline():
+    """Regex có `$` hoặc re.match sẽ để lọt giá trị này và vượt cột String(32)."""
+    from nids.honeypot.web_honeypot import SESSION_ID
+    assert SESSION_ID.fullmatch("0" * 32) and not SESSION_ID.fullmatch("0" * 32 + "\n")

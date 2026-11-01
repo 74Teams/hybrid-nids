@@ -1,7 +1,8 @@
 import logging
 import re
+import uuid
 
-from flask import Flask, render_template, request
+from flask import Flask, g, render_template, request
 
 from .settings import settings
 from .store import log_event
@@ -10,9 +11,25 @@ logger = logging.getLogger("nids.honeypot")
 
 SQLI = re.compile(r"('|--|OR\s+\d|UNION|SELECT)", re.I)
 
+SESSION_COOKIE = "wordpress_sess"
+SESSION_ID = re.compile(r"[0-9a-f]{32}")
+
 
 def web_honeypot(input_username=settings.http_username, input_password=settings.http_password):
     app = Flask(__name__)
+
+    @app.before_request
+    def load_session():
+        # cookie do attacker gửi: sai định dạng thì cấp id mới, tránh vượt cột session_id
+        cookie = request.cookies.get(SESSION_COOKIE, '')
+        g.new_session = not SESSION_ID.fullmatch(cookie)
+        g.session_id = uuid.uuid4().hex if g.new_session else cookie
+
+    @app.after_request
+    def save_session(response):
+        if g.new_session:
+            response.set_cookie(SESSION_COOKIE, g.session_id, httponly=True, samesite='Lax')
+        return response
 
     @app.route('/')
     def index():
@@ -32,7 +49,8 @@ def web_honeypot(input_username=settings.http_username, input_password=settings.
                   username=username, password=password,
                   user_agent=request.headers.get('User-Agent'),
                   http_method=request.method, http_uri=request.full_path.rstrip('?'),
-                  attack_tag='sqli' if SQLI.search(username + ' ' + password) else None)
+                  attack_tag='sqli' if SQLI.search(username + ' ' + password) else None,
+                  session_id=g.session_id)
 
         if username == input_username and password == input_password:
             return 'DEEBOODAH!'
