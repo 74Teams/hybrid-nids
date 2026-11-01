@@ -226,6 +226,7 @@ Main endpoints:
 | `GET` | `/api/alerts/sessions/{session_id}` | Events of one honeypot session, oldest first |
 | `GET` | `/api/alerts/sessions/{session_id}/raw` | Raw log of one session (plain text, one event per line) |
 | `WS` | `/api/alerts/ws` | Pushes the id of each new alert (via Redis); the browser then reloads over REST. Closes with code 1013 when Redis is off or down |
+| `GET` | `/api/redirects/` | IPs currently redirected to the honeypot (`active=false` adds history) |
 | `GET` | `/api/rules/` | Rules with category and enabled state. Filters: `category`, `enabled`, `q` |
 | `GET`, `PUT` | `/api/rules/categories` | List rule files / save which ones are loaded |
 | `POST` | `/api/rules/sids` | Enable/disable SIDs (`{"enable": [...], "disable": [...]}`) |
@@ -270,6 +271,7 @@ pytest
 | `victim_app` | nginx target with several services | `172.28.0.50` |
 | `nids_engine` | Detection engine, sniffing the victim's traffic | shares the victim's network namespace |
 | `honeypot_ssh` / `honeypot_http` | Honeypots on ports 2222 / 8080 | share the victim's network namespace |
+| `nids_redirector` | Sends IPs with many P1/P2 alerts to the honeypots with iptables `REDIRECT` (ports 22→2222, 80→8080) for a limited time | shares the victim's network namespace |
 | `nids_api` | API and web console, published on `localhost:8000` | `172.28.0.20` |
 | `attacker` | Kali Linux with nmap, hping3, hydra, sqlmap, nikto | `172.28.0.100` |
 

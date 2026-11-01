@@ -1,9 +1,9 @@
 import time
 from datetime import datetime, timedelta
-from typing import Dict, Any, Iterable, List, Optional, Set
+from typing import Dict, Any, Iterable, List, Optional, Set, Tuple
 from sqlalchemy import String, case, cast, distinct, func
 from sqlalchemy.orm import joinedload
-from nids.db.models import EventModel, EventPayloadModel, FlowModel, iso_utc, utc_from_epoch, utc_now
+from nids.db.models import EventModel, EventPayloadModel, FlowModel, RedirectModel, iso_utc, utc_from_epoch, utc_now
 from nids.engine.flow import Flow
 from nids.realtime import publish_alert
 
@@ -312,5 +312,94 @@ class EventRepository:
             deleted = session.query(EventModel).filter(EventModel.id.in_(ids)).delete(synchronize_session=False)
             session.commit()
             return deleted
+        finally:
+            session.close()
+
+    # ── Chuyển hướng IP đáng ngờ sang honeypot (nids.redirector) ──
+
+    @staticmethod
+    def suspicious_ips(window_seconds: int, min_alerts: int, max_priority: int) -> List[Tuple[str, int]]:
+        """IP có ít nhất `min_alerts` cảnh báo rule engine mức `max_priority` trở lên (số nhỏ = nặng) trong cửa sổ; kèm số cảnh báo."""
+        from nids.db import SessionLocal
+        session = SessionLocal()
+        try:
+            since = utc_now() - timedelta(seconds=window_seconds)
+            count = func.count(EventModel.id)
+            rows = (session.query(EventModel.src_ip, count)
+                    .filter(EventModel.source_type == "RULE_ENGINE", EventModel.severity <= max_priority,
+                            EventModel.timestamp >= since)
+                    .group_by(EventModel.src_ip).having(count >= min_alerts).all())
+            return [(ip, n) for ip, n in rows]
+        finally:
+            session.close()
+
+    @staticmethod
+    def add_redirect(ip: str, ttl_seconds: int, alert_count: int = 0, reason: str = "") -> RedirectModel:
+        from nids.db import SessionLocal
+        session = SessionLocal()
+        try:
+            now = utc_now()
+            row = RedirectModel(ip=ip, created_at=now, expires_at=now + timedelta(seconds=ttl_seconds),
+                                alert_count=alert_count, reason=reason)
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return row
+        finally:
+            session.close()
+
+    @staticmethod
+    def active_redirects() -> List[RedirectModel]:
+        """Các lượt chuyển hướng chưa gỡ và chưa hết hạn, cũ đến mới."""
+        from nids.db import SessionLocal
+        session = SessionLocal()
+        try:
+            return (session.query(RedirectModel)
+                    .filter(RedirectModel.removed_at.is_(None), RedirectModel.expires_at > utc_now())
+                    .order_by(RedirectModel.id).all())
+        finally:
+            session.close()
+
+    @staticmethod
+    def expire_redirects() -> List[str]:
+        """Đánh dấu đã gỡ các lượt chuyển hướng hết hạn; trả về IP của chúng."""
+        from nids.db import SessionLocal
+        session = SessionLocal()
+        try:
+            now = utc_now()
+            rows = (session.query(RedirectModel)
+                    .filter(RedirectModel.removed_at.is_(None), RedirectModel.expires_at <= now).all())
+            for row in rows:
+                row.removed_at = now
+            session.commit()
+            return [row.ip for row in rows]
+        finally:
+            session.close()
+
+    @staticmethod
+    def release_redirects() -> int:
+        """Gỡ mọi lượt chuyển hướng đang hiệu lực (khi redirector dừng); trả về số dòng đã gỡ."""
+        from nids.db import SessionLocal
+        session = SessionLocal()
+        try:
+            now = utc_now()
+            rows = session.query(RedirectModel).filter(RedirectModel.removed_at.is_(None)).all()
+            for row in rows:
+                row.removed_at = now
+            session.commit()
+            return len(rows)
+        finally:
+            session.close()
+
+    @staticmethod
+    def list_redirects(active_only: bool = True, limit: int = 200) -> List[RedirectModel]:
+        """Danh sách chuyển hướng mới đến cũ; `active_only` chỉ lấy dòng đang hiệu lực."""
+        from nids.db import SessionLocal
+        session = SessionLocal()
+        try:
+            query = session.query(RedirectModel)
+            if active_only:
+                query = query.filter(RedirectModel.removed_at.is_(None), RedirectModel.expires_at > utc_now())
+            return query.order_by(RedirectModel.id.desc()).limit(limit).all()
         finally:
             session.close()

@@ -17,11 +17,13 @@ paths:
 
 ## Database
 
-- Ba bảng: `events`, `event_payloads`, `flows`. Engine và honeypot cùng ghi vào `events`, phân biệt bằng `source_type` (`RULE_ENGINE` / `HONEYPOT`).
+- Bốn bảng: `events`, `event_payloads`, `flows`, `redirects`. Engine và honeypot cùng ghi vào `events`, phân biệt bằng `source_type` (`RULE_ENGINE` / `HONEYPOT`).
 - `flows` là flow log của engine: mỗi dòng là một flow đã kết thúc (số gói/byte hai chiều, cờ TCP, `end_reason`, `alert_count`; `alert_count = 0` nghĩa là không khớp rule nào). Engine ghi theo lô và tự xoá flow cũ hơn `flow.retention_hours` theo cột `created_at` (thời điểm ghi, không phải giờ của gói). Cấu hình ở mục `flow` trong `settings.yaml`.
 - Mọi cột thời gian (`events.timestamp`, `flows.*`) luôn lưu **UTC naive** (không kèm múi giờ), bất kể múi giờ của máy chạy engine hay API. Dùng `nids.db.models.utc_now()` để lấy giờ hiện tại và `utc_from_epoch(ts)` để đổi epoch; không dùng `datetime.now()`, `datetime.utcnow()` hay `fromtimestamp` không có `tz`.
 - Mục `detection.variables` khai báo biến header rule (`HTTP_PORTS`, `HOME_NET`...), đọc qua `get_rule_variables()`; đổi xong phải khởi động lại engine và API, và quote mọi giá trị trong YAML (`!$HOME_NET` không quote là YAML tag).
 - Mục `redis` (`host`, `port`, `password`) cấu hình kênh đẩy cảnh báo realtime; `host` rỗng = tắt. Biến `NIDS_REDIS_HOST/PORT/PASSWORD` ghi đè (compose dựa vào đây), đọc qua `get_redis_settings()`. Mật khẩu Redis ở `.env` (`NIDS_REDIS_PASSWORD`), file mẫu để trống.
+- `redirects` là nhật ký chuyển hướng IP sang honeypot (`nids.redirector` ghi, `GET /api/redirects` đọc): `ip`, `created_at`, `expires_at`, `removed_at` (NULL = đang hiệu lực), `alert_count`, `reason`. Là bảng mới nên `create_all` tự tạo, không cần `_add_missing_columns`.
+- Mục `redirect` (`enabled`, `window_seconds`, `min_alerts`, `max_priority`, `ttl_seconds`, `poll_interval`, `ports`, `allowlist`) đọc qua `get_redirect_settings()`; giá trị sai thì ghi `ERROR` và dùng mặc định. Mặc định trong code là `enabled: false`, file mẫu bật sẵn.
 - `init_db()` thử lại tối đa 15 lần, mỗi lần cách 2s, vì MySQL khởi động chậm trong Docker.
 - Repo không có migration. `create_all` không sửa bảng đã có, nên cột mới của `events` được thêm trong `_add_missing_columns()` (`nids/db/__init__.py`), kèm mọi index còn thiếu. Nhiều process cùng thêm thì process đến sau nhận lỗi trùng rồi retry; lỗi vĩnh viễn như thiếu quyền `ALTER` thì `init_db` `raise` sau hết lượt, có chủ ý: thiếu cột thì mọi lần ghi `events` đều hỏng.
 - `mysql_db` dùng volume ẩn danh: muốn giữ dữ liệu thì dùng `docker compose restart`, không dùng `docker compose down`.
@@ -32,5 +34,6 @@ paths:
 - `docker compose up --build` khởi động MySQL, Redis, một nginx "victim", NIDS engine, honeypot, API và container attacker trên mạng bridge cô lập (172.28.0.0/16).
 - `nids_engine` dùng `network_mode: service:victim_app` để sniff traffic của victim, và mount repo vào `/app`.
 - `honeypot_ssh` và `honeypot_http` cũng dùng `network_mode: service:victim_app` (cổng 2222 và 8080; 8080 nằm trong `HTTP_PORTS` nên rule web áp dụng luôn), nên cùng một đòn vừa sinh cảnh báo rule vừa sinh sự kiện honeypot.
+- `nids_redirector` (`python -m nids.redirector`) dùng chung network namespace với victim, có `NET_ADMIN`, image cài thêm `iptables`, không `restart`: `redirect.enabled: false` thoát mã 0, iptables không dùng được thì thoát mã 1.
 - `nids_api` (API + dashboard) cố ý chạy ở network riêng để request của dashboard (poll dự phòng, WebSocket) không bị engine sniff nhầm.
 - `network.bpf_filter` loại port 3306: engine thấy cả kết nối ghi alert vào MySQL, nếu không loại thì câu INSERT chứa chuỗi tấn công sẽ sinh alert mới (vòng lặp). Cùng lý do, loại thêm `host 172.28.0.30 and port 6379` (Redis của lab); không loại cả cổng 6379.

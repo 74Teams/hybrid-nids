@@ -113,6 +113,26 @@ services:
     environment: *nids_db_env
     restart: unless-stopped
 
+  # Chuyển hướng IP đáng ngờ (nhiều cảnh báo P1/P2) sang honeypot bằng iptables REDIRECT trong network của victim.
+  # Không đặt restart: iptables không dùng được thì thoát mã 1; redirect.enabled: false thoát mã 0 (bình thường).
+  nids_redirector:
+    image: hybrid-nids-app
+    pull_policy: never
+    container_name: nids_redirector
+    command: python -m nids.redirector
+    network_mode: "service:victim_app"
+    cap_add:
+      - NET_ADMIN
+    stop_grace_period: 10s
+    depends_on:
+      mysql_db:
+        condition: service_healthy
+      victim_app:
+        condition: service_started
+    volumes:
+      - .:/app
+    environment: *nids_db_env
+
   # API + dashboard chạy ở network namespace riêng (không chung với victim) để các request
   # của dashboard (poll dự phòng, WebSocket) không bị engine sniff nhầm thành lưu lượng cần phân tích.
   nids_api:

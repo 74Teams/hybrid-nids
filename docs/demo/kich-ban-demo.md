@@ -33,6 +33,13 @@ Mỗi lệnh `attack_demo.py` nghỉ 1,5 giây giữa các đòn để khán gi�
 
 Xem lại một phiên SSH: `docker exec -it nids_attacker ssh -p 2222 -o StrictHostKeyChecking=no root@172.28.0.50`, nhập mật khẩu bất kỳ, gõ vài lệnh rồi `exit`. Trên [http://localhost:8000/logs](http://localhost:8000/logs), tab Honeypot SSH, phiên vừa rồi là **một dòng** (`Phiên SSH`, kèm số sự kiện). Bấm vào dòng để mở popup: tab **Hoạt động** liệt kê đăng nhập và từng lệnh theo thứ tự (phân trang 20 dòng), tab **Raw log** hiện log thô kèm HASSH và công cụ của client.
 
+Chuyển hướng IP đáng ngờ sang honeypot (thực hiện sau khi bấm **Xoá dữ liệu**):
+
+1. Trước khi tấn công: `docker exec nids_attacker nc -w 3 172.28.0.50 22` in banner OpenSSH của victim (Debian); `docker exec nids_attacker curl -s http://172.28.0.50/` trả trang nginx.
+2. Tấn công: `docker exec -it nids_attacker python lab/attacker/attack_demo.py web`. Sau tối đa vài giây `curl http://localhost:8000/api/redirects/` có `172.28.0.100`, và `docker logs nids_redirector` có dòng "Chuyển hướng 172.28.0.100 sang honeypot".
+3. Lặp lại hai lệnh ở bước 1: `nc` giờ in `SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13` (banner honeypot), `curl` trả trang đăng nhập WordPress giả. Trên `/logs` có sự kiện Honeypot mới với đúng IP attacker.
+4. Sau 10 phút (`redirect.ttl_seconds`) IP tự được gỡ và hai lệnh lại trả về dịch vụ thật. Chỉ kết nối **mới** bị chuyển hướng; kết nối đang mở giữ nguyên.
+
 Nếu hết giờ, chạy một lệnh duy nhất: `docker exec -it nids_attacker python lab/attacker/attack_demo.py all --delay 0.5`.
 
 ## Demo gõ lệnh thủ công

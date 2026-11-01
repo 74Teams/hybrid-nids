@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from nids.api.routes import alerts, rules
+from nids.api.routes import alerts, redirects, rules
 from nids.logger import setup_logging
 
 logger = logging.getLogger("nids.api")
@@ -66,6 +66,7 @@ app.add_middleware(
 
 app.include_router(alerts.router)
 app.include_router(rules.router)
+app.include_router(redirects.router)
 
 class RevalidatingStaticFiles(StaticFiles):
     """File tĩnh luôn được trình duyệt hỏi lại (ETag), để sửa CSS/JS có hiệu lực ngay mà không cần xoá cache."""
