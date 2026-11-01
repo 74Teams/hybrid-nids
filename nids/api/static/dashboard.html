@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hybrid NIDS Dashboard</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=2">
 </head>
 <body>
 <nav class="navbar">
@@ -75,8 +75,8 @@
     </div>
   </section>
 </main>
-<script src="/static/charts.js"></script>
-<script src="/static/live.js"></script>
+<script src="/static/charts.js?v=2"></script>
+<script src="/static/live.js?v=2"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const seen = new Set();
@@ -90,7 +90,7 @@ function el(tag, cls, text) {
 }
 const endpoint = (ip, port) => port != null ? ip + ":" + port : ip;
 
-// Tam giác cảnh báo tô màu theo priority, giống cột Action của pfSense
+// Tam giác cảnh báo tô màu theo priority
 function priIcon(sev) {
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");

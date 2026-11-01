@@ -138,6 +138,9 @@ def test_export_csv_respects_filter(client):
 def test_logs_page_and_stylesheet_are_served(client):
     assert "text/html" in client.get("/logs").headers["content-type"]
     assert client.get("/static/style.css").status_code == 200
+    assert client.get("/static/style.css").headers["cache-control"] == "no-cache"   # sửa CSS phải có hiệu lực ngay
+    for page in ("/", "/logs", "/rules"):
+        assert client.get(page).headers["cache-control"] == "no-cache"
 
 
 def test_logs_page_updates_live_by_default(client):
