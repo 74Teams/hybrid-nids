@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     ssh_banner: str = "SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13"
     ssh_prompt: str = "corporate-jumpbox2$ "
     ssh_motd: str = "Welcome to Ubuntu 24.04.1 LTS (GNU/Linux 6.8.0-45-generic x86_64)"
+    ssh_bruteforce_threshold: int = 5       # số lần đăng nhập để coi là brute force
+    ssh_bruteforce_window: int = 60         # giây tối đa giữa hai lần đăng nhập của cùng một đợt
 
     # HTTP
     http_port: int = 8080
