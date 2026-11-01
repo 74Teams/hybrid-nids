@@ -7,6 +7,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import yaml
 
+from nids.config import get_rule_variables
+from nids.engine.rule_header import parse_addrs, parse_ports
 from nids.engine.rule import (
     SnortRule,
     ContentMatch,
@@ -39,7 +41,9 @@ class RuleManager:
     Category bật/tắt và override theo SID lưu trong rules_dir/state.yaml (thiếu file = mặc định).
     """
 
-    def __init__(self, rules_dir: str = "rules"):
+    def __init__(self, rules_dir: str = "rules", variables: Optional[Dict[str, str]] = None):
+        # Biến header rule: mặc định lấy từ settings.yaml (detection.variables), test có thể truyền riêng
+        self.variables = dict(variables) if variables is not None else get_rule_variables()
         self.rules_dir = Path(rules_dir)
         self.state_path = self.rules_dir / STATE_FILE
         self.rules: List[SnortRule] = []                # Rule đang bật, đưa vào DetectionEngine
@@ -300,6 +304,8 @@ class RuleManager:
             raise ValueError(f"header phải có 7 thành phần, nhận được {len(header_tokens)}")
 
         action, protocol, src_ip, src_port, direction, dst_ip, dst_port = header_tokens
+        if direction not in ("->", "<>"):
+            raise ValueError(f"hướng phải là '->' hoặc '<>', nhận được '{direction}'")
         rule = SnortRule(
             action=action.lower(),
             protocol=protocol.lower(),
@@ -308,8 +314,14 @@ class RuleManager:
             direction=direction,
             dst_ip=dst_ip,
             dst_port=dst_port,
+            src_addrs=parse_addrs(src_ip, self.variables),
+            src_ports=parse_ports(src_port, self.variables),
+            dst_addrs=parse_addrs(dst_ip, self.variables),
+            dst_ports=parse_ports(dst_port, self.variables),
             raw_rule=line,
         )
+        rule.header_any = (rule.src_addrs.wildcard and rule.src_ports.wildcard
+                           and rule.dst_addrs.wildcard and rule.dst_ports.wildcard)
 
         # Sticky buffer hiện hành: mọi content/pcre phía sau sẽ gắn vào buffer này
         buffer, header_field = BUFFER_PKT_DATA, None

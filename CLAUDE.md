@@ -73,7 +73,7 @@ Các process (engine, API, mỗi honeypot một process) chạy riêng và chỉ
 ## Known Issues / Gotchas
 
 - File mẫu `settings.example.yaml` được commit; `settings.yaml` là file local bị ignore, mật khẩu Docker nằm ở `.env`. Mặc định của file mẫu dùng `capture_mode: "live"`, interface `eth0` và MySQL của Docker. Khi chạy local thì chuyển sang `sqlite` (và `offline` kèm `pcap_file` nếu cần).
-- Biến trong rule được hard-code: `$HTTP_PORTS` xử lý trong `_match_port`, còn `decoder.HTTP_PORTS` quyết định payload nào được parse thành HTTP. Thêm port hoặc biến mới thì phải sửa cả hai chỗ.
+- Biến trong header rule (`$HTTP_PORTS`, `$HOME_NET`...) khai báo ở `detection.variables` trong `settings.yaml`, dùng chung cho parser và `decoder.HTTP_PORTS`. Đổi biến phải khởi động lại cả engine lẫn API (API dùng biến để kiểm tra `custom.rules`).
 - Parser chỉ hiểu cú pháp Snort 3. Cú pháp Snort 2 (`nocase;` đứng riêng, `severity:`, `http_method:"POST"`) không được hỗ trợ.
 - Engine sniff cả kết nối của chính nó tới MySQL. Nếu bỏ port 3306 khỏi BPF filter, câu INSERT chứa chuỗi tấn công sẽ sinh alert mới thành vòng lặp.
 - Engine cũng sniff kết nối tới Redis (`172.28.0.30:6379`) nên BPF loại riêng địa chỉ này. Không loại cả cổng 6379 để vẫn thấy đòn nhắm vào cổng đó của victim. Tin Redis chỉ chứa id nên không thể sinh alert lặp, kể cả khi `settings.yaml` local còn BPF cũ.

@@ -165,9 +165,7 @@ class DetectionEngine:
         for rule in candidate_rules.values():
             if packet.reassembled and (rule.sid in skip_sids or not self._stream_eligible(rule)):
                 continue
-            if not self._match_port(packet.dst_port, rule.dst_port):
-                continue
-            if not self._match_port(packet.src_port, rule.src_port):
+            if not self._match_header(packet, rule):
                 continue
             if not self._match_non_payload(packet, rule):
                 continue
@@ -183,17 +181,18 @@ class DetectionEngine:
 
         return matched_rules
 
-    def _match_port(self, packet_port: Optional[int], rule_port: str) -> bool:
-        if rule_port == "any" or rule_port == "$HTTP_PORTS":
-            if rule_port == "$HTTP_PORTS":
-                return packet_port in {80, 8080, 8000, 3000, 5000}
+    @staticmethod
+    def _match_header(packet: DecodedPacket, rule: SnortRule) -> bool:
+        """So khớp cổng và IP của header; hướng `<>` khớp cả chiều ngược. Cổng được kiểm tra trước vì rẻ hơn IP."""
+        if rule.header_any:
             return True
-        if packet_port is None:
-            return False
-        try:
-            return packet_port == int(rule_port)
-        except ValueError:
+        if (rule.dst_ports.matches(packet.dst_port) and rule.src_ports.matches(packet.src_port)
+                and rule.src_addrs.matches(packet.src_ip) and rule.dst_addrs.matches(packet.dst_ip)):
             return True
+        return rule.direction == "<>" and (
+            rule.dst_ports.matches(packet.src_port) and rule.src_ports.matches(packet.dst_port)
+            and rule.src_addrs.matches(packet.dst_ip) and rule.dst_addrs.matches(packet.src_ip)
+        )
 
     def _match_non_payload(self, packet: DecodedPacket, rule: SnortRule) -> bool:
         if rule.flags is not None and not self._match_flags(packet.tcp_flags, rule.flags):

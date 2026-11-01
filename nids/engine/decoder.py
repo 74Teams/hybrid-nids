@@ -3,11 +3,14 @@ from typing import Optional
 from scapy.all import IP, IPv6, TCP, UDP, ICMP, Raw
 from scapy.packet import Packet
 
+from nids.config import get_rule_variables
 from nids.engine.packet import DecodedPacket
 from nids.engine.http_parser import HTTPParser
+from nids.engine.rule_header import http_ports
 
-# Tập hợp các port HTTP phổ biến, dùng để quyết định có cần parse HTTP hay không
-HTTP_PORTS = {80, 8080, 8000, 3000, 5000, 443}
+# Cổng HTTP lấy từ biến HTTP_PORTS trong settings.yaml (cùng nguồn với rule `$HTTP_PORTS`),
+# dùng để quyết định có cần parse HTTP hay không. `port in HTTP_PORTS` vẫn dùng được như với set.
+HTTP_PORTS = http_ports(get_rule_variables())
 
 
 class PacketDecoder:

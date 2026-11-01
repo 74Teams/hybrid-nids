@@ -78,6 +78,65 @@ def test_no_print_calls_left():
     assert offenders == []
 
 
+def _reloader_fixture(tmp_path, first_rules):
+    from nids.engine.detector import DetectionEngine
+    from nids.engine.main import RuleReloader
+    from nids.engine.rule_manager import RuleManager
+
+    path = tmp_path / "web.rules"
+    path.write_text(first_rules, encoding="utf-8")
+    manager = RuleManager(str(tmp_path))
+    manager.load_all_rules()
+    engine = DetectionEngine(manager)
+    return path, engine, RuleReloader(manager, engine, interval=1.0)
+
+
+def _rewrite(path, data):
+    """Ghi file rồi đẩy mtime lên 5 giây để chữ ký đổi dù hệ thống file làm tròn thời gian."""
+    import os
+    path.write_bytes(data)
+    stat = path.stat()
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 5_000_000_000))
+
+
+RULE_A = 'alert tcp any any -> any 80 (msg:"a"; content:"aaa"; sid:1; rev:1;)\n'
+RULE_B = 'alert tcp any any -> any 80 (msg:"b"; content:"bbb"; sid:2; rev:1;)\n'
+RULE_BAD = 'alert tcp any any -> any [80 (msg:"bad"; content:"ccc"; sid:3; rev:1;)\n'
+
+
+def test_rule_reloader_activates_new_rule_file_while_running(tmp_path):
+    path, engine, reloader = _reloader_fixture(tmp_path, RULE_A)
+    assert [r.sid for r in engine.rules_by_proto["tcp"]] == [1]
+    (tmp_path / "extra.rules").write_text(RULE_B, encoding="utf-8")
+    assert reloader.check(now=reloader._checked_at + 5)
+    assert sorted(r.sid for r in engine.rules_by_proto["tcp"]) == [1, 2]
+
+
+def test_rule_reloader_does_not_touch_packets_waiting_in_the_queue(tmp_path):
+    import queue
+    path, engine, reloader = _reloader_fixture(tmp_path, RULE_A)
+    waiting = queue.Queue()
+    for i in range(5):
+        waiting.put(i)
+    _rewrite(path, (RULE_A + RULE_B).encode("utf-8"))
+    assert reloader.check(now=reloader._checked_at + 5)
+    assert waiting.qsize() == 5 and [waiting.get() for _ in range(5)] == [0, 1, 2, 3, 4]
+
+
+def test_rule_reloader_drops_only_the_line_that_became_invalid(tmp_path):
+    path, engine, reloader = _reloader_fixture(tmp_path, RULE_A + RULE_B)
+    _rewrite(path, (RULE_A + RULE_BAD).replace("sid:3", "sid:2").encode("utf-8"))
+    assert reloader.check(now=reloader._checked_at + 5)
+    assert [r.sid for r in engine.rules_by_proto["tcp"]] == [1]
+
+
+def test_rule_reloader_keeps_old_index_when_a_file_cannot_be_read(tmp_path):
+    path, engine, reloader = _reloader_fixture(tmp_path, RULE_A)
+    _rewrite(path, b"\xff\xfe\x00 not utf-8")
+    assert not reloader.check(now=reloader._checked_at + 5)
+    assert [r.sid for r in engine.rules_by_proto["tcp"]] == [1]
+
+
 def test_rule_reloader_picks_up_state_change(tmp_path):
     from nids.engine.detector import DetectionEngine
     from nids.engine.main import RuleReloader

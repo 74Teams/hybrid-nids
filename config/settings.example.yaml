@@ -18,6 +18,14 @@ detection:
   enable_rule_engine: true
   enable_ai_worker: true
   queue_max_size: 10000
+  # Biến dùng trong header rule ($HTTP_PORTS, $HOME_NET...) và quyết định cổng nào được parse HTTP.
+  # Chỉ cần khai báo biến muốn đổi, biến còn lại lấy giá trị mặc định. Đổi xong phải khởi động lại CẢ engine lẫn API.
+  # Quote mọi giá trị: `!$HOME_NET` không quote là YAML tag, `22:25` không quote có thể bị hiểu là số.
+  # Đặt HOME_NET cụ thể trước khi dùng `!$HOME_NET` (HOME_NET mặc định là any nên `!$HOME_NET` bị coi là lỗi).
+  variables:
+    HTTP_PORTS: "80,8080,8000,3000,5000"
+    # HOME_NET: "172.28.0.0/16"
+    # EXTERNAL_NET: "!$HOME_NET"
 
 stream:
   # Tái hợp luồng TCP chiều client → server để bắt chuỗi tấn công bị chia qua nhiều gói

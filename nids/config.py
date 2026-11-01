@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import quote_plus
 
+from nids.engine.rule_header import DEFAULT_RULE_VARIABLES
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 CONFIG_DIR = ROOT_DIR / "config"
 DEFAULT_SETTINGS_PATH = CONFIG_DIR / "settings.yaml"
@@ -41,6 +43,20 @@ def get_db_url() -> str:
         return f"mysql+pymysql://{auth}@{host}:{port}/{name}?charset=utf8mb4"
     
     return db_cfg.get("db_url", "sqlite:///./nids_events.db")
+
+
+def get_rule_variables() -> Dict[str, str]:
+    """Biến dùng trong header rule ($HTTP_PORTS, $HOME_NET...): giá trị mặc định chồng bởi `detection.variables`.
+
+    Giá trị YAML dạng list được nối bằng dấu phẩy. Đọc từ SETTINGS nên đổi biến cần khởi động lại engine và API.
+    """
+    variables = dict(DEFAULT_RULE_VARIABLES)
+    configured = (SETTINGS.get("detection") or {}).get("variables") or {}
+    for name, value in configured.items():
+        if isinstance(value, (list, tuple)):
+            value = ",".join(str(v) for v in value)
+        variables[str(name)] = str(value)
+    return variables
 
 
 def get_redis_settings() -> Optional[Dict[str, Any]]:
