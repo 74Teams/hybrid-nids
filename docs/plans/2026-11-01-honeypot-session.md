@@ -156,7 +156,7 @@ Nhánh: `feature/24-honeypot-session`
 - [x] Cập nhật tài liệu ở mục 7
 - [x] Gom phiên thành một dòng: `by_session`, endpoint raw log, popup hai tab trên trang Logs, `shortSummary`, test và tài liệu
 - [ ] Chạy `pytest`, xác minh theo mục 9
-- [ ] Tạo PR, cập nhật bảng tổng hợp
+- [x] Tạo PR ([#59](https://github.com/74Teams/hybrid-nids/pull/59)), cập nhật bảng tổng hợp
 
 ## 12. Quyết định và nhật ký
 
