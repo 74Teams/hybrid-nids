@@ -4,7 +4,7 @@ File này hướng dẫn Claude Code (claude.ai/code) khi làm việc với code
 
 ## Project Overview
 
-Hybrid NIDS + honeypot (đồ án PBL4): hệ thống phát hiện xâm nhập mạng kết hợp static rule tương thích Snort 3, một AI worker phát hiện bất thường theo flow và honeypot SSH/HTTP làm nguồn sự kiện thứ hai. Kèm theo là web console kiểu pfSense để xem cảnh báo và quản lý rule, cùng một môi trường Docker lab (attacker, victim) để trình diễn. Người dùng là nhóm sinh viên làm đồ án và giảng viên chấm, nên ưu tiên chạy được, demo được và dễ giải thích.
+Hybrid NIDS + honeypot (đồ án PBL4): hệ thống phát hiện xâm nhập mạng kết hợp static rule tương thích Snort 3, một AI worker phát hiện bất thường theo flow và honeypot SSH/HTTP làm nguồn sự kiện thứ hai. Kèm theo là web console kiểu shadcn/ui để xem cảnh báo và quản lý rule, cùng một môi trường Docker lab (attacker, victim) để trình diễn. Người dùng là nhóm sinh viên làm đồ án và giảng viên chấm, nên ưu tiên chạy được, demo được và dễ giải thích.
 
 ## Tech Stack
 
@@ -68,7 +68,7 @@ Các process (engine, API, mỗi honeypot một process) chạy riêng và chỉ
 - Quản lý rule nhiều file (branch `feature/rule-management`): category, override theo SID, sửa `custom.rules` trên trang Rules kiểu pfSense.
 - Thiết kế AI worker theo flow (`docs/ai/`) để thay stub trong `nids/ai.py` mà không phải sửa capture, decoder, DB hay API.
 - Cảnh báo realtime qua Redis pub/sub + WebSocket (branch `feature/30-realtime-alert-push`, PLAN-001, issue #30).
-- Phía honeypot chưa có session theo kết nối, route catch-all, giới hạn tài nguyên.
+- Phía honeypot chưa có route catch-all, giới hạn tài nguyên.
 
 ## Known Issues / Gotchas
 
@@ -83,4 +83,4 @@ Các process (engine, API, mỗi honeypot một process) chạy riêng và chỉ
 - Honeypot ghi từ process khác, nên cache IP honeypot trong engine có TTL 5 giây và cảnh báo có thể chưa được làm giàu ngay.
 - `nids/ai.py` mới là stub: đừng viết test hay demo giả định AI worker đã sinh cảnh báo.
 
-Quy tắc chi tiết: `.claude/rules/git-workflow.md`, `planning.md`, `engine.md`, `api-web.md`, `honeypot.md`, `config-db-docker.md`, `logging.md`, `lab-demo.md`, `snort-rules.md`.
+Quy tắc chi tiết: `.claude/rules/git-workflow.md`, `planning.md`, `engine.md`, `api-web.md`, `web-design.md`, `honeypot.md`, `config-db-docker.md`, `logging.md`, `lab-demo.md`, `snort-rules.md`.

@@ -4,7 +4,7 @@
 const Charts = (() => {
   const NS = "http://www.w3.org/2000/svg";
   const SERIES = [{ key: "nids", name: "NIDS", color: "#2a78d6" }, { key: "honeypot", name: "Honeypot", color: "#eb6834" }];
-  const INK = "#212529", MUTED = "#6c757d", GRID = "#e1e0d9", AXIS = "#adb5bd", WASH = "#f1f3f5";
+  const INK = "#09090b", MUTED = "#71717a", GRID = "#e4e4e7", AXIS = "#a1a1aa", WASH = "#f4f4f5";
   const redraws = new Set();
 
   function svgEl(tag, attrs, text) {

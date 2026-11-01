@@ -1,7 +1,8 @@
 import time
 from datetime import datetime, timedelta
 from typing import Dict, Any, Iterable, List, Optional, Set
-from sqlalchemy import case, func
+from sqlalchemy import String, case, cast, distinct, func
+from sqlalchemy.orm import joinedload
 from nids.db.models import EventModel, EventPayloadModel, FlowModel, iso_utc, utc_from_epoch, utc_now
 from nids.engine.flow import Flow
 from nids.realtime import publish_alert
@@ -33,7 +34,8 @@ class EventRepository:
                 http_method=alert_data.get("http_method"),
                 http_uri=alert_data.get("http_uri"),
                 summary=alert_data.get("msg", ""),
-                status="NEW"
+                status="NEW",
+                session_id=alert_data.get("session_id")
             )
             if alert_data.get("matched_content"):
                 event.payload = EventPayloadModel(matched_content=alert_data["matched_content"])
@@ -79,6 +81,53 @@ class EventRepository:
         try:
             query = EventRepository._apply_filters(session.query(EventModel), source_type=source_type, **filters)
             return query.order_by(EventModel.timestamp.desc(), EventModel.id.desc()).offset(offset).limit(limit).all()
+        finally:
+            session.close()
+
+    @staticmethod
+    def get_session_events(session_id: str, limit: int = 1000) -> List[EventModel]:
+        """Sự kiện của một phiên honeypot (kèm payload), cũ đến mới."""
+        from nids.db import SessionLocal
+        session = SessionLocal()
+        try:
+            return (session.query(EventModel).options(joinedload(EventModel.payload))
+                    .filter(EventModel.session_id == session_id)
+                    .order_by(EventModel.timestamp.asc(), EventModel.id.asc()).limit(limit).all())
+        finally:
+            session.close()
+
+    # Sự kiện không có session_id (rule engine, honeypot cũ) tự thành nhóm một dòng, khoá là id của nó
+    _GROUP_KEY = func.coalesce(EventModel.session_id, cast(EventModel.id, String))
+
+    @staticmethod
+    def get_session_groups(limit: int = 50, offset: int = 0, **filters) -> List[Dict[str, Any]]:
+        """Danh sách theo nhóm (phiên hoặc sự kiện lẻ), nhóm hoạt động gần nhất ở trên.
+
+        Bộ lọc áp lên từng sự kiện trước khi gom; mỗi nhóm trả sự kiện đầu tiên cùng số sự kiện khớp,
+        thời điểm sự kiện cuối và priority nặng nhất (số nhỏ nhất).
+        """
+        from nids.db import SessionLocal
+        last_ts = func.max(EventModel.timestamp)
+        session = SessionLocal()
+        try:
+            groups = (EventRepository._apply_filters(
+                          session.query(func.min(EventModel.id), func.count(EventModel.id), last_ts,
+                                        func.min(EventModel.severity)), **filters)
+                      .group_by(EventRepository._GROUP_KEY).order_by(last_ts.desc(), func.max(EventModel.id).desc())
+                      .offset(offset).limit(limit).all())
+            firsts = {e.id: e for e in session.query(EventModel).filter(EventModel.id.in_([g[0] for g in groups]))}
+            return [{"event": firsts[first_id], "event_count": n, "last_timestamp": last, "severity": severity}
+                    for first_id, n, last, severity in groups]
+        finally:
+            session.close()
+
+    @staticmethod
+    def count_session_groups(**filters) -> int:
+        from nids.db import SessionLocal
+        session = SessionLocal()
+        try:
+            query = session.query(func.count(distinct(EventRepository._GROUP_KEY)))
+            return EventRepository._apply_filters(query, **filters).scalar() or 0
         finally:
             session.close()
 

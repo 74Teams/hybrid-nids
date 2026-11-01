@@ -1,7 +1,7 @@
 """
 Điểm khởi chạy ứng dụng FastAPI – Hybrid NIDS API Server.
 
-Luồng khởi động (startup lifespan): init_db() tạo bảng trong CSDL nếu chưa có.
+Luồng khởi động (startup lifespan): init_db() tạo bảng trong CSDL nếu chưa có và thêm cột còn thiếu.
 Rule nằm trong các file rules/*.rules (mỗi file một category). API chỉ ghi trạng thái bật/tắt
 (rules/state.yaml) và rules/custom.rules; process engine tự nạp lại khi thấy file đổi.
 """
@@ -67,20 +67,33 @@ app.add_middleware(
 app.include_router(alerts.router)
 app.include_router(rules.router)
 
+class RevalidatingStaticFiles(StaticFiles):
+    """File tĩnh luôn được trình duyệt hỏi lại (ETag), để sửa CSS/JS có hiệu lực ngay mà không cần xoá cache."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 STATIC_DIR = Path(__file__).parent / "static"
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/static", RevalidatingStaticFiles(directory=STATIC_DIR), name="static")
+
+
+def _page(name: str) -> FileResponse:
+    return FileResponse(STATIC_DIR / name, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/", include_in_schema=False)
 def dashboard():
     """Trang dashboard theo dõi cảnh báo theo thời gian thực."""
-    return FileResponse(STATIC_DIR / "dashboard.html")
+    return _page("dashboard.html")
 
 
 @app.get("/logs", include_in_schema=False)
 def logs_page():
     """Trang Status › Logs: lọc, xem chi tiết, xoá và xuất CSV sự kiện."""
-    return FileResponse(STATIC_DIR / "logs.html")
+    return _page("logs.html")
 
 
 @app.get("/health", tags=["System"])
@@ -92,4 +105,4 @@ def health_check():
 @app.get("/rules", include_in_schema=False)
 def rules_page():
     """Trang Services › Rules: bật/tắt category và SID, sửa custom.rules."""
-    return FileResponse(STATIC_DIR / "rules.html")
+    return _page("rules.html")

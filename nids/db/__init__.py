@@ -1,10 +1,10 @@
 import logging
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
 from nids.config import get_db_url
-from nids.db.models import Base
+from nids.db.models import Base, EventModel
 
 logger = logging.getLogger("nids.db")
 
@@ -32,15 +32,30 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
+def _add_missing_columns() -> None:
+    """
+    Thêm cột và index còn thiếu của bảng events, vì create_all không sửa bảng đã có.
+    Nhiều process cùng thêm thì process đến sau nhận lỗi trùng và rơi vào vòng retry của init_db.
+    """
+    if "session_id" not in {c["name"] for c in inspect(engine).get_columns("events")}:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE events ADD COLUMN session_id VARCHAR(32)"))
+    existing = {i["name"] for i in inspect(engine).get_indexes("events")}
+    for index in EventModel.__table__.indexes:
+        if index.name not in existing:
+            index.create(bind=engine)
+
+
 def init_db(max_retries: int = 15, delay: float = 2.0) -> None:
     """
-    Khởi tạo toàn bộ bảng trong cơ sở dữ liệu nếu chưa tồn tại.
+    Khởi tạo toàn bộ bảng trong cơ sở dữ liệu nếu chưa tồn tại và thêm cột còn thiếu vào bảng cũ.
     Tự động retry tối đa 15 lần (30s) trong môi trường Docker khi MySQL cần thời gian khởi động.
     """
     import time
     for attempt in range(1, max_retries + 1):
         try:
             Base.metadata.create_all(bind=engine)
+            _add_missing_columns()
             logger.info("Kết nối và khởi tạo CSDL thành công")
             return
         except Exception as e:

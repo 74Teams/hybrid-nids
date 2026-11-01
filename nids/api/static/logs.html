@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hybrid NIDS Logs</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v=2">
 </head>
 <body>
 <nav class="navbar">
@@ -77,7 +77,7 @@
   <div class="panel-body" id="d-body"></div>
 </dialog>
 
-<script src="/static/live.js"></script>
+<script src="/static/live.js?v=2"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const TABS = {
@@ -91,7 +91,24 @@ const ICONS = {
   plus: "M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4z",
   close: "M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6z",
 };
+const KIND_LABELS = {
+  "ssh.auth.attempt": "Đăng nhập", "ssh.command": "Lệnh", "ssh.exec": "Lệnh exec",
+  "ssh.download": "Tải file", "ssh.bruteforce": "Brute force", "http.login": "Đăng nhập web",
+};
+const SESSION_PAGE = 20;
 let offset = 0, total = 0, stopLive = null;
+// Popup đang mở: giữ ngoài renderRows để tự làm mới vẫn cập nhật được nội dung popup
+let openKey = null, openAlert = null, view = { tab: "events", page: 0 };
+const cache = {};   // key dòng -> { events, raw } (phiên) hoặc { detail }
+const rowKey = (a) => a.session_id || "e" + a.id;
+// shortcut: cắt tiền tố "HONEYPOT <loại> [<công cụ>] " bằng regex; lệnh bắt đầu bằng "[...]" mà không có công cụ sẽ bị cắt nhầm, chỉ ảnh hưởng hiển thị (Raw log vẫn đủ)
+const shortSummary = (a) => a.source_type === "HONEYPOT" ? a.summary.replace(/^HONEYPOT \S+(?: \[[^\]]*\])? /, "") : a.summary;
+const kindLabel = (a) => KIND_LABELS[a.attack_type] || a.attack_type;
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString("vi-VN");
+function fmtDuration(s) {
+  s = Math.round(s);
+  return s < 60 ? `${s} giây` : `${Math.floor(s / 60)} phút ${s % 60} giây`;
+}
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -113,7 +130,7 @@ function iconBtn(name, title, onClick, cls) {
   b.addEventListener("click", (e) => { e.stopPropagation(); onClick(); });
   return b;
 }
-// Tam giác cảnh báo tô màu theo priority, giống cột Action của pfSense
+// Tam giác cảnh báo tô màu theo priority
 function priIcon(sev) {
   const s = svg("M12 2 1 21h22zM11 10h2v5h-2zm0 6h2v2h-2z", "pri p" + sev);
   const t = document.createElementNS("http://www.w3.org/2000/svg", "title"); t.textContent = "P" + sev;
@@ -166,10 +183,11 @@ function renderRows(list) {
     const sev = [1, 2, 3].includes(a.severity) ? a.severity : 2;
     const tr = el("tr", "clickable");
     tr.tabIndex = 0;
-    tr.addEventListener("click", () => showDetail(a.id));
-    tr.addEventListener("keydown", (e) => { if (e.key === "Enter") showDetail(a.id); });
+    tr.addEventListener("click", () => openRow(a));
+    tr.addEventListener("keydown", (e) => { if (e.key === "Enter") openRow(a); });
 
-    const d = a.timestamp ? new Date(a.timestamp) : null;
+    // dòng phiên hiện giờ của sự kiện cuối, để phiên đang chạy luôn cho thấy hoạt động mới nhất
+    const d = (a.last_timestamp || a.timestamp) ? new Date(a.last_timestamp || a.timestamp) : null;
     const when = el("td", "nw", d ? d.toLocaleDateString("vi-VN") : "");
     if (d) when.append(el("span", "sub", d.toLocaleTimeString("vi-VN")));
     const pri = el("td"); pri.append(priIcon(sev));
@@ -184,15 +202,16 @@ function renderRows(list) {
     } else {
       sidCell.append(a.source_type === "HONEYPOT" ? "–" : "AI");
     }
-    actions.append(iconBtn("close", "Xoá cảnh báo này", () => deleteOne(a.id), "del"));
+    if (!a.session_id) actions.append(iconBtn("close", "Xoá cảnh báo này", () => deleteOne(a.id), "del"));   // chưa có API xoá theo phiên
     sidCell.append(actions);
 
-    const desc = el("td", "msg", a.summary);
+    const desc = el("td", "msg", shortSummary(a) + (a.session_id ? ` · ${a.event_count} sự kiện` : ""));
     const http = [a.http_method, a.http_uri].filter(Boolean).join(" ");
     if (http) desc.append(el("span", "sub uri", http));
 
     tr.append(when, pri, el("td", "", a.source_type === "HONEYPOT" ? "Honeypot" : "NIDS"), el("td", "", a.protocol),
-      el("td", "", a.attack_type), endpointCell(a.src_ip, "src_ip"), el("td", "", a.src_port ?? ""),
+      el("td", "", a.session_id ? "Phiên " + a.protocol.toUpperCase() : kindLabel(a)),
+      endpointCell(a.src_ip, "src_ip"), el("td", "", a.src_port ?? ""),
       endpointCell(a.dst_ip, "dst_ip"), el("td", "", a.dst_port ?? ""), sidCell, desc);
     body.append(tr);
   }
@@ -201,14 +220,15 @@ function renderRows(list) {
 async function load() {
   const q = filterQuery();
   $("export").href = "/api/alerts/export.csv?" + q;
-  q.set("limit", pageSize()); q.set("offset", offset);
+  q.set("limit", pageSize()); q.set("offset", offset); q.set("by_session", "true");
   try {
     const r = await fetch("/api/alerts/?" + q);
     if (!r.ok) throw new Error(r.status);
     total = Number(r.headers.get("X-Total-Count") || 0);
     const list = await r.json();
     renderRows(list);
-    $("range").textContent = list.length ? `${offset + 1}–${offset + list.length} / ${total} sự kiện` : `0 / ${total} sự kiện`;
+    if (openKey) refresh(openAlert);   // popup đang mở nhận thêm sự kiện mới của phiên
+    $("range").textContent = list.length ? `${offset + 1}–${offset + list.length} / ${total} dòng` : `0 / ${total} dòng`;
     $("prev").disabled = offset === 0;
     $("next").disabled = offset + list.length >= total;
     setStatus(true);
@@ -225,26 +245,112 @@ function selectTab() {
   load();
 }
 
-async function showDetail(id) {
-  const r = await fetch("/api/alerts/" + id);
-  if (!r.ok) { alert("Không tải được chi tiết sự kiện #" + id); return; }
-  const a = await r.json();
-  $("d-title").textContent = `Sự kiện #${a.id} – ${a.summary}`;
+function openRow(a) {
+  openKey = rowKey(a);
+  openAlert = a;
+  view = { tab: "events", page: 0 };
+  $("d-title").textContent = a.session_id ? `Phiên ${a.protocol.toUpperCase()} – ${a.src_ip}` : `Sự kiện #${a.id} – ${shortSummary(a)}`;
+  fillBody(a);
+  $("detail").showModal();
+  refresh(a);
+}
+
+// Tải dữ liệu của popup đang mở. Cache cũ vẫn hiện trong lúc chờ nên tự làm mới không làm popup nháy
+async function refresh(a) {
+  const key = rowKey(a);
+  try {
+    if (a.session_id) {
+      const r = await fetch("/api/alerts/sessions/" + encodeURIComponent(a.session_id));
+      if (!r.ok) throw new Error(r.status);
+      cache[key] = { ...cache[key], events: await r.json() };
+      if (view.tab === "raw") {
+        const raw = await fetch(`/api/alerts/sessions/${encodeURIComponent(a.session_id)}/raw`);
+        if (!raw.ok) throw new Error(raw.status);
+        cache[key].raw = await raw.text();
+      }
+    } else {
+      const r = await fetch("/api/alerts/" + a.id);
+      if (!r.ok) throw new Error(r.status);
+      cache[key] = { detail: await r.json() };
+    }
+  } catch (e) {
+    cache[key] = { error: true };
+  }
+  if (rowKey(a) === openKey) fillBody(a);
+}
+
+function fillBody(a) {
+  const c = cache[rowKey(a)], body = $("d-body");
+  if (!c) body.replaceChildren(el("div", "empty", "Đang tải…"));
+  else if (c.error) body.replaceChildren(el("div", "empty", "Không tải được dữ liệu."));
+  else body.replaceChildren(...(a.session_id ? sessionView(a, c) : detailView(c.detail)));
+}
+
+// Bảng trường của một sự kiện (IP, port, protocol, SID...); với phiên là của sự kiện đầu tiên
+function fieldsView(a) {
   const dl = el("dl");
-  for (const k of ["timestamp", "source_type", "attack_type", "severity", "sid", "src_ip", "src_port",
-                   "dst_ip", "dst_port", "protocol", "http_method", "http_uri", "status"]) {
+  for (const k of ["id", "timestamp", "source_type", "attack_type", "severity", "sid", "src_ip", "src_port",
+                   "dst_ip", "dst_port", "protocol", "http_method", "http_uri", "status", "session_id"]) {
     if (a[k] == null || a[k] === "") continue;
     // timestamp là ISO UTC kèm Z, đổi sang giờ máy người xem cho khớp với bảng
     dl.append(el("dt", "", k), el("dd", "", k === "timestamp" ? new Date(a[k]).toLocaleString("vi-VN") : a[k]));
   }
-  const body = $("d-body");
-  body.replaceChildren(dl);
+  return dl;
+}
+
+function detailView(a) {
   const p = a.payload || {};
   const parts = [["Matched content / evidence", p.matched_content], ["HTTP headers", p.http_headers],
                  ["HTTP body", p.http_body], ["Packet raw (hex)", p.packet_raw_hex]].filter(([, v]) => v);
-  if (!parts.length) body.append(el("h3", "", "Không có payload"));
-  for (const [title, v] of parts) body.append(el("h3", "", title), el("pre", "", v));
-  $("detail").showModal();
+  const out = [fieldsView(a)];
+  if (!parts.length) out.push(el("h3", "", "Không có payload"));
+  for (const [title, v] of parts) out.push(el("h3", "", title), el("pre", "", v));
+  return out;
+}
+
+function sessionView(a, c) {
+  const events = c.events;
+  const first = events[0], last = events[events.length - 1];
+  const meta = el("div", "meta", `${a.src_ip} · ${fmtTime(first.timestamp)} → ${fmtTime(last.timestamp)} ` +
+    `(${fmtDuration((new Date(last.timestamp) - new Date(first.timestamp)) / 1000)}) · ${events.length} sự kiện · phiên `);
+  meta.append(Object.assign(el("span", "", a.session_id.slice(0, 8)), { title: a.session_id }));
+
+  const tabs = el("nav", "subtabs");
+  for (const [key, name] of [["events", "Hoạt động"], ["raw", "Raw log"]]) {
+    const t = el("button", view.tab === key ? "active" : "", name);
+    t.type = "button";
+    t.addEventListener("click", () => { view.tab = key; fillBody(a); refresh(a); });
+    tabs.append(t);
+  }
+  if (view.tab === "raw") return [meta, fieldsView(a), tabs, c.raw === undefined ? el("div", "empty", "Đang tải…") : el("pre", "", c.raw)];
+
+  const pages = Math.max(1, Math.ceil(events.length / SESSION_PAGE));
+  view.page = Math.min(view.page, pages - 1);
+  const start = view.page * SESSION_PAGE;
+  const rows = el("tbody");
+  for (const e of events.slice(start, start + SESSION_PAGE)) {
+    const tr = el("tr");
+    tr.append(el("td", "nw", fmtTime(e.timestamp)), el("td", "nw", kindLabel(e)), el("td", "msg", shortSummary(e)));
+    rows.append(tr);
+  }
+  const head = el("tr");
+  for (const t of ["Giờ", "Hành động", "Nội dung"]) head.append(el("th", "", t));
+  const thead = el("thead");
+  thead.append(head);
+  const table = el("table");
+  table.append(thead, rows);
+
+  const pager = el("div", "pager");
+  const prev = el("button", "", "‹ Trước"), next = el("button", "", "Sau ›");
+  prev.type = next.type = "button";
+  prev.disabled = view.page === 0;
+  next.disabled = view.page >= pages - 1;
+  prev.addEventListener("click", () => { view.page--; fillBody(a); });
+  next.addEventListener("click", () => { view.page++; fillBody(a); });
+  const nav = el("span");
+  nav.append(prev, " ", next);
+  pager.append(el("span", "", `${start + 1}–${Math.min(start + SESSION_PAGE, events.length)} / ${events.length}`), nav);
+  return [meta, fieldsView(a), tabs, table, pager];
 }
 
 async function deleteOne(id) {
@@ -265,6 +371,7 @@ function syncLive() {
 $("auto").addEventListener("change", syncLive);
 $("toggle").addEventListener("click", () => setPanel($("filter").hidden));
 $("d-close").addEventListener("click", () => $("detail").close());
+$("detail").addEventListener("close", () => { openKey = openAlert = null; });
 $("delete").addEventListener("click", async () => {
   const q = filterQuery();
   const n = Number((await fetch("/api/alerts/?limit=0&" + q)).headers.get("X-Total-Count") || 0);

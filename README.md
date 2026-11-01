@@ -1,6 +1,6 @@
 # Hybrid NIDS
 
-**A real-time network intrusion detection system that combines Snort 3–compatible signature rules with SSH/HTTP honeypots, and comes with a pfSense-style web console.**
+**A real-time network intrusion detection system that combines Snort 3–compatible signature rules with SSH/HTTP honeypots, and comes with a shadcn-style web console.**
 
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Scapy](https://img.shields.io/badge/Scapy-packet%20capture-2C3E50?style=for-the-badge&logo=wireshark&logoColor=white)
@@ -37,7 +37,7 @@ Hybrid NIDS sniffs traffic live from a network interface. It decodes every packe
 
 Signatures only catch attacks that are already known. To cover more, the system runs SSH and HTTP honeypots that write into the same database. Nobody legitimate ever touches a honeypot, so any IP that does is a confirmed attacker. Rule alerts from those IPs are raised one priority level and tagged `[honeypot-confirmed]`.
 
-All alerts and honeypot events end up in one database. A FastAPI service and a pfSense-style web console read from it, so you can watch alerts live, search the logs, inspect payloads and browse the loaded rules.
+All alerts and honeypot events end up in one database. A FastAPI service and a shadcn-style web console read from it, so you can watch alerts live, search the logs, inspect payloads and browse the loaded rules.
 
 ---
 
@@ -215,7 +215,7 @@ Main endpoints:
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/alerts/` | List alerts. Filters: `source_type`, `protocol`, `src_ip`, `dst_ip`, `sid`, `severity`, `since`, `until`, `q`; paging: `limit`, `offset` |
+| `GET` | `/api/alerts/` | List alerts. Filters: `source_type`, `protocol`, `src_ip`, `dst_ip`, `sid`, `severity`, `since`, `until`, `q`; paging: `limit`, `offset`; `by_session=true` collapses each honeypot session into one row (with `event_count`, `last_timestamp`) |
 | `GET` | `/api/alerts/{id}` | Alert detail with raw payload |
 | `DELETE` | `/api/alerts/{id}` | Delete one alert |
 | `DELETE` | `/api/alerts/` | Delete alerts matching the same filters (no filter = delete all) |
@@ -223,6 +223,8 @@ Main endpoints:
 | `GET` | `/api/alerts/stats` | Totals by priority and top attack types |
 | `GET` | `/api/alerts/timeline` | Alert counts per time bucket, split into NIDS and honeypot |
 | `GET` | `/api/alerts/attackers` | Per-IP honeypot events and NIDS alerts |
+| `GET` | `/api/alerts/sessions/{session_id}` | Events of one honeypot session, oldest first |
+| `GET` | `/api/alerts/sessions/{session_id}/raw` | Raw log of one session (plain text, one event per line) |
 | `WS` | `/api/alerts/ws` | Pushes the id of each new alert (via Redis); the browser then reloads over REST. Closes with code 1013 when Redis is off or down |
 | `GET` | `/api/rules/` | Rules with category and enabled state. Filters: `category`, `enabled`, `q` |
 | `GET`, `PUT` | `/api/rules/categories` | List rule files / save which ones are loaded |
