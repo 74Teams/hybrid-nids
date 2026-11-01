@@ -28,7 +28,7 @@ Thao tác ghi rule cần header `X-API-Key` khớp biến môi trường `NIDS_A
 
 ## Web UI
 
-- Giao diện kiểu shadcn/ui (token màu zinc, bo góc 0.5rem, card viền mảnh, tab dạng pill, button/input/badge/alert/dialog) viết bằng CSS thuần trong `nids/api/static/`, CSS chung `style.css` mount tại `/static`. Không dùng thư viện frontend hay font ngoài (lab chạy offline); đổi màu thì sửa biến ở `:root`, riêng biểu đồ SVG có hằng màu ở đầu `charts.js` cần đổi theo.
+- Giao diện kiểu shadcn/ui (token màu zinc, bo góc 0.5rem, card viền mảnh, tab dạng pill, button/input/badge/alert/dialog) viết bằng CSS thuần trong `nids/api/static/`, CSS chung `style.css` mount tại `/static`. Không dùng thư viện frontend hay font ngoài (lab chạy offline); quy tắc chi tiết (token, ánh xạ component, truy cập, cache) nằm ở `web-design.md`.
 - Dashboard tại `/`; Status › System Logs (`logs.html`) tại `/logs`; Services › Rules (`rules.html`) tại `/rules` kiểu Suricata trên pfSense: tab Categories, dropdown category, panel SID overrides (Apply / Reset All / Reset Current / Disable All / Enable All), ô sửa `custom.rules`.
 - Chỉ có giao diện sáng.
 - Trang HTML và file tĩnh trả `Cache-Control: no-cache` (trình duyệt hỏi lại bằng ETag) nên sửa CSS/JS có hiệu lực ngay.

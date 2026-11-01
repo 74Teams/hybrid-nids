@@ -83,4 +83,4 @@ Các process (engine, API, mỗi honeypot một process) chạy riêng và chỉ
 - Honeypot ghi từ process khác, nên cache IP honeypot trong engine có TTL 5 giây và cảnh báo có thể chưa được làm giàu ngay.
 - `nids/ai.py` mới là stub: đừng viết test hay demo giả định AI worker đã sinh cảnh báo.
 
-Quy tắc chi tiết: `.claude/rules/git-workflow.md`, `planning.md`, `engine.md`, `api-web.md`, `honeypot.md`, `config-db-docker.md`, `logging.md`, `lab-demo.md`, `snort-rules.md`.
+Quy tắc chi tiết: `.claude/rules/git-workflow.md`, `planning.md`, `engine.md`, `api-web.md`, `web-design.md`, `honeypot.md`, `config-db-docker.md`, `logging.md`, `lab-demo.md`, `snort-rules.md`.
