@@ -159,7 +159,7 @@ system:
 
 network:
   interface: ""                # empty = default interface
-  bpf_filter: "ip and not port 3306"
+  bpf_filter: "ip and not port 3306 and not (host 172.28.0.30 and port 6379)"
   capture_mode: "live"
 
 detection:
@@ -175,9 +175,14 @@ database:
   user: "root"
   password: "your_password"
   name: "nids_db"
+
+redis:
+  host: ""                     # empty = real-time push off, the dashboard polls instead
+  port: 6379
+  password: ""
 ```
 
-The `NIDS_DB_HOST`, `NIDS_DB_PORT`, `NIDS_DB_NAME`, `NIDS_DB_USER` and `NIDS_DB_PASSWORD` environment variables override the MySQL settings. Honeypots read `HONEYPY_*` variables (for example `HONEYPY_SSH_PORT`, `HONEYPY_HTTP_USERNAME`).
+The `NIDS_DB_HOST`, `NIDS_DB_PORT`, `NIDS_DB_NAME`, `NIDS_DB_USER` and `NIDS_DB_PASSWORD` environment variables override the MySQL settings; `NIDS_REDIS_HOST`, `NIDS_REDIS_PORT` and `NIDS_REDIS_PASSWORD` do the same for Redis. Honeypots read `HONEYPY_*` variables (for example `HONEYPY_SSH_PORT`, `HONEYPY_HTTP_USERNAME`).
 
 ---
 
@@ -218,6 +223,7 @@ Main endpoints:
 | `GET` | `/api/alerts/stats` | Totals by priority and top attack types |
 | `GET` | `/api/alerts/timeline` | Alert counts per time bucket, split into NIDS and honeypot |
 | `GET` | `/api/alerts/attackers` | Per-IP honeypot events and NIDS alerts |
+| `WS` | `/api/alerts/ws` | Pushes the id of each new alert (via Redis); the browser then reloads over REST. Closes with code 1013 when Redis is off or down |
 | `GET` | `/api/rules/` | Rules with category and enabled state. Filters: `category`, `enabled`, `q` |
 | `GET`, `PUT` | `/api/rules/categories` | List rule files / save which ones are loaded |
 | `POST` | `/api/rules/sids` | Enable/disable SIDs (`{"enable": [...], "disable": [...]}`) |
@@ -258,16 +264,17 @@ pytest
 | Container | Role | Address |
 |---|---|---|
 | `mysql_db` | Shared database | `172.28.0.10` |
+| `redis` | Pub/sub that tells the API about new alerts (optional, not published to the host) | `172.28.0.30` |
 | `victim_app` | nginx target with several services | `172.28.0.50` |
 | `nids_engine` | Detection engine, sniffing the victim's traffic | shares the victim's network namespace |
 | `honeypot_ssh` / `honeypot_http` | Honeypots on ports 2222 / 8080 | share the victim's network namespace |
 | `nids_api` | API and web console, published on `localhost:8000` | `172.28.0.20` |
 | `attacker` | Kali Linux with nmap, hping3, hydra, sqlmap, nikto | `172.28.0.100` |
 
-Create `.env` first and fill in the two passwords (compose refuses to start without them). `openssl rand -hex 24` generates a good value:
+Create `.env` first and fill in the three passwords (compose refuses to start without them). `openssl rand -hex 24` generates a good value:
 
 ```bash
-cp .env.example .env     # set MYSQL_ROOT_PASSWORD and NIDS_DB_PASSWORD
+cp .env.example .env     # set MYSQL_ROOT_PASSWORD, NIDS_DB_PASSWORD and NIDS_REDIS_PASSWORD
 docker compose up --build -d
 docker logs -f nids_engine                                        # wait for "Đã nạp 67 rule"
 ```
@@ -283,7 +290,8 @@ docker exec -it nids_attacker bash                                        # manu
 ```
 
 Notes:
-- `nids_api` runs on its own address, so the dashboard's polling requests are never sniffed by the engine.
-- `network.bpf_filter` excludes port 3306. Without it, the engine would see its own MySQL `INSERT`s, which contain attack strings, and raise alerts on them in a loop.
+- `nids_api` runs on its own address, so the dashboard's own requests (fallback polling, WebSocket) are never sniffed by the engine.
+- `network.bpf_filter` excludes port 3306. Without it, the engine would see its own MySQL `INSERT`s, which contain attack strings, and raise alerts on them in a loop. It also excludes the lab's Redis (`172.28.0.30:6379`) but not port 6379 in general, so attacks aimed at that port on the victim are still seen.
+- New alerts reach the dashboard through Redis in well under a second. Redis is optional: if it is stopped, the engine and honeypots keep running and the dashboard falls back to polling every 2 seconds, then switches back by itself once Redis returns.
 - To start a fresh run, use **Xoá dữ liệu** on the dashboard or `curl -X DELETE http://localhost:8000/api/alerts/`.
 - To stop the lab, run `docker compose down`. Add `-v` to also drop the MySQL data.

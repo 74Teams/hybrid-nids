@@ -27,6 +27,17 @@ services:
       timeout: 5s
       retries: 5
 
+  # Kênh đẩy tín hiệu "có cảnh báo mới" từ engine/honeypot sang API. Chỉ nằm trong mạng lab (không publish cổng ra host),
+  # không lưu bền. Sensor vẫn chạy khi Redis chết nên các service không depends_on nó.
+  redis:
+    image: redis:7-alpine
+    container_name: nids_redis
+    command: redis-server --requirepass "${NIDS_REDIS_PASSWORD:?đặt trong .env}" --save "" --appendonly no
+    networks:
+      nids_isolated_net:
+        ipv4_address: 172.28.0.30
+    restart: unless-stopped
+
   victim_app:
     build: ./lab/victim
     container_name: nids_victim
@@ -57,6 +68,8 @@ services:
       NIDS_DB_NAME: "nids_db"
       NIDS_DB_USER: "nids_app"
       NIDS_DB_PASSWORD: "${NIDS_DB_PASSWORD:?đặt trong .env}"
+      NIDS_REDIS_HOST: "172.28.0.30"
+      NIDS_REDIS_PASSWORD: "${NIDS_REDIS_PASSWORD:?đặt trong .env}"
     restart: unless-stopped
 
   # Honeypot chạy chung network với victim: NIDS sniff được cả traffic tới honeypot,
@@ -80,6 +93,8 @@ services:
       NIDS_DB_NAME: "nids_db"
       NIDS_DB_USER: "nids_app"
       NIDS_DB_PASSWORD: "${NIDS_DB_PASSWORD:?đặt trong .env}"
+      NIDS_REDIS_HOST: "172.28.0.30"
+      NIDS_REDIS_PASSWORD: "${NIDS_REDIS_PASSWORD:?đặt trong .env}"
     restart: unless-stopped
 
   honeypot_http:
@@ -99,7 +114,7 @@ services:
     restart: unless-stopped
 
   # API + dashboard chạy ở network namespace riêng (không chung với victim) để các request
-  # poll của dashboard không bị engine sniff nhầm thành lưu lượng cần phân tích.
+  # của dashboard (poll dự phòng, WebSocket) không bị engine sniff nhầm thành lưu lượng cần phân tích.
   nids_api:
     image: hybrid-nids-app
     pull_policy: never
@@ -121,6 +136,8 @@ services:
       NIDS_DB_NAME: "nids_db"
       NIDS_DB_USER: "nids_app"
       NIDS_DB_PASSWORD: "${NIDS_DB_PASSWORD:?đặt trong .env}"
+      NIDS_REDIS_HOST: "172.28.0.30"
+      NIDS_REDIS_PASSWORD: "${NIDS_REDIS_PASSWORD:?đặt trong .env}"
       # Khoá cho thao tác sửa rule trên web; đặt trong shell hoặc file .env, để trống thì trang Rules chỉ xem
       NIDS_API_KEY: "${NIDS_API_KEY:-}"
     restart: unless-stopped

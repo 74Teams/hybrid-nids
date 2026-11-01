@@ -1,6 +1,6 @@
 # Kịch bản demo Hybrid NIDS
 
-Thời lượng gợi ý: 10–12 phút. Mạng Docker cô lập `172.28.0.0/16`: victim (nginx) `172.28.0.50`, attacker `172.28.0.100`, MySQL `172.28.0.10`, API và dashboard `172.28.0.20`.
+Thời lượng gợi ý: 10–12 phút. Mạng Docker cô lập `172.28.0.0/16`: victim (nginx) `172.28.0.50`, attacker `172.28.0.100`, MySQL `172.28.0.10`, Redis `172.28.0.30` (đẩy cảnh báo tức thì lên dashboard), API và dashboard `172.28.0.20`.
 
 ## 1. Chuẩn bị trước giờ demo
 

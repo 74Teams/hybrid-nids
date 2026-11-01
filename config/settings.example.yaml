@@ -8,7 +8,8 @@ network:
   interface: "eth0"
   # Loại port 3306: engine chạy chung network với victim nên sẽ thấy cả kết nối ghi alert vào MySQL,
   # nếu không loại thì nội dung câu INSERT (chứa chuỗi tấn công) lại sinh thêm alert.
-  bpf_filter: "ip and not port 3306"
+  # Loại thêm kết nối tới Redis của lab (172.28.0.30:6379) vì là traffic nội bộ của chính hệ thống.
+  bpf_filter: "ip and not port 3306 and not (host 172.28.0.30 and port 6379)"
   promiscuous: true
   capture_mode: "live"
 
@@ -36,6 +37,13 @@ database:
   user: "nids_app"
   password: ""
   name: "nids_db"
+
+redis:
+  # Kênh đẩy cảnh báo thời gian thực tới dashboard. host rỗng = tắt, dashboard tự quay về poll.
+  # Mật khẩu đặt qua biến môi trường NIDS_REDIS_PASSWORD (.env), không ghi vào file này.
+  host: ""
+  port: 6379
+  password: ""
 
 api:
   host: "0.0.0.0"

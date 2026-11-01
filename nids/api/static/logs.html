@@ -55,7 +55,7 @@
 
   <section class="panel">
     <div class="panel-head"><span class="grow" id="title">Cảnh báo mới nhất (mới nhất ở trên)</span>
-      <label class="check"><input type="checkbox" id="auto"> Tự làm mới 5s</label>
+      <label class="check"><input type="checkbox" id="auto" checked> Tự làm mới</label>
       <button type="button" id="reload">Làm mới</button></div>
     <div class="table-wrap">
       <table>
@@ -77,6 +77,7 @@
   <div class="panel-body" id="d-body"></div>
 </dialog>
 
+<script src="/static/live.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const TABS = {
@@ -90,7 +91,7 @@ const ICONS = {
   plus: "M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4z",
   close: "M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6z",
 };
-let offset = 0, total = 0, timer = null;
+let offset = 0, total = 0, stopLive = null;
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -257,10 +258,11 @@ $("filter").addEventListener("reset", () => setTimeout(() => { offset = 0; load(
 $("prev").addEventListener("click", () => { offset = Math.max(0, offset - pageSize()); load(); });
 $("next").addEventListener("click", () => { offset += pageSize(); load(); });
 $("reload").addEventListener("click", load);
-$("auto").addEventListener("change", (e) => {
-  clearInterval(timer);
-  timer = e.target.checked ? setInterval(load, 5000) : null;
-});
+function syncLive() {
+  if (stopLive) stopLive();
+  stopLive = $("auto").checked ? liveAlerts(load, 5000) : null;
+}
+$("auto").addEventListener("change", syncLive);
 $("toggle").addEventListener("click", () => setPanel($("filter").hidden));
 $("d-close").addEventListener("click", () => $("detail").close());
 $("delete").addEventListener("click", async () => {
@@ -281,6 +283,7 @@ for (const [k, v] of new URLSearchParams(location.search)) {
   if (f && k !== "limit") { f.value = v; setPanel(true); }
 }
 selectTab();
+syncLive();
 </script>
 </body>
 </html>

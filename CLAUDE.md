@@ -12,6 +12,7 @@ Hybrid NIDS + honeypot (đồ án PBL4): hệ thống phát hiện xâm nhập m
 - Scapy ≥ 2.5 (capture + decode), pyahocorasick ≥ 2.1 (prefilter)
 - SQLAlchemy 2.0 + PyMySQL (MySQL trong Docker, SQLite khi chạy local)
 - FastAPI + Uvicorn (API, dashboard); HTML/CSS/JS thuần, biểu đồ SVG tự vẽ, không dùng thư viện frontend
+- Redis ≥ 7 (Docker) + redis-py ≥ 8.1: pub/sub đẩy tín hiệu cảnh báo mới tới WebSocket của dashboard (tuỳ chọn, tắt được)
 - paramiko ≥ 3.4 (honeypot SSH), Flask ≥ 3.0 (honeypot HTTP), pydantic-settings
 - numpy, pandas, scikit-learn, joblib (dành cho AI worker, chưa dùng)
 - pytest; Docker Compose; GitHub Actions chạy pytest cho mỗi PR vào `main`
@@ -24,7 +25,7 @@ Lệnh luôn chạy từ thư mục gốc repo (`pytest.ini` đặt `pythonpath 
 - `nids/api/` — process FastAPI: `routes/` (alerts, rules), `static/` (dashboard, logs, rules page)
 - `nids/honeypot/` — honeypot SSH và HTTP (`python -m nids.honeypot ssh|http`), `store.py` ghi sự kiện
 - `nids/db/` — `models.py` (`events`, `event_payloads`, `flows`), `repository.py` (`EventRepository`)
-- `nids/ai.py` — `AITrafficWorker` (stub); `nids/config.py` — `SETTINGS`, `get_db_url()`; `nids/logger.py` — `setup_logging`
+- `nids/ai.py` — `AITrafficWorker` (stub); `nids/config.py` — `SETTINGS`, `get_db_url()`, `get_redis_settings()`; `nids/logger.py` — `setup_logging`; `nids/realtime.py` — `publish_alert` (đẩy id cảnh báo mới lên Redis)
 - `rules/` — file `.rules` theo category, `custom.rules`, `vendor/`, `state.yaml` (gitignore)
 - `config/settings.example.yaml` — file mẫu được commit; `config/settings.yaml` — cấu hình local (bị git ignore, thiếu thì dùng file mẫu)
 - `lab/` — Docker lab: `attacker/attack_demo.py`, `victim/`
@@ -32,7 +33,7 @@ Lệnh luôn chạy từ thư mục gốc repo (`pytest.ini` đặt `pythonpath 
 - `docs/` — `demo/kich-ban-demo.md` (kịch bản thuyết trình), `ai/` (thiết kế AI worker), `plans/` (plan và bảng tổng hợp)
 - `.claude/rules/` — quy tắc chi tiết theo khu vực; `.claude/commands/` — slash command (`them-rule`); `.claude/skills/` — skill (`idea-to-plan`); `.claude/agents/` — subagent (`plan-critic`, `git-workflow`)
 
-Các process (engine, API, mỗi honeypot một process) chạy riêng và chỉ giao tiếp qua database chung cùng các file trong `rules/`.
+Các process (engine, API, mỗi honeypot một process) chạy riêng và chỉ giao tiếp qua database chung cùng các file trong `rules/`. Ngoại lệ duy nhất là tín hiệu "có cảnh báo mới" qua Redis (chỉ chứa id, dữ liệu vẫn lấy từ DB); Redis tắt hoặc chết thì mọi thứ vẫn chạy, dashboard quay về poll.
 
 ## Coding Conventions
 
@@ -49,7 +50,8 @@ Các process (engine, API, mỗi honeypot một process) chạy riêng và chỉ
 - DB chỉ lưu dữ liệu quan sát được: sự kiện cảnh báo (`events`) và flow log (`flows`, một dòng cho mỗi flow, không ghi từng gói). Rule chỉ nằm trong file `rules/`, không nạp rule từ DB.
 - Thao tác ghi rule qua API phải kiểm tra header `X-API-Key` khớp `NIDS_API_KEY`. Chưa đặt biến môi trường thì thao tác ghi bị khoá.
 - Thêm rule mới thì phải thêm đòn tương ứng trong `lab/attacker/attack_demo.py`, nếu không `tests/lab/test_attack_demo.py` sẽ fail. Trước khi thêm hoặc sửa rule, đọc `.claude/rules/snort-rules.md`.
-- Không bỏ port 3306 khỏi `network.bpf_filter` (lý do ở mục Known Issues).
+- Không bỏ port 3306 và `172.28.0.30:6379` (Redis của lab) khỏi `network.bpf_filter` (lý do ở mục Known Issues).
+- `publish_alert` và mọi đường Redis không được chặn hay làm lỗi sensor: publish chỉ ở thread nền, lỗi chỉ được log.
 
 ## Common Commands
 
@@ -58,14 +60,15 @@ Các process (engine, API, mỗi honeypot một process) chạy riêng và chỉ
 - Honeypot: `python -m nids.honeypot ssh` (cổng 2222), `python -m nids.honeypot http` (cổng 8080)
 - API + dashboard: `uvicorn nids.api.main:app --host 0.0.0.0 --port 8000 --reload` (Swagger tại `/docs`)
 - Test: `pytest`; một test: `pytest tests/engine/test_diverse_rules_engine.py::test_name`
-- Docker lab: `docker compose up --build` (MySQL, victim nginx, engine, honeypot, API, attacker trên mạng 172.28.0.0/16)
+- Docker lab: `docker compose up --build` (MySQL, Redis, victim nginx, engine, honeypot, API, attacker trên mạng 172.28.0.0/16)
 - Build: không có bước build riêng; chưa cấu hình linter.
 
 ## Current Focus
 
 - Quản lý rule nhiều file (branch `feature/rule-management`): category, override theo SID, sửa `custom.rules` trên trang Rules kiểu pfSense.
 - Thiết kế AI worker theo flow (`docs/ai/`) để thay stub trong `nids/ai.py` mà không phải sửa capture, decoder, DB hay API.
-- Chưa triển khai: Redis pub/sub, WebSocket alert. Phía honeypot chưa có session theo kết nối, route catch-all, giới hạn tài nguyên.
+- Cảnh báo realtime qua Redis pub/sub + WebSocket (branch `feature/30-realtime-alert-push`, PLAN-001, issue #30).
+- Phía honeypot chưa có session theo kết nối, route catch-all, giới hạn tài nguyên.
 
 ## Known Issues / Gotchas
 
@@ -73,7 +76,9 @@ Các process (engine, API, mỗi honeypot một process) chạy riêng và chỉ
 - Biến trong rule được hard-code: `$HTTP_PORTS` xử lý trong `_match_port`, còn `decoder.HTTP_PORTS` quyết định payload nào được parse thành HTTP. Thêm port hoặc biến mới thì phải sửa cả hai chỗ.
 - Parser chỉ hiểu cú pháp Snort 3. Cú pháp Snort 2 (`nocase;` đứng riêng, `severity:`, `http_method:"POST"`) không được hỗ trợ.
 - Engine sniff cả kết nối của chính nó tới MySQL. Nếu bỏ port 3306 khỏi BPF filter, câu INSERT chứa chuỗi tấn công sẽ sinh alert mới thành vòng lặp.
-- `nids_api` cố ý chạy ở network riêng để request poll của dashboard không bị engine sniff nhầm.
+- Engine cũng sniff kết nối tới Redis (`172.28.0.30:6379`) nên BPF loại riêng địa chỉ này. Không loại cả cổng 6379 để vẫn thấy đòn nhắm vào cổng đó của victim. Tin Redis chỉ chứa id nên không thể sinh alert lặp, kể cả khi `settings.yaml` local còn BPF cũ.
+- Cần `NIDS_REDIS_PASSWORD` trong `.env`, nếu không `docker compose` từ chối chạy. `redis.host` rỗng trong `settings.yaml` (mặc định khi chạy local) nghĩa là tắt Redis.
+- `nids_api` cố ý chạy ở network riêng để request của dashboard (poll dự phòng, WebSocket) không bị engine sniff nhầm.
 - `init_db()` thử lại 15 lần × 2s vì MySQL khởi động chậm. Đừng coi lần kết nối thất bại đầu tiên là lỗi.
 - Honeypot ghi từ process khác, nên cache IP honeypot trong engine có TTL 5 giây và cảnh báo có thể chưa được làm giàu ngay.
 - `nids/ai.py` mới là stub: đừng viết test hay demo giả định AI worker đã sinh cảnh báo.

@@ -3,6 +3,8 @@
 import re
 from pathlib import Path
 
+import yaml
+
 COMPOSE_PATH = Path(__file__).resolve().parents[2] / "docker-compose.yml"
 
 
@@ -25,3 +27,15 @@ def test_compose_requires_password_variables():
 
 def test_healthcheck_escapes_dollar():
     assert "$$MYSQL_ROOT_PASSWORD" in _text()
+
+
+def test_redis_requires_password_and_is_not_published():
+    services = yaml.safe_load(_text())["services"]
+    assert "${NIDS_REDIS_PASSWORD:?" in services["redis"]["command"]
+    assert "ports" not in services["redis"]  # chỉ trong mạng lab, không mở ra host
+
+
+def test_sensors_do_not_depend_on_redis():
+    services = yaml.safe_load(_text())["services"]
+    for name, service in services.items():
+        assert "redis" not in (service.get("depends_on") or {}), name
