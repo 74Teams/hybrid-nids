@@ -26,9 +26,13 @@ paths:
 - Mỗi rule được index bằng fast pattern của nó (content có `fast_pattern`, nếu không thì content dài nhất). Rule không có fast pattern vào `no_content_rules` và luôn được đánh giá.
 - `evaluate_packet` là phễu 4 tầng: demux theo protocol/port → prefilter Aho-Corasick → kiểm tra chi tiết (flags, flow, dsize, itype/icode, content theo buffer, pcre, `detection_filter`) → `ThresholdManager` chặn bớt để tránh bão alert.
 
-## Biến hard-code
+## Header rule và biến
 
-`$HTTP_PORTS` được xử lý riêng trong `_match_port`, còn `decoder.HTTP_PORTS` (80, 8080, 8000, 3000, 5000, 443) quyết định payload nào được parse thành HTTP. Thêm biến mới hoặc HTTP port mới thì phải sửa cả hai chỗ.
+- `nids/engine/rule_header.py` biên dịch IP và cổng của header lúc nạp rule thành `AddrSpec`/`PortSpec` (gắn vào `SnortRule.src_addrs/src_ports/dst_addrs/dst_ports`). Hiểu `any`, giá trị đơn, dải cổng `1:1024`, CIDR, danh sách lồng nhau `[a,b]`, phủ định `!x`, biến `$X`. Dạng không hiểu được ném `ValueError` nên rule bị bỏ kèm `WARNING rules` (không khớp tất cả); `!any` cũng là lỗi, kể cả khi sinh ra từ biến.
+- `DetectionEngine._match_header` so khớp cổng trước IP; hướng `<>` khớp cả chiều ngược. Cổng `None` (ICMP) chỉ khớp `any`. IP của gói rỗng hoặc sai định dạng chỉ khớp `any`: `matches()` chạy trên worker thread duy nhất nên không bao giờ được ném lỗi.
+- Đường nóng: `PortSpec` là bảng bit 65536 cổng tính sẵn (dùng chung giữa rule có cùng biểu thức), tra O(1); rule có cả bốn thành phần là `any` có `header_any = True` và bỏ qua bước này; IP của gói qua `lru_cache(4096)`.
+- Biến lấy từ `get_rule_variables()` (`nids/config.py`): `DEFAULT_RULE_VARIABLES` chồng bởi `detection.variables`. `decoder.HTTP_PORTS` và rule `$HTTP_PORTS` dùng chung một nguồn, nên thêm cổng HTTP chỉ cần sửa cấu hình. `HTTP_PORTS` cấu hình sai thì `http_ports()` ghi `logger.error` và dùng mặc định, engine không dừng. Mặc định không có 443 (HTTP trên 443 là TLS nên không parse được).
+- `RuleManager(rules_dir, variables=None)`: test truyền `variables` riêng để không phụ thuộc `settings.yaml`.
 
 ## Kiểu dữ liệu
 

@@ -2,6 +2,8 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from nids.engine.rule_header import ANY_ADDRS, ANY_PORTS, AddrSpec, PortSpec
+
 # Các buffer mà content/pcre có thể gắn vào (sticky buffer kiểu Snort 3).
 # pkt_data = payload thô; các buffer http_* chỉ có khi gói tin được parse thành HTTP.
 BUFFER_PKT_DATA = "pkt_data"
@@ -51,6 +53,13 @@ class SnortRule:
     direction: str               # -> hoặc <>
     dst_ip: str
     dst_port: str
+
+    # Header đã biên dịch từ các chuỗi ở trên (biến đã được thay); mặc định khớp mọi giá trị
+    src_addrs: AddrSpec = ANY_ADDRS
+    src_ports: PortSpec = ANY_PORTS
+    dst_addrs: AddrSpec = ANY_ADDRS
+    dst_ports: PortSpec = ANY_PORTS
+    header_any: bool = True    # True khi cả bốn thành phần đều là `any`: detector bỏ qua bước so khớp header
 
     # Options phổ biến
     msg: str = ""

@@ -118,7 +118,7 @@ Bảng dưới gõ trực tiếp trong container attacker (`docker exec -it nids
 
 **Tại sao dùng Aho-Corasick?** Có hàng chục rule cùng cần tìm chuỗi trong mỗi gói. Aho-Corasick khớp đồng thời mọi mẫu trong một lần duyệt payload (độ phức tạp tuyến tính theo độ dài gói, không phụ thuộc số rule), nên chỉ những rule có mẫu xuất hiện mới được kiểm tra chi tiết.
 
-**Khác gì Snort thật?** Rule cú pháp Snort 3 nhưng engine chỉ hiểu một tập con option (content, pcre, flags, flow, dsize, itype/icode, detection_filter, sticky buffer HTTP). Chưa có tái hợp luồng TCP (chuỗi bị chia qua hai gói sẽ không khớp), `flow:established` được xấp xỉ bằng cờ ACK, chưa so khớp IP/dải cổng.
+**Khác gì Snort thật?** Rule cú pháp Snort 3 nhưng engine chỉ hiểu một tập con option (content, pcre, flags, flow, dsize, itype/icode, detection_filter, sticky buffer HTTP). Tái hợp luồng TCP mới làm cho chiều client → server (chuỗi bị chia qua hai gói vẫn bị bắt), `flow:established` được xấp xỉ bằng cờ ACK. Header rule hiểu IP/CIDR, dải và danh sách cổng, phủ định và biến.
 
 **Có dương tính giả không?** Mỗi rule có test gói tấn công và gói lành tính gần giống (`tests/lab/test_demo_rules.py`, `tests/engine/test_diverse_rules_engine.py`). Rule dựa trên tần suất dùng `detection_filter` để một gói hợp lệ đơn lẻ không gây cảnh báo.
 

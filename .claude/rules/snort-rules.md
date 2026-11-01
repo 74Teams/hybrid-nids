@@ -27,13 +27,14 @@ alert <proto> <src_ip> <src_port> -> <dst_ip> <dst_port> (<options>)
 |---|---|
 | action | `alert` |
 | proto | `tcp`, `udp`, `icmp`, `ip` |
-| IP | `any` (engine chưa so khớp IP, mọi giá trị đều coi như `any`) |
-| port | `any`, một số cổng (`22`), hoặc `$HTTP_PORTS` |
-| hướng | `->` |
+| IP | `any`, IP đơn, CIDR (`10.0.0.0/8`), danh sách (`[10.0.0.0/8,192.168.1.1]`), phủ định (`!10.0.0.1`, `![...]`) |
+| port | `any`, một số cổng (`22`), dải (`1:1024`, `:1024`, `1024:`), danh sách (`[80,443,8000:8080]`), phủ định (`!80`, `![80,443]`) |
+| hướng | `->` hoặc `<>` (khớp cả hai chiều) |
+| biến | `$HTTP_PORTS`, `$HOME_NET`, `$EXTERNAL_NET`... dùng thay cho IP/cổng và trong danh sách |
 
-Engine chưa hỗ trợ danh sách cổng (`[80,443]`), dải cổng (`1:1024`) hay phủ định cổng (`!80`): chúng khớp mọi cổng mà không báo lỗi. Khi cần nhiều cổng, viết mỗi cổng một rule.
+Header không hiểu được (thiếu `]`, cổng ngoài 0–65535, dải ngược, IP sai, biến chưa khai báo, `!any`, hướng khác `->` và `<>`) làm rule bị bỏ kèm `WARNING rules`; không bao giờ khớp tất cả. Trang Rules báo lỗi theo dòng khi lưu `custom.rules`.
 
-`$HTTP_PORTS` được định nghĩa cứng ở hai nơi: `DetectionEngine._match_port` (80, 8080, 8000, 3000, 5000) và `nids/engine/decoder.py::HTTP_PORTS` (danh sách cổng sẽ được parse HTTP). Thêm cổng HTTP thì sửa cả hai.
+Biến khai báo ở `detection.variables` trong `settings.yaml` (giá trị mặc định xem `DEFAULT_RULE_VARIABLES` trong `nids/engine/rule_header.py`). `$HTTP_PORTS` cũng quyết định cổng nào được parse thành HTTP (`decoder.HTTP_PORTS`), nên thêm cổng HTTP chỉ cần sửa cấu hình rồi khởi động lại engine và API. `$HOME_NET` mặc định là `any`; đặt giá trị cụ thể trước khi dùng `!$HOME_NET`. Cổng 443 không nằm trong `$HTTP_PORTS` mặc định.
 
 ## Thứ tự option chuẩn
 
@@ -62,7 +63,7 @@ Buffer là **sticky**: viết tên buffer **trước** các content/pcre, và m�
 | `http_client_body` | body của request |
 | `http_method` | method (`GET`, `POST`...) |
 
-Rule có buffer `http_*` thêm `service:http;`. Buffer `http_*` chỉ có khi gói tin tới cổng trong `nids/engine/decoder.py::HTTP_PORTS`. Vì `http_uri` chưa được URL-decode, pcre trên URI phải tự bao cả dạng encode, ví dụ `[\s+]` cho khoảng trắng và `(=|%3d)` cho dấu bằng.
+Rule có buffer `http_*` thêm `service:http;`. Buffer `http_*` chỉ có khi gói tin tới cổng trong `$HTTP_PORTS` (`nids/engine/decoder.py::HTTP_PORTS`). Vì `http_uri` chưa được URL-decode, pcre trên URI phải tự bao cả dạng encode, ví dụ `[\s+]` cho khoảng trắng và `(=|%3d)` cho dấu bằng.
 
 ## Option được hỗ trợ
 
