@@ -15,6 +15,7 @@ paths:
 - `GET /api/alerts` — danh sách; lọc theo `source_type/protocol/src_ip/dst_ip/sid/severity/since/until/q`, phân trang `limit/offset`, tổng ở header `X-Total-Count`. `source_type` là `HONEYPOT` hoặc `RULE_ENGINE`.
 - `GET /api/alerts/{id}` (kèm payload), `/api/alerts/export.csv`, `/api/alerts/stats`, `/api/alerts/attackers`.
 - `GET /api/alerts/timeline?minutes&buckets` — số cảnh báo NIDS/honeypot theo cột thời gian.
+- `WS /api/alerts/ws` — gửi id mỗi cảnh báo mới (tin lấy từ Redis kênh `nids:alerts`); trình duyệt chỉ coi đó là tín hiệu rồi tải lại qua REST. Mỗi kết nối giữ một subscriber riêng, tối đa `MAX_WS_CLIENTS` (20). Redis tắt, lỗi hoặc hết chỗ thì đóng với code 1013 trước khi accept; subscribe phải xong trước `accept()` để không lỡ cảnh báo. Endpoint không xác thực, nhưng chỉ lộ id, không lộ thêm dữ liệu so với `GET /api/alerts`.
 - `DELETE /api/alerts/` (cùng bộ lọc; không lọc = xoá hết), `DELETE /api/alerts/{id}`.
 - `/api/rules/` — danh sách rule kèm category và trạng thái bật/tắt; `categories`, `sids`, `sids/reset`, `categories/{name}/all`, `custom` để bật/tắt category, override SID và sửa `custom.rules`.
 - `/health`.
@@ -28,4 +29,5 @@ Thao tác ghi rule cần header `X-API-Key` khớp biến môi trường `NIDS_A
 - Giao diện kiểu pfSense trong `nids/api/static/`, CSS chung `style.css` mount tại `/static`.
 - Dashboard tại `/`; Status › System Logs (`logs.html`) tại `/logs`; Services › Rules (`rules.html`) tại `/rules` kiểu Suricata trên pfSense: tab Categories, dropdown category, panel SID overrides (Apply / Reset All / Reset Current / Disable All / Enable All), ô sửa `custom.rules`.
 - Chỉ có giao diện sáng, bám phong cách pfSense.
+- `static/live.js` (`liveAlerts(load, pollMs, onMode)`) dùng chung cho dashboard và trang Logs (ô "Tự làm mới" mặc định bật, bỏ chọn thì ngắt WebSocket): nhận tín hiệu WebSocket rồi gọi `load` (gộp tối đa 2 lần/giây), vẫn tải lại mỗi 30 giây khi live (timeline trượt theo giờ, tab khác xoá cảnh báo không phát tín hiệu), mất WebSocket thì poll `pollMs` và nối lại với backoff 5–60 giây. Dashboard hiện "cập nhật tức thì" hay "tự làm mới mỗi 2 giây" theo chế độ.
 - Biểu đồ dashboard là SVG thuần trong `static/charts.js` (cột chồng theo thời gian, thanh chồng theo IP; xanh = NIDS, cam = honeypot). Không thêm thư viện frontend ngoài.

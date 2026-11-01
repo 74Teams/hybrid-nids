@@ -20,6 +20,7 @@ Mạng Docker cô lập `172.28.0.0/16`.
 | Honeypot HTTP | `nids_honeypot_http` | `172.28.0.50:8080` | Bẫy trang login WordPress giả |
 | NIDS engine | `nids_engine` | chung network với victim | Sniff toàn bộ traffic, đối chiếu rule |
 | MySQL | `nids_mysql` | `172.28.0.10:3306` | Bảng `events` dùng chung |
+| Redis | `nids_redis` | `172.28.0.30:6379` | Đẩy tín hiệu cảnh báo mới lên dashboard (tuỳ chọn) |
 | API + dashboard | `nids_api` | `172.28.0.20`, http://localhost:8000/ | Hiển thị cảnh báo |
 | Attacker (Kali) | `nids_attacker` | `172.28.0.100` | Máy tấn công |
 
