@@ -1,13 +1,32 @@
 import time
 from typing import Optional
 from scapy.all import IP, IPv6, TCP, UDP, ICMP, Raw
-from scapy.packet import Packet
+from scapy.packet import Packet, Padding
 
 from nids.engine.packet import DecodedPacket
 from nids.engine.http_parser import HTTPParser
 
 # Tập hợp các port HTTP phổ biến, dùng để quyết định có cần parse HTTP hay không
 HTTP_PORTS = {80, 8080, 8000, 3000, 5000, 443}
+
+
+def _l4_payload(l4: Packet) -> bytes:
+    """Byte payload ngay sau header L4, đúng như trên dây.
+
+    Gói đọc từ mạng/pcap giữ byte gốc ở `payload.original`, dùng luôn để không phụ thuộc việc Scapy bóc tiếp
+    tầng trên (dựng lại byte có thể khác bản gốc). Gói tự dựng thì không có byte gốc nên dựng lại và bỏ phần
+    Padding của khung Ethernet ngắn.
+    """
+    payload = l4.payload
+    original = getattr(payload, "original", None)
+    if original:
+        return bytes(original)
+    data = bytes(payload)
+    if l4.haslayer(Padding):
+        pad = len(bytes(l4[Padding].load))
+        if pad:
+            data = data[:-pad]
+    return data
 
 
 class PacketDecoder:
@@ -86,8 +105,13 @@ class PacketDecoder:
             icmp_type = scapy_pkt[ICMP].type
             icmp_code = scapy_pkt[ICMP].code
 
-        # Payload thô (bytes)
-        raw_payload = bytes(scapy_pkt[Raw].load) if scapy_pkt.haslayer(Raw) else b""
+        # Payload thô (bytes) của tầng L4. Không dùng scapy_pkt[Raw]: với cổng Scapy tự bóc tiếp
+        # (SMB 445, DNS 53...) Raw chỉ là phần đuôi, mất header của giao thức tầng trên.
+        l4 = next((scapy_pkt[layer] for layer in (TCP, UDP, ICMP) if scapy_pkt.haslayer(layer)), None)
+        if l4 is not None:
+            raw_payload = _l4_payload(l4)
+        else:
+            raw_payload = bytes(scapy_pkt[Raw].load) if scapy_pkt.haslayer(Raw) else b""
 
         # Tạo DecodedPacket cơ bản
         decoded = DecodedPacket(
