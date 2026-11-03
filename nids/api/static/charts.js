@@ -1,9 +1,11 @@
 // Biểu đồ SVG thuần cho dashboard: cột chồng theo thời gian và thanh ngang chồng theo IP.
-// Hai series cố định theo thứ tự palette (xanh dương = NIDS, cam = Honeypot), đã qua validate_palette.js.
+// Series cố định theo thứ tự palette (xanh dương = NIDS, cam = Honeypot, aqua = Anomaly), đã qua validate_palette.js
+// (--pairs all; aqua contrast < 3:1 nên biểu đồ luôn có bảng đi kèm).
 // Nhãn đi qua textContent: tên IP/loại tấn công là dữ liệu không tin cậy, không bao giờ được render thành HTML.
 const Charts = (() => {
   const NS = "http://www.w3.org/2000/svg";
-  const SERIES = [{ key: "nids", name: "NIDS", color: "#2a78d6" }, { key: "honeypot", name: "Honeypot", color: "#eb6834" }];
+  const SERIES = [{ key: "nids", name: "NIDS", color: "#2a78d6" }, { key: "honeypot", name: "Honeypot", color: "#eb6834" },
+                  { key: "anomaly", name: "Anomaly", color: "#1baf7a" }];
   const INK = "#09090b", MUTED = "#71717a", GRID = "#e4e4e7", AXIS = "#a1a1aa", WASH = "#f4f4f5";
   const redraws = new Set();
 
@@ -21,8 +23,8 @@ const Charts = (() => {
   }
 
   // Chú giải (luôn có khi >= 2 series): ô vuông màu + tên bằng màu chữ thường
-  function legend(box) {
-    box.replaceChildren(...SERIES.map((s) => {
+  function legend(box, count = SERIES.length) {
+    box.replaceChildren(...SERIES.slice(0, count).map((s) => {
       const item = htmlEl("span", "legend-item");
       const sw = htmlEl("span", "sw"); sw.style.background = s.color;
       item.append(sw, s.name);
@@ -101,7 +103,7 @@ const Charts = (() => {
   }
   function drawTime(box, data, W) {
     const bs = data.buckets, n = bs.length;
-    const total = (b) => b.nids + b.honeypot;
+    const total = (b) => SERIES.reduce((sum, s) => sum + (b[s.key] || 0), 0);
     const max = Math.max(0, ...bs.map(total));
     if (!max) { box.append(htmlEl("div", "empty", "Chưa có cảnh báo trong khoảng thời gian này")); return; }
 
@@ -125,25 +127,26 @@ const Charts = (() => {
 
     bs.forEach((b, i) => {
       const x = ml + i * slot + (slot - bw) / 2;
-      const hn = (b.nids / top) * ih, hp = (b.honeypot / top) * ih;
       const band = svgEl("rect", { x: ml + i * slot, y: mt, width: slot, height: ih, fill: WASH, visibility: "hidden" });
       svg.append(band);
-      // Khe 2px màu nền giữa hai đoạn: đoạn dưới ngắn đi 2px khi có đoạn trên
-      if (b.nids) {
-        const h = Math.max(1, hn - (b.honeypot ? 2 : 0)), y = mt + ih - hn;
-        svg.append(b.honeypot ? svgEl("rect", { x, y: y + (hn - h), width: bw, height: h, fill: SERIES[0].color })
-                              : svgEl("path", { d: topRound(x, y, bw, h, 4), fill: SERIES[0].color }));
-      }
-      if (b.honeypot) svg.append(svgEl("path", { d: topRound(x, mt + ih - hn - hp, bw, Math.max(1, hp), 4), fill: SERIES[1].color }));
+      // Chồng từ dưới lên theo thứ tự SERIES; đoạn trên cùng bo đỉnh 4px, đoạn dưới ngắn đi 2px để có khe màu nền
+      const parts = SERIES.filter((s) => b[s.key]);
+      let base = mt + ih;
+      parts.forEach((s, k) => {
+        const full = (b[s.key] / top) * ih, last = k === parts.length - 1;
+        const h = Math.max(1, full - (last ? 0 : 2));
+        svg.append(last ? svgEl("path", { d: topRound(x, base - full, bw, h, 4), fill: s.color })
+                        : svgEl("rect", { x, y: base - h, width: bw, height: h, fill: s.color }));
+        base -= full;
+      });
 
       const hit = svgEl("rect", { x: ml + i * slot, y: mt, width: slot, height: ih, fill: "transparent", tabindex: 0,
-        "aria-label": `${hhmm(b.t)}: ${b.nids} NIDS, ${b.honeypot} honeypot` });
+        "aria-label": `${hhmm(b.t)}: ` + SERIES.map((s) => `${b[s.key] || 0} ${s.name}`).join(", ") });
       const start = new Date(b.t), end = new Date(start.getTime() + data.step_seconds * 1000);
       bindTip(hit, (px, py) => {
         band.setAttribute("visibility", "visible");
         showTip(px, py, `${hhmmss(start)} – ${hhmmss(end)}`, [
-          { color: SERIES[0].color, name: "NIDS", value: b.nids },
-          { color: SERIES[1].color, name: "Honeypot", value: b.honeypot },
+          ...SERIES.map((s) => ({ color: s.color, name: s.name, value: b[s.key] || 0 })),
           { name: "Tổng", value: total(b) }]);
       });
       hit.addEventListener("pointerleave", () => band.setAttribute("visibility", "hidden"));
@@ -191,8 +194,8 @@ const Charts = (() => {
 
   // ── Lưu lượng theo thời gian: một chuỗi (byte), cùng mốc cột với biểu đồ cảnh báo phía trên để so dạng small multiples ──
   // data = {step_seconds, buckets:[{t, bytes, flows, alerts}]}. Không gộp với cảnh báo vào một khung vì sẽ cần hai trục y.
-  // Màu aqua là slot 3 của palette, qua validate_palette.js cùng hai series trên (contrast < 3:1 nên luôn có bảng đi kèm)
-  const TRAFFIC = "#1baf7a";
+  // Một chuỗi không phải loại cảnh báo nên dùng xám trung tính (contrast 4.8:1), để aqua chỉ mang nghĩa Anomaly
+  const TRAFFIC = MUTED;
   const fmtBytes = (n) => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`;
   function trafficColumns(box, data) {
     box._draw = drawTraffic;

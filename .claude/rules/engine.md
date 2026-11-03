@@ -61,6 +61,15 @@ IP đã chạm honeypot trong 1 giờ gần nhất chắc chắn là attacker. `
 - Chế độ live: khi queue trống worker gọi `flow_log.tick(time.time())` để flow hết hạn. Khi dừng (hết pcap hoặc Ctrl+C), `main()` đặt `stop_event` và worker tự gọi `flow_log.close()` để ghi nốt flow còn mở; chỉ worker thread được đụng vào bảng flow.
 - Lỗi CSDL khi ghi flow chỉ được log, batch đó bị bỏ, engine vẫn chạy. Traffic cổng 3306 không có trong flow vì BPF filter loại nó.
 
+## Phát hiện bất thường theo ngưỡng
+
+- `nids/engine/anomaly.py` (`AnomalyDetector`) bắt tấn công chưa có rule bằng thống kê theo cửa sổ thời gian của gói (`packet.timestamp`, replay pcap lặp lại được); module thuần, không biết CSDL hay `SETTINGS`. Worker gọi `main.py::observe_anomaly(anomaly, packet)` sau `flow_log.on_packet`; lỗi chỉ được log.
+- Gói "mở kết nối" là TCP SYN không ACK, ICMP echo, và UDP không xuất phát từ cổng trong `common_ports` (để trả lời của DNS server không bị coi là quét).
+- Port scan / host sweep: một nguồn mở kết nối tới `scan.ports` cặp (IP, cổng) hoặc `scan.hosts` máy trong `scan.window` giây (P2). SYN flood / packet flood: một đích nhận `flood.syn` SYN hoặc `flood.packets` gói trong `flood.window` giây (P1). Rare: TCP SYN tới cổng ngoài `common_ports`, UDP tới cổng < 1024 ngoài danh sách, ICMP type ngoài {0, 3, 8, 11} (P3); bỏ qua khi nguồn đang bị đánh dấu scan.
+- Cảnh báo đi qua `handle_alert` với `source_type="ANOMALY"`, `sid=None`, bằng chứng ở `matched_content`; `format_alert` in nhãn `ANOMALY`. Chặn bớt bằng `ThresholdManager` riêng (`suppress_seconds`): scan và rare khoá theo nguồn, flood theo đích. Cửa sổ chặn theo giờ hệ thống nên replay pcap chỉ ra một cảnh báo mỗi loại.
+- Bộ nhớ: tối đa `max_tracked` IP mỗi bảng (đầy thì bỏ IP lâu nhất không có gói), mỗi nguồn nhớ tối đa 10000 gói trong cửa sổ scan, mục hết cửa sổ được dọn mỗi giây theo giờ gói.
+- Báo cả khi rule cũng bắt cùng traffic (ví dụ 1000107 và ANOMALY Port scan). `alert_count` của flow chỉ đếm rule.
+
 ## AI worker
 
 `nids/ai.py` (`AITrafficWorker`) mới là stub. Nó được khởi tạo với cùng callback `handle_alert` như rule engine, nên khi làm phần AI chỉ sửa bên trong `nids/ai.py`. Thiết kế nằm ở `docs/ai/`.

@@ -203,7 +203,7 @@ class EventRepository:
 
     @staticmethod
     def get_timeline(minutes: int = 60, buckets: int = 30) -> Dict[str, Any]:
-        """Số cảnh báo NIDS / honeypot trong `minutes` phút gần nhất, chia đều thành `buckets` cột (cột trống = 0)."""
+        """Số cảnh báo NIDS / honeypot / anomaly trong `minutes` phút gần nhất, chia đều thành `buckets` cột (cột trống = 0)."""
         from nids.db import SessionLocal
         step = minutes * 60 / buckets
         start = utc_now() - timedelta(minutes=minutes)
@@ -213,11 +213,11 @@ class EventRepository:
                     .filter(EventModel.timestamp >= start).all())
         finally:
             session.close()
-        cols = [{"t": iso_utc(start + timedelta(seconds=i * step), "seconds"), "nids": 0, "honeypot": 0}
+        cols = [{"t": iso_utc(start + timedelta(seconds=i * step), "seconds"), "nids": 0, "honeypot": 0, "anomaly": 0}
                 for i in range(buckets)]
         for ts, source in rows:
             i = min(int((ts - start).total_seconds() // step), buckets - 1)
-            cols[i]["honeypot" if source == "HONEYPOT" else "nids"] += 1
+            cols[i]["honeypot" if source == "HONEYPOT" else "anomaly" if source == "ANOMALY" else "nids"] += 1
         return {"step_seconds": step, "buckets": cols}
 
     @staticmethod
