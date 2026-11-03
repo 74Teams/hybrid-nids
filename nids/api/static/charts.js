@@ -189,5 +189,60 @@ const Charts = (() => {
     box.append(svg);
   }
 
-  return { legend, timeColumns, ipBars };
+  // ── Lưu lượng theo thời gian: một chuỗi (byte), cùng mốc cột với biểu đồ cảnh báo phía trên để so dạng small multiples ──
+  // data = {step_seconds, buckets:[{t, bytes, flows, alerts}]}. Không gộp với cảnh báo vào một khung vì sẽ cần hai trục y.
+  // Màu aqua là slot 3 của palette, qua validate_palette.js cùng hai series trên (contrast < 3:1 nên luôn có bảng đi kèm)
+  const TRAFFIC = "#1baf7a";
+  const fmtBytes = (n) => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+  function trafficColumns(box, data) {
+    box._draw = drawTraffic;
+    mount(box, data, drawTraffic);
+  }
+  function drawTraffic(box, data, W) {
+    const bs = data.buckets, n = bs.length;
+    const max = Math.max(0, ...bs.map((b) => b.bytes));
+    if (!max) { box.append(htmlEl("div", "empty", "Chưa có flow nào kết thúc trong khoảng thời gian này")); return; }
+
+    const H = 160, ml = 56, mr = 8, mt = 8, mb = 24, iw = W - ml - mr, ih = H - mt - mb;
+    const ticks = [0, max / 2, max];   // byte không chia đẹp theo niceTicks; ba vạch 0, nửa, đỉnh là đủ đọc
+    const Y = (v) => mt + ih - (v / max) * ih;
+    const slot = iw / n, bw = Math.max(2, Math.min(24, slot - 2));
+    const svg = svgEl("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img",
+      "aria-label": `Lưu lượng theo thời gian, tối đa ${fmtBytes(max)} mỗi cột` });
+    const hhmm = (iso) => new Date(iso).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+
+    for (const t of ticks) {
+      svg.append(svgEl("line", { x1: ml, x2: W - mr, y1: Y(t), y2: Y(t), stroke: t === 0 ? AXIS : GRID, "stroke-width": 1 }),
+        svgEl("text", { x: ml - 6, y: Y(t) + 4, "text-anchor": "end", "font-size": 11, fill: MUTED }, fmtBytes(Math.round(t))));
+    }
+    const every = Math.max(1, Math.ceil(n / 6));
+    bs.forEach((b, i) => {
+      if (i % every === 0) svg.append(svgEl("text", { x: ml + i * slot + slot / 2, y: H - 6, "text-anchor": "middle", "font-size": 11, fill: MUTED }, hhmm(b.t)));
+    });
+
+    bs.forEach((b, i) => {
+      const band = svgEl("rect", { x: ml + i * slot, y: mt, width: slot, height: ih, fill: WASH, visibility: "hidden" });
+      svg.append(band);
+      if (b.bytes) {
+        const h = Math.max(1, (b.bytes / max) * ih);
+        svg.append(svgEl("path", { d: topRound(ml + i * slot + (slot - bw) / 2, mt + ih - h, bw, h, 4), fill: TRAFFIC }));
+      }
+      const hit = svgEl("rect", { x: ml + i * slot, y: mt, width: slot, height: ih, fill: "transparent", tabindex: 0,
+        "aria-label": `${hhmm(b.t)}: ${fmtBytes(b.bytes)}, ${b.flows} flow, ${b.alerts} cảnh báo` });
+      const start = new Date(b.t), end = new Date(start.getTime() + data.step_seconds * 1000);
+      bindTip(hit, (px, py) => {
+        band.setAttribute("visibility", "visible");
+        showTip(px, py, `${start.toLocaleTimeString("vi-VN")} – ${end.toLocaleTimeString("vi-VN")}`, [
+          { color: TRAFFIC, name: "lưu lượng", value: fmtBytes(b.bytes) },
+          { name: "flow", value: b.flows },
+          { name: "cảnh báo", value: b.alerts }]);
+      });
+      hit.addEventListener("pointerleave", () => band.setAttribute("visibility", "hidden"));
+      hit.addEventListener("blur", () => band.setAttribute("visibility", "hidden"));
+      svg.append(hit);
+    });
+    box.append(svg);
+  }
+
+  return { legend, timeColumns, ipBars, trafficColumns };
 })();

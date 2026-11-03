@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from nids.api.routes import alerts, rules
+from nids.api.routes import alerts, flows, rules
 from nids.logger import setup_logging
 
 logger = logging.getLogger("nids.api")
@@ -65,6 +65,7 @@ app.add_middleware(
 # ─────────────────────────────────────────────────────────────
 
 app.include_router(alerts.router)
+app.include_router(flows.router)
 app.include_router(rules.router)
 
 class RevalidatingStaticFiles(StaticFiles):
@@ -94,6 +95,12 @@ def dashboard():
 def logs_page():
     """Trang Status › Logs: lọc, xem chi tiết, xoá và xuất CSV sự kiện."""
     return _page("logs.html")
+
+
+@app.get("/traffic", include_in_schema=False)
+def traffic_page():
+    """Trang Status › Traffic: mọi flow, kể cả traffic chưa khớp rule nào."""
+    return _page("traffic.html")
 
 
 @app.get("/health", tags=["System"])

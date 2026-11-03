@@ -27,18 +27,20 @@ FIELDS = ["id", "timestamp", "sid", "source_type", "attack_type", "severity", "s
           "dst_ip", "dst_port", "protocol", "http_method", "http_uri", "summary", "status", "session_id"]
 
 
+def to_utc_naive(value: Optional[datetime]) -> Optional[datetime]:
+    """Đổi giờ có múi về UTC naive để so với cột thời gian (CSDL lưu UTC); giờ không kèm múi giờ coi là UTC."""
+    if value is not None and value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
 def log_filters(source_type: Optional[str] = None, protocol: Optional[str] = None,
                 src_ip: Optional[str] = None, dst_ip: Optional[str] = None, sid: Optional[int] = None,
                 severity: Optional[int] = None, since: Optional[datetime] = None,
                 until: Optional[datetime] = None, q: Optional[str] = None) -> Dict[str, Any]:
-    """Bộ lọc dùng chung cho danh sách, xoá và xuất CSV; chuỗi rỗng coi như không lọc.
-
-    `since`/`until` được đổi về UTC naive để so với cột timestamp (CSDL lưu UTC); giờ không kèm múi giờ coi là UTC.
-    """
+    """Bộ lọc dùng chung cho danh sách, xoá và xuất CSV; chuỗi rỗng coi như không lọc."""
     filters = {k: (v or None) if isinstance(v, str) else v for k, v in locals().items()}
-    for key in ("since", "until"):
-        if filters[key] is not None and filters[key].tzinfo is not None:
-            filters[key] = filters[key].astimezone(timezone.utc).replace(tzinfo=None)
+    filters["since"], filters["until"] = to_utc_naive(since), to_utc_naive(until)
     return filters
 
 

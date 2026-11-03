@@ -5,7 +5,7 @@ paths:
 
 # Thiết kế giao diện kiểu shadcn/ui (`nids/api/static/`)
 
-Web console dùng phong cách shadcn/ui (bảng màu zinc, card viền mảnh, bo góc `0.5rem`, tab dạng pill) nhưng viết bằng **CSS thuần**. Nguồn duy nhất của style là `style.css`; ba trang `dashboard.html`, `logs.html`, `rules.html` chỉ dùng lại class có sẵn. Rule về endpoint và hành vi trang nằm ở `api-web.md`.
+Web console dùng phong cách shadcn/ui (bảng màu zinc, card viền mảnh, bo góc `0.5rem`, tab dạng pill) nhưng viết bằng **CSS thuần**. Nguồn duy nhất của style là `style.css`; các trang `dashboard.html`, `logs.html`, `traffic.html`, `rules.html` chỉ dùng lại class có sẵn. Rule về endpoint và hành vi trang nằm ở `api-web.md`.
 
 ## Nguyên tắc
 
@@ -34,7 +34,7 @@ Web console dùng phong cách shadcn/ui (bảng màu zinc, card viền mảnh, b
 | `--radius` | `0.5rem` | Card, popup; nút và ô nhập dùng `calc(var(--radius) - 2px)` |
 | `--shadow-sm/md/lg` | | Card, popover/tooltip, popup |
 
-Priority chỉ dùng ba màu `--p1..--p3`; không dùng chúng cho mục đích khác. Hai series biểu đồ (NIDS xanh, Honeypot cam) nằm trong `charts.js` vì SVG cần giá trị thật; đổi màu thì sửa cả `:root` lẫn đầu `charts.js` và kiểm tra độ tương phản trên nền trắng.
+Priority chỉ dùng ba màu `--p1..--p3`; không dùng chúng cho mục đích khác. Các series biểu đồ (NIDS xanh, Honeypot cam, lưu lượng aqua) nằm trong `charts.js` vì SVG cần giá trị thật; đổi màu thì sửa cả `:root` lẫn đầu `charts.js` và kiểm tra độ tương phản trên nền trắng.
 
 ## Chữ và khoảng cách
 
@@ -78,6 +78,6 @@ Trang HTML và file tĩnh trả `Cache-Control: no-cache`, và các trang trỏ 
 ## Kiểm tra khi sửa giao diện
 
 1. `pytest tests/api` (có test trang phục vụ đúng và header cache).
-2. Mở cả ba trang `/`, `/logs`, `/rules` (tab Categories và tab Rules); không có trang nào bị vỡ bố cục.
+2. Mở các trang `/`, `/logs`, `/traffic`, `/rules` (tab Categories và tab Rules); không có trang nào bị vỡ bố cục.
 3. Nhìn thử độ rộng hẹp (dưới 640px): form xuống một cột, tổng quan còn 2 cột.
 4. Nội dung có `<script>alert(1)</script>` trong lệnh hoặc URI phải hiện nguyên văn.
