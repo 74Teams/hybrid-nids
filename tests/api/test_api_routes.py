@@ -17,6 +17,7 @@ def test_rules_api_routes():
         "/api/rules/custom": {"get", "put"},
     }
     assert "/api/alerts/" in paths
+    assert {"/api/flows/", "/api/flows/stats"} <= set(paths)
     assert "/health" in paths
 
 

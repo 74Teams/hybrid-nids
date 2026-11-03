@@ -11,7 +11,7 @@
   <a class="brand" href="/">Hybrid<b>NIDS</b></a>
   <ul class="menu">
     <li><span tabindex="0">Services</span><ul><li><a href="/rules">Rules</a></li></ul></li>
-    <li><span tabindex="0">Status</span><ul><li><a href="/">Dashboard</a></li><li><a href="/logs">System Logs</a></li></ul></li>
+    <li><span tabindex="0">Status</span><ul><li><a href="/">Dashboard</a></li><li><a href="/logs">System Logs</a></li><li><a href="/traffic">Traffic</a></li></ul></li>
   </ul>
   <span class="status"><span id="dot" class="dot"></span><span id="status">Đang kết nối…</span></span>
 </nav>
@@ -39,6 +39,20 @@
         <div class="table-wrap"><table>
           <thead><tr><th>Bắt đầu</th><th>NIDS</th><th>Honeypot</th></tr></thead>
           <tbody id="time-table"></tbody>
+        </table></div>
+      </details>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><span class="grow">Lưu lượng theo thời gian</span>
+      <a class="btn btn-success" href="/traffic">Xem traffic</a></div>
+    <div class="panel-body">
+      <div class="chart" id="chart-traffic"></div>
+      <p class="note">Cùng khoảng thời gian và cùng mốc cột với biểu đồ cảnh báo phía trên để so sánh. Byte của một flow tính vào cột chứa thời điểm flow bắt đầu; flow chỉ có sau khi kết thúc.</p>
+      <details class="tableview"><summary>Xem dạng bảng</summary>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Bắt đầu</th><th>Byte</th><th>Flow</th><th>Cảnh báo</th></tr></thead>
+          <tbody id="traffic-table"></tbody>
         </table></div>
       </details>
     </div>
@@ -75,7 +89,7 @@
     </div>
   </section>
 </main>
-<script src="/static/charts.js?v=2"></script>
+<script src="/static/charts.js?v=3"></script>
 <script src="/static/live.js?v=2"></script>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -163,6 +177,17 @@ function renderTimeline(t) {
   }
 }
 
+function renderTraffic(s) {
+  Charts.trafficColumns($("chart-traffic"), { step_seconds: s.step_seconds, buckets: s.buckets });
+  const body = $("traffic-table");
+  body.replaceChildren();
+  for (const b of s.buckets) {
+    const tr = el("tr");
+    tr.append(el("td", "nw", new Date(b.t).toLocaleString("vi-VN")), el("td", "", b.bytes), el("td", "", b.flows), el("td", "", b.alerts));
+    body.append(tr);
+  }
+}
+
 function setStatus(ok) {
   connected = ok;
   $("dot").className = "dot" + (ok ? " ok" : "");
@@ -173,13 +198,15 @@ function setStatus(ok) {
 async function refresh() {
   try {
     const [minutes, buckets] = $("range").value.split(":");
-    const [alerts, stats, attackers, timeline] = await Promise.all([
+    const [alerts, stats, attackers, timeline, traffic] = await Promise.all([
       fetch("/api/alerts/?limit=100").then((r) => r.json()),
       fetch("/api/alerts/stats").then((r) => r.json()),
       fetch("/api/alerts/attackers").then((r) => r.json()),
       fetch(`/api/alerts/timeline?minutes=${minutes}&buckets=${buckets}`).then((r) => r.json()),
+      fetch(`/api/flows/stats?minutes=${minutes}&buckets=${buckets}`).then((r) => r.json()),
     ]);
-    renderAlerts(alerts); renderStats(stats); renderAttackers(attackers); renderTimeline(timeline); setStatus(true);
+    renderAlerts(alerts); renderStats(stats); renderAttackers(attackers); renderTimeline(timeline); renderTraffic(traffic);
+    setStatus(true);
   } catch (e) {
     setStatus(false);
   }
