@@ -247,6 +247,19 @@ def test_recon_dns_tunneling(real_engine):
     assert any(r.sid == 1000502 for r in matched)
 
 
+def test_recon_dns_malformed_short_query(real_engine):
+    pkt = make_udp_packet(dport=53, payload=b"DNS Query")   # 9 byte, không đủ header DNS 12 byte
+    matched = real_engine.evaluate_packet(pkt)
+    assert any(r.sid == 1000509 for r in matched)
+
+
+def test_recon_dns_malformed_short_query_benign(real_engine):
+    # Truy vấn DNS hợp lệ nhỏ nhất (header 12 byte + tên gốc + type/class) và gói ngắn tới cổng khác
+    query = b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x01"
+    assert not any(r.sid == 1000509 for r in real_engine.evaluate_packet(make_udp_packet(dport=53, payload=query)))
+    assert not any(r.sid == 1000509 for r in real_engine.evaluate_packet(make_udp_packet(dport=5353, payload=b"DNS Query")))
+
+
 def test_recon_icmp_timestamp(real_engine):
     pkt = make_icmp_packet(icmp_type=13)
     matched = real_engine.evaluate_packet(pkt)

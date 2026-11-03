@@ -9,7 +9,7 @@ Làm từ tối hôm trước, không làm sát giờ:
 1. Mở Docker Desktop, chờ trạng thái "Engine running".
 2. Build sẵn image: `docker compose build`.
 3. Khởi động: `docker compose up -d`, đợi khoảng 30 giây cho MySQL sẵn sàng.
-4. Kiểm tra engine đã nạp rule: `docker logs nids_engine` phải có dòng `Đã nạp 67 rule` và `Lắng nghe trực tiếp`.
+4. Kiểm tra engine đã nạp rule: `docker logs nids_engine` phải có dòng `Đã nạp 68 rule` và `Lắng nghe trực tiếp`.
 5. Mở dashboard [http://localhost:8000/](http://localhost:8000/), góc trên phải phải báo "Đã kết nối".
 6. Bấm **Xoá dữ liệu** để bảng bắt đầu từ 0.
 7. Chuẩn bị hai cửa sổ cạnh nhau: terminal chạy `docker logs -f nids_engine` và trình duyệt dashboard.
@@ -57,6 +57,7 @@ Bảng dưới gõ trực tiếp trong container attacker (`docker exec -it nids
 | UDP/recon | `snmpget -v1 -c public -t 1 -r 0 172.28.0.50 1.3.6.1.2.1.1.1.0` | 1000501 |
 | UDP/recon | `dig @172.28.0.50 data.c2tunnel.evil.example` (chưa có DNS server, chỉ cần gói UDP tới) | 1000502 |
 | UDP/recon | `dig @172.28.0.50 version.bind CH TXT` | 1000508 |
+| UDP/recon | `echo -n "DNS Query" \| nc -u -w1 172.28.0.50 53` (gói 9 byte, ngắn hơn header DNS) | 1000509 |
 | UDP/recon | `dig @172.28.0.50 example.com AXFR +tcp` | 1000506 |
 | Flood (hping3) | `hping3 -S -p 80 --flood 172.28.0.50` rồi Ctrl+C sau 2–3 giây | 1000201 |
 | Flood (hping3) | `hping3 --udp -p 9999 --flood 172.28.0.50` rồi Ctrl+C sau 2–3 giây | 1000205 |
@@ -122,7 +123,7 @@ Bảng dưới gõ trực tiếp trong container attacker (`docker exec -it nids
 
 **Có dương tính giả không?** Mỗi rule có test gói tấn công và gói lành tính gần giống (`tests/lab/test_demo_rules.py`, `tests/engine/test_diverse_rules_engine.py`). Rule dựa trên tần suất dùng `detection_filter` để một gói hợp lệ đơn lẻ không gây cảnh báo.
 
-**Bộ rule lấy từ đâu?** 67 rule tự viết, chia theo nhóm SID (WEB, SCAN, DOS, AUTH, MALWARE/C2, RECON). Có sẵn bộ community của Snort ở `rules/vendor/` nhưng mặc định không nạp.
+**Bộ rule lấy từ đâu?** 68 rule tự viết, chia theo nhóm SID (WEB, SCAN, DOS, AUTH, MALWARE/C2, RECON). Có sẵn bộ community của Snort ở `rules/vendor/` nhưng mặc định không nạp.
 
 **Thêm rule mới thế nào?** Rule built-in: thêm vào file của nhóm (`rules/<nhóm>.rules`); rule tạm: viết trong `custom.rules` ngay trên trang Services › Rules. Engine tự nạp lại sau vài giây, không cần khởi động lại. Mỗi rule mới cần test positive/negative và một đòn trong `lab/attacker/attack_demo.py` (có test kiểm tra rule nào cũng có đòn trình diễn).
 

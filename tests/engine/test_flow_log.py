@@ -123,7 +123,8 @@ def test_replaying_a_pcap_logs_flows_with_and_without_alerts(db, monkeypatch, tm
         tcp("10.0.0.5", 50000, "10.0.0.9", 80, "A", 0.06),
         tcp("10.0.0.6", 50001, "10.0.0.9", 80, "S", 1), tcp("10.0.0.9", 80, "10.0.0.6", 50001, "SA", 1.01),
         tcp("10.0.0.6", 50001, "10.0.0.9", 80, "A", 1.02), tcp("10.0.0.6", 50001, "10.0.0.9", 80, "PA", 1.03, benign),
-        Ether() / IP(src="10.0.0.6", dst="8.8.8.8") / UDP(sport=5353, dport=53) / Raw(b"\x00\x01"),
+        # Truy vấn DNS hợp lệ (header 12 byte + tên gốc + type/class) để flow này không khớp rule nào
+        Ether() / IP(src="10.0.0.6", dst="8.8.8.8") / UDP(sport=5353, dport=53) / Raw(b"\x12\x34\x01\x00\x00\x01" + b"\x00" * 7 + b"\x00\x01\x00\x01"),
     ]
     packets[-1].time = base + 2
     pcap = tmp_path / "flows.pcap"
