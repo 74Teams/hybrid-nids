@@ -1,6 +1,6 @@
 import time
 from typing import Optional
-from scapy.all import IP, IPv6, TCP, UDP, ICMP, Raw
+from scapy.all import IP, IPv6, TCP, UDP, ICMP, Padding, Raw
 from scapy.packet import Packet
 
 from nids.config import get_rule_variables
@@ -89,8 +89,16 @@ class PacketDecoder:
             icmp_type = scapy_pkt[ICMP].type
             icmp_code = scapy_pkt[ICMP].code
 
-        # Payload thô (bytes)
-        raw_payload = bytes(scapy_pkt[Raw].load) if scapy_pkt.haslayer(Raw) else b""
+        # Payload thô: mọi byte sau header L4. Không lấy lớp Raw vì Scapy tự bóc payload cổng 53 thành lớp DNS
+        # (hay ICMP lỗi thành IPerror...), khi đó không còn Raw và rule content/dsize thấy payload rỗng.
+        l4 = scapy_pkt.getlayer(TCP) or scapy_pkt.getlayer(UDP) or scapy_pkt.getlayer(ICMP)
+        if l4 is not None:
+            raw_payload = bytes(l4.payload)
+            padding = l4.payload.getlayer(Padding)
+            if padding is not None:   # byte độn Ethernet cho frame < 60 byte, không phải dữ liệu của gói
+                raw_payload = raw_payload[:len(raw_payload) - len(bytes(padding))]
+        else:
+            raw_payload = bytes(scapy_pkt[Raw].load) if scapy_pkt.haslayer(Raw) else b""
 
         # Tạo DecodedPacket cơ bản
         decoded = DecodedPacket(
