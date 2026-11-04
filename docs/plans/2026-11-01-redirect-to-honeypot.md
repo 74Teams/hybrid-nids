@@ -1,6 +1,6 @@
 ---
 type: PLAN
-plan_id: PLAN-004
+plan_id: PLAN-005
 title: Chuyển hướng traffic của IP đáng ngờ sang honeypot
 status: IN_PROGRESS
 issue: 29
@@ -9,7 +9,7 @@ created: 2026-11-01
 updated: 2026-11-01
 ---
 
-# PLAN-004: Chuyển hướng traffic của IP đáng ngờ sang honeypot
+# PLAN-005: Chuyển hướng traffic của IP đáng ngờ sang honeypot
 
 ## 1. Bối cảnh
 

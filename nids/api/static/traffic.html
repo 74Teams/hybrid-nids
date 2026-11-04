@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hybrid NIDS Traffic</title>
+<link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+<nav class="navbar">
+  <a class="brand" href="/">Hybrid<b>NIDS</b></a>
+  <ul class="menu">
+    <li><span tabindex="0">Services</span><ul><li><a href="/rules">Rules</a></li></ul></li>
+    <li><span tabindex="0">Status</span><ul><li><a href="/">Dashboard</a></li><li><a href="/logs">System Logs</a></li><li><a href="/traffic">Traffic</a></li></ul></li>
+  </ul>
+  <span class="status"><span id="dot" class="dot"></span><span id="status">Đang kết nối…</span></span>
+</nav>
+<div class="crumb-wrap"><div class="breadcrumb"><a href="/">Status</a><span class="sep">/</span><a href="/traffic">Traffic</a><span class="sep">/</span><span class="cur" id="crumb">Tất cả</span></div></div>
+<main>
+  <nav class="tabs" id="tabs">
+    <a href="#all">Tất cả</a>
+    <a href="#unmatched">Chưa khớp rule</a>
+    <a href="#matched">Có cảnh báo</a>
+  </nav>
+
+  <section class="panel">
+    <div class="panel-head"><span class="grow">Bộ lọc flow</span>
+      <button type="button" class="toggle" id="toggle" aria-expanded="false" aria-controls="filter" title="Mở / thu gọn">⊕</button></div>
+    <form class="panel-body" id="filter" hidden>
+      <div class="form-cols">
+        <div>
+          <div class="form-row"><label for="f-src">IP nguồn</label><input id="f-src" name="src_ip" placeholder="vd. 172.28.0.100"></div>
+          <div class="form-row"><label for="f-dst">IP đích</label><input id="f-dst" name="dst_ip"></div>
+          <div class="form-row"><label for="f-port">Cổng đích</label><input id="f-port" name="dst_port" type="number" min="0" max="65535"></div>
+        </div>
+        <div>
+          <div class="form-row"><label for="f-proto">Protocol</label><select id="f-proto" name="protocol"><option value="">Tất cả</option><option>TCP</option><option>UDP</option><option>ICMP</option></select></div>
+          <div class="form-row"><label for="f-since">Từ thời điểm</label><input id="f-since" name="since" type="datetime-local" step="1"></div>
+          <div class="form-row"><label for="f-until">Đến thời điểm</label><input id="f-until" name="until" type="datetime-local" step="1"></div>
+        </div>
+      </div>
+      <div class="form-row"><label for="f-limit">Số dòng / trang</label><select id="f-limit" name="limit" style="max-width:120px"><option>25</option><option selected>50</option><option>100</option><option>500</option></select></div>
+      <div class="actions">
+        <button type="submit" class="btn-primary">Áp dụng</button>
+        <button type="reset" class="btn-warning">Đặt lại</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><span class="grow">Flow đã kết thúc (mới nhất ở trên)</span>
+      <label class="check"><input type="checkbox" id="auto" checked> Tự làm mới</label>
+      <button type="button" id="reload">Làm mới</button></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Bắt đầu</th><th>Thời lượng</th><th>Proto</th><th>Nguồn</th><th>Đích</th><th>Gói đi / về</th><th>Byte đi / về</th><th>Cờ TCP</th><th>Kết thúc</th><th>Cảnh báo</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="empty" class="empty">Không có flow nào khớp bộ lọc. Flow chỉ được ghi sau khi kết thúc (FIN/RST hoặc hết idle timeout).</div>
+    </div>
+    <div class="pager">
+      <span id="range">0 / 0</span>
+      <span><button type="button" id="prev">‹ Trước</button> <button type="button" id="next">Sau ›</button></span>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const TABS = {
+  all:       { name: "Tất cả", params: {} },
+  unmatched: { name: "Chưa khớp rule", params: { matched: "false" } },
+  matched:   { name: "Có cảnh báo", params: { matched: "true" } },
+};
+const END_LABELS = { fin: "FIN", rst: "RST", idle: "Hết idle", active: "Quá thời lượng", evicted: "Bảng đầy", shutdown: "Engine dừng" };
+const POLL_MS = 10000;   // flow chỉ ghi theo lô nên không có tín hiệu realtime, poll là đủ
+let offset = 0, total = 0, timer = null;
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined && text !== null) e.textContent = text;
+  return e;
+}
+const fmtBytes = (n) => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+const fmtDuration = (s) => s < 1 ? `${Math.round(s * 1000)} ms` : s < 60 ? `${s.toFixed(1)} giây` : `${Math.floor(s / 60)} phút ${Math.round(s % 60)} giây`;
+const endpoint = (ip, port) => port == null ? ip : `${ip}:${port}`;
+const tabKey = () => TABS[location.hash.slice(1)] ? location.hash.slice(1) : "all";
+const pageSize = () => Number($("filter").elements.limit.value);
+
+function filterQuery() {
+  const p = new URLSearchParams(TABS[tabKey()].params);
+  for (const [k, v] of new FormData($("filter"))) {
+    if (k === "limit" || v === "") continue;
+    // Ô datetime-local là giờ máy người xem; API dùng UTC nên đổi sang ISO UTC trước khi gửi
+    const t = (k === "since" || k === "until") ? new Date(v) : null;
+    p.set(k, t && !isNaN(t) ? t.toISOString() : v);
+  }
+  return p;
+}
+
+function setPanel(open) {
+  $("filter").hidden = !open;
+  $("toggle").textContent = open ? "⊖" : "⊕";
+  $("toggle").setAttribute("aria-expanded", open);
+}
+
+function setStatus(ok) {
+  $("dot").className = "dot" + (ok ? " ok" : "");
+  $("status").textContent = ok ? "Đã kết nối" : "Mất kết nối tới API";
+}
+
+function renderRows(list) {
+  const body = $("rows");
+  body.replaceChildren();
+  $("empty").style.display = list.length ? "none" : "block";
+  for (const f of list) {
+    const d = new Date(f.first_seen);
+    const when = el("td", "nw", d.toLocaleDateString("vi-VN"));
+    when.append(el("span", "sub", d.toLocaleTimeString("vi-VN")));
+    const alerts = el("td", "nw");
+    if (f.alert_count > 0) {
+      const link = el("a", "", `${f.alert_count} cảnh báo`);
+      link.href = "/logs?" + new URLSearchParams({ src_ip: f.src_ip, dst_ip: f.dst_ip });
+      link.title = "Xem cảnh báo của cặp IP này trong System Logs";
+      alerts.append(link);
+    } else {
+      alerts.append("–");
+    }
+    const tr = el("tr");
+    tr.append(when, el("td", "nw", fmtDuration(f.duration)), el("td", "", f.protocol),
+      el("td", "nw", endpoint(f.src_ip, f.src_port)), el("td", "nw", endpoint(f.dst_ip, f.dst_port)),
+      el("td", "nw", `${f.fwd_packets} / ${f.bwd_packets}`),
+      el("td", "nw", `${fmtBytes(f.fwd_bytes)} / ${fmtBytes(f.bwd_bytes)}`),
+      el("td", "", f.tcp_flags || "–"), el("td", "nw", END_LABELS[f.end_reason] || f.end_reason), alerts);
+    body.append(tr);
+  }
+}
+
+async function load() {
+  const q = filterQuery();
+  q.set("limit", pageSize()); q.set("offset", offset);
+  try {
+    const r = await fetch("/api/flows/?" + q);
+    if (!r.ok) throw new Error(r.status);
+    total = Number(r.headers.get("X-Total-Count") || 0);
+    const list = await r.json();
+    renderRows(list);
+    $("range").textContent = list.length ? `${offset + 1}–${offset + list.length} / ${total} flow` : `0 / ${total} flow`;
+    $("prev").disabled = offset === 0;
+    $("next").disabled = offset + list.length >= total;
+    setStatus(true);
+  } catch (e) {
+    setStatus(false);
+  }
+}
+
+function selectTab() {
+  const key = tabKey();
+  for (const a of $("tabs").children) a.classList.toggle("active", a.hash === "#" + key);
+  $("crumb").textContent = TABS[key].name;
+  offset = 0;
+  load();
+}
+
+function syncAuto() {
+  clearInterval(timer);
+  timer = $("auto").checked ? setInterval(load, POLL_MS) : null;
+}
+
+$("filter").addEventListener("submit", (e) => { e.preventDefault(); offset = 0; load(); });
+$("filter").addEventListener("reset", () => setTimeout(() => { offset = 0; load(); }));
+$("prev").addEventListener("click", () => { offset = Math.max(0, offset - pageSize()); load(); });
+$("next").addEventListener("click", () => { offset += pageSize(); load(); });
+$("reload").addEventListener("click", load);
+$("auto").addEventListener("change", syncAuto);
+$("toggle").addEventListener("click", () => setPanel($("filter").hidden));
+window.addEventListener("hashchange", selectTab);
+
+for (const [k, v] of new URLSearchParams(location.search)) {
+  const f = $("filter").elements[k];
+  if (f && k !== "limit") { f.value = v; setPanel(true); }
+}
+selectTab();
+syncAuto();
+</script>
+</body>
+</html>

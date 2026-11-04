@@ -282,6 +282,88 @@ class EventRepository:
             session.close()
 
     @staticmethod
+    def _apply_flow_filters(query, src_ip: Optional[str] = None, dst_ip: Optional[str] = None,
+                            protocol: Optional[str] = None, dst_port: Optional[int] = None,
+                            since: Optional[datetime] = None, until: Optional[datetime] = None,
+                            matched: Optional[bool] = None):
+        """Áp bộ lọc trang Traffic; `matched` True/False là flow có/không khớp rule nào, None là không lọc."""
+        if src_ip:
+            query = query.filter(FlowModel.src_ip == src_ip)
+        if dst_ip:
+            query = query.filter(FlowModel.dst_ip == dst_ip)
+        if protocol:
+            query = query.filter(func.lower(FlowModel.protocol) == protocol.lower())
+        if dst_port is not None:
+            query = query.filter(FlowModel.dst_port == dst_port)
+        if since:
+            query = query.filter(FlowModel.first_seen >= since)
+        if until:
+            query = query.filter(FlowModel.first_seen <= until)
+        if matched is not None:
+            query = query.filter(FlowModel.alert_count > 0 if matched else FlowModel.alert_count == 0)
+        return query
+
+    @staticmethod
+    def get_flows(limit: int = 50, offset: int = 0, **filters) -> List[FlowModel]:
+        """Flow mới nhất (theo `first_seen`) khớp bộ lọc."""
+        from nids.db import SessionLocal
+        session = SessionLocal()
+        try:
+            query = EventRepository._apply_flow_filters(session.query(FlowModel), **filters)
+            return query.order_by(FlowModel.first_seen.desc(), FlowModel.id.desc()).offset(offset).limit(limit).all()
+        finally:
+            session.close()
+
+    @staticmethod
+    def count_flows(**filters) -> int:
+        from nids.db import SessionLocal
+        session = SessionLocal()
+        try:
+            return EventRepository._apply_flow_filters(session.query(func.count(FlowModel.id)), **filters).scalar() or 0
+        finally:
+            session.close()
+
+    @staticmethod
+    def get_flow_stats(minutes: int = 60, buckets: int = 30, top: int = 8) -> Dict[str, Any]:
+        """Thống kê traffic trong `minutes` phút gần nhất: top talker, top cổng đích, protocol,
+        và byte/flow/cảnh báo theo `buckets` cột cùng mốc (byte của flow tính vào cột chứa `first_seen`)."""
+        from nids.db import SessionLocal
+        step = minutes * 60 / buckets
+        start = utc_now() - timedelta(minutes=minutes)
+        total_bytes = FlowModel.fwd_bytes + FlowModel.bwd_bytes
+        session = SessionLocal()
+        try:
+            recent = session.query(FlowModel).filter(FlowModel.first_seen >= start)
+            talkers = (recent.with_entities(FlowModel.src_ip, func.sum(total_bytes), func.count(FlowModel.id))
+                       .group_by(FlowModel.src_ip).order_by(func.sum(total_bytes).desc()).limit(top).all())
+            ports = (recent.with_entities(FlowModel.dst_port, func.count(FlowModel.id))
+                     .filter(FlowModel.dst_port.isnot(None))
+                     .group_by(FlowModel.dst_port).order_by(func.count(FlowModel.id).desc()).limit(top).all())
+            protocols = (recent.with_entities(FlowModel.protocol, func.count(FlowModel.id), func.sum(total_bytes))
+                         .group_by(FlowModel.protocol).order_by(func.count(FlowModel.id).desc()).all())
+            flow_rows = recent.with_entities(FlowModel.first_seen, total_bytes).all()
+            alert_rows = session.query(EventModel.timestamp).filter(EventModel.timestamp >= start).all()
+        finally:
+            session.close()
+
+        cols = [{"t": iso_utc(start + timedelta(seconds=i * step), "seconds"), "bytes": 0, "flows": 0, "alerts": 0}
+                for i in range(buckets)]
+        index = lambda ts: min(int((ts - start).total_seconds() // step), buckets - 1)
+        for ts, size in flow_rows:
+            col = cols[index(ts)]
+            col["bytes"] += int(size or 0)
+            col["flows"] += 1
+        for (ts,) in alert_rows:
+            cols[index(ts)]["alerts"] += 1
+        return {
+            "step_seconds": step,
+            "buckets": cols,
+            "top_talkers": [{"ip": ip, "bytes": int(b or 0), "flows": n} for ip, b, n in talkers],
+            "top_ports": [{"port": port, "flows": n} for port, n in ports],
+            "protocols": [{"protocol": p, "flows": n, "bytes": int(b or 0)} for p, n, b in protocols],
+        }
+
+    @staticmethod
     def delete_event(event_id: int) -> bool:
         """Xoá một cảnh báo cùng payload của nó; False nếu không có."""
         from nids.db import SessionLocal
