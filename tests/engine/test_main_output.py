@@ -28,6 +28,22 @@ def test_format_alert_icmp_and_ai():
     assert format_alert(alert) == "[P2] AI-ANOMALY  X  1.1.1.1 → 2.2.2.2"
 
 
+def test_format_alert_threshold_anomaly():
+    alert = {**ALERT, "severity": 2, "sid": None, "source_type": "ANOMALY", "dst_port": None}
+    assert format_alert(alert) == "[P2] ANOMALY  X  1.1.1.1:5 → 2.2.2.2"
+
+
+def test_anomaly_error_is_logged_and_does_not_escape(caplog):
+    class Broken:
+        def observe(self, packet):
+            raise RuntimeError("hỏng")
+
+    with caplog.at_level(logging.ERROR, logger="nids.engine"):
+        main.observe_anomaly(Broken(), object())
+        main.observe_anomaly(None, object())
+    assert "hỏng" in caplog.text
+
+
 def test_format_summary():
     assert format_summary(10, Counter({1: 2, 3: 1})) == "Hoàn tất: 10 gói, 3 cảnh báo (P1: 2, P2: 0, P3: 1)"
     assert format_summary(5, Counter()) == "Hoàn tất: 5 gói, 0 cảnh báo (P1: 0, P2: 0, P3: 0)"

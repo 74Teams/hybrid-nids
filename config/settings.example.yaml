@@ -55,6 +55,16 @@ database:
   password: ""
   name: "nids_db"
 
+anomaly:
+  # Phát hiện bất thường theo ngưỡng cho tấn công chưa có rule; cảnh báo có source_type ANOMALY, không có SID
+  enabled: true
+  suppress_seconds: 60      # mỗi loại (theo nguồn / đích) chỉ báo một lần trong ngần này giây
+  max_tracked: 10000        # số IP giữ trạng thái; đầy thì bỏ IP lâu nhất không có gói
+  scan:  { window: 5, ports: 15, hosts: 10 }    # một nguồn mở kết nối tới >= ports đích hoặc >= hosts máy trong window giây
+  flood: { window: 1, packets: 500, syn: 100 }  # một đích nhận >= packets gói hoặc >= syn SYN trong window giây
+  # Cổng thường gặp; TCP SYN tới cổng ngoài danh sách (hoặc UDP < 1024) sinh cảnh báo P3 "Rare port"
+  common_ports: [20, 21, 22, 23, 25, 53, 67, 68, 80, 110, 123, 143, 161, 443, 445, 993, 995, 2222, 3000, 3306, 3389, 5000, 6379, 8000, 8080]
+
 redis:
   # Kênh đẩy cảnh báo thời gian thực tới dashboard. host rỗng = tắt, dashboard tự quay về poll.
   # Mật khẩu đặt qua biến môi trường NIDS_REDIS_PASSWORD (.env), không ghi vào file này.

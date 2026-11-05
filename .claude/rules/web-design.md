@@ -34,7 +34,7 @@ Web console dùng phong cách shadcn/ui (bảng màu zinc, card viền mảnh, b
 | `--radius` | `0.5rem` | Card, popup; nút và ô nhập dùng `calc(var(--radius) - 2px)` |
 | `--shadow-sm/md/lg` | | Card, popover/tooltip, popup |
 
-Priority chỉ dùng ba màu `--p1..--p3`; không dùng chúng cho mục đích khác. Các series biểu đồ (NIDS xanh, Honeypot cam, lưu lượng aqua) nằm trong `charts.js` vì SVG cần giá trị thật; đổi màu thì sửa cả `:root` lẫn đầu `charts.js` và kiểm tra độ tương phản trên nền trắng.
+Priority chỉ dùng ba màu `--p1..--p3`; không dùng chúng cho mục đích khác. Các series biểu đồ (NIDS xanh, Honeypot cam, Anomaly aqua; lưu lượng là chuỗi đơn nên dùng xám `MUTED`) nằm trong `charts.js` vì SVG cần giá trị thật; đổi màu thì sửa cả `:root` lẫn đầu `charts.js` và kiểm tra độ tương phản trên nền trắng.
 
 ## Chữ và khoảng cách
 

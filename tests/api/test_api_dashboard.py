@@ -289,3 +289,14 @@ def test_redirects_active_false_includes_history_newest_first(client):
 
 def test_redirects_empty_when_none(client):
     assert client.get("/api/redirects/").json() == []
+
+
+def test_anomaly_alerts_have_their_own_timeline_series_and_filter(client):
+    EventRepository.save_alert(_alert(1, "SQLi", 1))
+    EventRepository.save_alert({**_alert(None, "ANOMALY Port scan", 2), "source_type": "ANOMALY",
+                                "matched_content": "15 cổng/đích trong 5s"})
+    data = client.get("/api/alerts/timeline?minutes=60&buckets=30").json()
+    assert sum(b["anomaly"] for b in data["buckets"]) == 1 and sum(b["nids"] for b in data["buckets"]) == 1
+    rows = client.get("/api/alerts/?source_type=ANOMALY").json()
+    assert [(r["summary"], r["sid"]) for r in rows] == [("ANOMALY Port scan", None)]
+    assert client.get(f"/api/alerts/{rows[0]['id']}").json()["payload"]["matched_content"] == "15 cổng/đích trong 5s"

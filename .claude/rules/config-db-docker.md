@@ -17,10 +17,11 @@ paths:
 
 ## Database
 
-- Bốn bảng: `events`, `event_payloads`, `flows`, `redirects`. Engine và honeypot cùng ghi vào `events`, phân biệt bằng `source_type` (`RULE_ENGINE` / `HONEYPOT`).
+- Bốn bảng: `events`, `event_payloads`, `flows`, `redirects`. Engine và honeypot cùng ghi vào `events`, phân biệt bằng `source_type` (`RULE_ENGINE` / `HONEYPOT` / `ANOMALY`; `ANOMALY` là lớp phát hiện theo ngưỡng của engine, `sid` NULL).
 - `flows` là flow log của engine: mỗi dòng là một flow đã kết thúc (số gói/byte hai chiều, cờ TCP, `end_reason`, `alert_count`; `alert_count = 0` nghĩa là không khớp rule nào). Engine ghi theo lô và tự xoá flow cũ hơn `flow.retention_hours` theo cột `created_at` (thời điểm ghi, không phải giờ của gói). Cấu hình ở mục `flow` trong `settings.yaml`.
 - Mọi cột thời gian (`events.timestamp`, `flows.*`) luôn lưu **UTC naive** (không kèm múi giờ), bất kể múi giờ của máy chạy engine hay API. Dùng `nids.db.models.utc_now()` để lấy giờ hiện tại và `utc_from_epoch(ts)` để đổi epoch; không dùng `datetime.now()`, `datetime.utcnow()` hay `fromtimestamp` không có `tz`.
 - Mục `detection.variables` khai báo biến header rule (`HTTP_PORTS`, `HOME_NET`...), đọc qua `get_rule_variables()`; đổi xong phải khởi động lại engine và API, và quote mọi giá trị trong YAML (`!$HOME_NET` không quote là YAML tag).
+- Mục `anomaly` cấu hình lớp phát hiện bất thường (`enabled`, `suppress_seconds`, `max_tracked`, `scan`, `flood`, `common_ports`); thiếu mục hoặc thiếu khoá thì dùng `DEFAULTS` trong `nids/engine/anomaly.py`, `enabled: false` tắt hẳn.
 - Mục `redis` (`host`, `port`, `password`) cấu hình kênh đẩy cảnh báo realtime; `host` rỗng = tắt. Biến `NIDS_REDIS_HOST/PORT/PASSWORD` ghi đè (compose dựa vào đây), đọc qua `get_redis_settings()`. Mật khẩu Redis ở `.env` (`NIDS_REDIS_PASSWORD`), file mẫu để trống.
 - `redirects` là nhật ký chuyển hướng IP sang honeypot (`nids.redirector` ghi, `GET /api/redirects` đọc): `ip`, `created_at`, `expires_at`, `removed_at` (NULL = đang hiệu lực), `alert_count`, `reason`. Là bảng mới nên `create_all` tự tạo, không cần `_add_missing_columns`.
 - Mục `redirect` (`enabled`, `window_seconds`, `min_alerts`, `max_priority`, `ttl_seconds`, `poll_interval`, `ports`, `allowlist`) đọc qua `get_redirect_settings()`; giá trị sai thì ghi `ERROR` và dùng mặc định. Mặc định trong code là `enabled: false`, file mẫu bật sẵn.

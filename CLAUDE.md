@@ -21,7 +21,7 @@ Hybrid NIDS + honeypot (đồ án PBL4): hệ thống phát hiện xâm nhập m
 
 Lệnh luôn chạy từ thư mục gốc repo (`pytest.ini` đặt `pythonpath = .`).
 
-- `nids/engine/` — process engine (`python -m nids.engine`): capture, decode, rule parser, Aho-Corasick, detection, threshold, `flow.py` (gom flow), `stream.py` (tái hợp TCP)
+- `nids/engine/` — process engine (`python -m nids.engine`): capture, decode, rule parser, Aho-Corasick, detection, threshold, `flow.py` (gom flow), `stream.py` (tái hợp TCP), `anomaly.py` (phát hiện bất thường theo ngưỡng, cảnh báo `ANOMALY`)
 - `nids/api/` — process FastAPI: `routes/` (alerts, flows, rules), `static/` (dashboard, logs, traffic, rules page)
 - `nids/honeypot/` — honeypot SSH và HTTP (`python -m nids.honeypot ssh|http`), `store.py` ghi sự kiện
 - `nids/redirector/` — process chuyển hướng IP đáng ngờ sang honeypot bằng iptables (`python -m nids.redirector`, chỉ chạy trong Docker lab)
@@ -69,7 +69,7 @@ Các process (engine, API, redirector, mỗi honeypot một process) chạy riê
 - Quản lý rule nhiều file (branch `feature/rule-management`): category, override theo SID, sửa `custom.rules` trên trang Rules kiểu pfSense.
 - Thiết kế AI worker theo flow (`docs/ai/`) để thay stub trong `nids/ai.py` mà không phải sửa capture, decoder, DB hay API.
 - Cảnh báo realtime qua Redis pub/sub + WebSocket (branch `feature/30-realtime-alert-push`, PLAN-001, issue #30).
-- Xem traffic và phát hiện bất thường theo ngưỡng (PLAN-004): API flows + trang Traffic (#40, #41, branch `feature/40-flow-traffic-view`), sau đó cảnh báo `ANOMALY` (#42).
+- Xem traffic và phát hiện bất thường theo ngưỡng (PLAN-004): API flows + trang Traffic (#40, #41, đã merge), cảnh báo `ANOMALY` theo ngưỡng (#42, branch `feature/42-anomaly-detection`).
 - Chuyển hướng IP đáng ngờ sang honeypot (branch `feature/29-redirect-to-honeypot`, PLAN-005, issue #29).
 - Phía honeypot chưa có route catch-all, giới hạn tài nguyên.
 

@@ -27,6 +27,7 @@ Kiểm tra nhanh toàn bộ chuỗi (30 giây): `docker exec -it nids_attacker p
 | 5. DoS | SYN/UDP/ICMP/HTTP flood. Rule dùng `detection_filter` (đếm trong cửa sổ thời gian), một gói đơn lẻ không bắn. | `... attack_demo.py dos` | Flood chỉ bắn sau ngưỡng; `ThresholdManager` chặn bão alert |
 | 6. Brute force và mã độc | SSH/FTP/web brute force, reverse shell, Mimikatz, cryptominer. | `... attack_demo.py auth` rồi `... attack_demo.py malware` | SID 10003xx, 10004xx |
 | 7. Recon | SNMP, DNS tunneling/AXFR, ICMP, NetBIOS, SSDP. | `... attack_demo.py recon` | SID 10005xx |
+| 7b. Tấn công chưa có rule | Lớp phát hiện bất thường theo ngưỡng bắt thứ rule bỏ sót: quét chậm 8 cổng/giây chỉ có ~16 SYN mỗi 2 giây, dưới ngưỡng rule 1000107 (> 20 SYN / 2 giây), nhưng một nguồn chạm ≥ 15 cổng trong 5 giây là bất thường. Trang Status › Traffic, tab "Chưa khớp rule", cho thấy traffic chưa có rule nào bắt. | `docker exec -it nids_attacker nmap -sS -p 1000-1030 --max-rate 8 172.28.0.50` | Logs tab Anomaly: một dòng `ANOMALY Port scan` (P2, SID `–`), popup có danh sách cổng |
 | 8. Tổng kết | Dashboard: tổng cảnh báo theo P1/P2/P3 và top loại tấn công. Mở `/docs` cho thấy API. | Mở [http://localhost:8000/docs](http://localhost:8000/docs) | |
 
 Mỗi lệnh `attack_demo.py` nghỉ 1,5 giây giữa các đòn để khán giả theo dõi kịp (đổi bằng `--delay`). Chạy lại sau khi bấm **Xoá dữ liệu** để lặp lại phần nào đó.
