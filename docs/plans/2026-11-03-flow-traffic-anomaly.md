@@ -71,7 +71,7 @@ worker: evaluate_with_stream → ai_worker → flow_log.on_packet → anomaly.ob
   - **Flood**: theo `dst_ip`, số gói trong `flood.window` ≥ `flood.packets` → P1 `ANOMALY Packet flood`; số SYN không ACK ≥ `flood.syn` → P1 `ANOMALY SYN flood`.
   - **Hiếm (bản hẹp)**: TCP SYN không ACK tới cổng ngoài `common_ports`, UDP tới cổng < 1024 ngoài `common_ports`, ICMP type ngoài {0, 3, 8, 11} → P3 `ANOMALY Rare port/ICMP`. Bỏ qua nếu `src_ip` đang bị đánh dấu scan.
   - Cửa sổ dùng `deque` theo `packet.timestamp` như `_detection_filter_reached`. Bảng trạng thái là `OrderedDict` giới hạn `max_tracked` IP, dọn mục hết cửa sổ mỗi giây (theo giờ gói), giống `FlowTracker`.
-  - Chặn bớt: một `ThresholdManager(default_window_seconds=suppress_seconds)` riêng, khoá `(kind, src, dst, port)`. Scan khoá theo `src`, flood theo `dst`, hiếm theo đủ bốn.
+  - Chặn bớt: một `ThresholdManager(default_window_seconds=suppress_seconds)` riêng, khoá `(kind, src, dst, port)`. Scan và hiếm khoá theo `src`, flood theo `dst`.
   - `alert_data`: `sid=None`, `source_type="ANOMALY"`, `msg`, `severity`, `classtype` (`attempted-recon` / `denial-of-service` / `misc-activity`), IP/cổng/protocol, `matched_content` là bằng chứng (vd `"18 cổng trong 5s: 20,25,30,…"`).
 - `main.py`: dựng từ `SETTINGS["anomaly"]` (`enabled: false` thì không dựng); lời gọi `observe` trong worker bọc `try/except` chỉ ghi `logger.error`, như `FlowLog.on_packet`, để lỗi anomaly không dừng worker; `format_alert` in nhãn `ANOMALY` khi `source_type == "ANOMALY"`. `alert_count` của flow vẫn chỉ đếm rule.
 - `settings.example.yaml` thêm mục `anomaly` (giá trị mặc định ở mục 7).
@@ -136,15 +136,15 @@ PR1 — nhánh `feature/40-flow-traffic-view`
 - [x] Route `/traffic`, `traffic.html`, mục menu ở 3 trang
 - [x] `trafficColumns` trong `charts.js` (đọc skill `dataviz` trước khi vẽ) và card trên dashboard
 - [x] Cập nhật `api-web.md`, `web-design.md`, `CLAUDE.md`; `pytest`; xác minh mục 9 bước 2 (phần API)
-- [ ] PR `feat(web): add flow API and traffic page (#40, #41)`, cập nhật bảng tổng hợp
+- [x] PR `feat(web): add flow API and traffic page (#40, #41)` (#61, đã merge), cập nhật bảng tổng hợp
 
 PR2 — nhánh `feature/42-anomaly-detection` (sau khi PR1 merge)
 
-- [ ] `anomaly.py` + `tests/engine/test_anomaly.py`
-- [ ] Nối vào `main.py`, `format_alert`, mục `anomaly` trong `settings.example.yaml`
-- [ ] `get_timeline` + `charts.js` + Logs/dashboard nhận `ANOMALY`
-- [ ] Cập nhật `engine.md`, `config-db-docker.md`, `api-web.md`, `CLAUDE.md`, kịch bản demo
-- [ ] `pytest`, xác minh mục 9 bước 1, 3, 4
+- [x] `anomaly.py` + `tests/engine/test_anomaly.py`
+- [x] Nối vào `main.py`, `format_alert`, mục `anomaly` trong `settings.example.yaml`
+- [x] `get_timeline` + `charts.js` + Logs/dashboard nhận `ANOMALY`
+- [x] Cập nhật `engine.md`, `config-db-docker.md`, `api-web.md`, `CLAUDE.md`, kịch bản demo
+- [x] `pytest`, xác minh mục 9 bước 1 (bước 3, 4 chưa chạy trong Docker lab)
 - [ ] PR `feat(engine): add threshold-based anomaly detection (#42)`, chuyển plan sang `DONE` khi cả hai PR merge
 
 ## 12. Quyết định và nhật ký
@@ -162,6 +162,8 @@ PR2 — nhánh `feature/42-anomaly-detection` (sau khi PR1 merge)
 | 2026-11-03 | Link flow → Logs chỉ truyền `src_ip`, `dst_ip` | Claude | `logs.html` điền bộ lọc theo tên ô; `since/until` dạng `datetime-local` cần đổi múi giờ, không đáng thêm logic |
 | 2026-11-03 | Trang Traffic poll 10 s, không dùng WebSocket | Claude | Flow chỉ ghi theo lô, không có tín hiệu Redis |
 | 2026-11-03 | Đổi biểu đồ dashboard từ hai trục y (cột byte + đường cảnh báo) sang biểu đồ lưu lượng riêng, cùng mốc cột với biểu đồ cảnh báo có sẵn (small multiples), màu aqua `#1baf7a` | Claude | Skill `dataviz` cấm hai trục y trên một khung; `validate_palette.js` cho aqua qua mọi kiểm tra cùng xanh NIDS và cam Honeypot (contrast < 3:1 được bù bằng bảng) |
+| 2026-11-03 | Cảnh báo cổng hiếm chặn theo nguồn thay vì theo đủ `(src, dst, port)` | Claude | Các cổng đầu của một lượt quét (trước khi đủ ngưỡng scan) đều là cổng hiếm khác nhau; chặn theo đủ bốn thì mỗi cổng ra một P3. Chặn theo nguồn chỉ còn một P3 mỗi `suppress_seconds` |
+| 2026-11-03 | Timeline cảnh báo dùng aqua cho Anomaly; biểu đồ lưu lượng (PR #61) đổi từ aqua sang xám `MUTED` | Claude | `validate_palette.js --pairs all` chỉ cho aqua qua cùng xanh NIDS và cam Honeypot (vàng, đỏ, tím, hồng, lục đều trượt); một màu chỉ mang một nghĩa trên dashboard, lưu lượng là chuỗi đơn không phải loại cảnh báo |
 
 **Câu hỏi còn mở**: Không.
 

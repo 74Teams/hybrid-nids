@@ -19,6 +19,7 @@ from nids.engine.rule_manager import RuleManager
 from nids.engine.detector import DetectionEngine
 from nids.engine.stream import StreamReassembler
 from nids.ai import AITrafficWorker
+from nids.engine.anomaly import AnomalyDetector
 
 logger = logging.getLogger("nids.engine")
 alert_logger = logging.getLogger("nids.alert")
@@ -35,7 +36,10 @@ def _endpoint(ip: str, port: Optional[int]) -> str:
 def format_alert(alert_data: dict) -> str:
     """Dựng dòng cảnh báo một dòng: priority, SID, tên tấn công, nguồn → đích."""
     sid = alert_data.get("sid")
-    label = f"SID {sid}" if sid is not None else "AI-ANOMALY"
+    if sid is not None:
+        label = f"SID {sid}"
+    else:
+        label = "ANOMALY" if alert_data.get("source_type") == "ANOMALY" else "AI-ANOMALY"
     src = _endpoint(alert_data.get("src_ip"), alert_data.get("src_port"))
     dst = _endpoint(alert_data.get("dst_ip"), alert_data.get("dst_port"))
     return f"[P{alert_data.get('severity', 2)}] {label}  {alert_data.get('msg')}  {src} → {dst}"
@@ -182,6 +186,16 @@ def evaluate_with_stream(engine: DetectionEngine, reassembler: Optional[StreamRe
     return matched
 
 
+def observe_anomaly(detector: Optional[AnomalyDetector], packet) -> None:
+    """Đưa gói cho lớp phát hiện bất thường; lỗi chỉ được log để không dừng worker thread."""
+    if detector is None:
+        return
+    try:
+        detector.observe(packet)
+    except Exception as e:
+        logger.error("Lớp phát hiện bất thường gặp lỗi: %s", e)
+
+
 class HoneypotIPCache:
     """Tập IP đã chạm honeypot, làm mới từ CSDL tối đa một lần mỗi `ttl` giây (honeypot ghi từ process khác)."""
 
@@ -242,6 +256,8 @@ def main():
 
     detection_engine = DetectionEngine(rule_manager, alert_callback=handle_alert)
     ai_worker = AITrafficWorker(alert_callback=handle_alert)
+    anomaly_cfg = SETTINGS.get("anomaly") or {}
+    anomaly = AnomalyDetector(anomaly_cfg, alert_callback=handle_alert) if anomaly_cfg.get("enabled", True) else None
 
     stream_cfg = SETTINGS.get("stream", {})
     reassembler = None
@@ -297,6 +313,7 @@ def main():
                 matched = evaluate_with_stream(detection_engine, reassembler, packet)
                 ai_worker.analyze_packet(packet)
                 flow_log.on_packet(packet, len(matched))  # sau evaluate_packet để biết gói có khớp rule
+                observe_anomaly(anomaly, packet)
             finally:
                 packet_queue.task_done()
         flow_log.close()  # thread này là nơi duy nhất đụng vào bảng flow nên đóng ở đây

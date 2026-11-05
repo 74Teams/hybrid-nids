@@ -22,6 +22,7 @@
     <a href="#nids">NIDS</a>
     <a href="#ssh">Honeypot SSH</a>
     <a href="#http">Honeypot HTTP</a>
+    <a href="#anomaly">Anomaly</a>
   </nav>
 
   <section class="panel">
@@ -85,6 +86,7 @@ const TABS = {
   nids: { name: "NIDS", params: { source_type: "RULE_ENGINE" } },
   ssh:  { name: "Honeypot SSH", params: { source_type: "HONEYPOT", protocol: "ssh" } },
   http: { name: "Honeypot HTTP", params: { source_type: "HONEYPOT", protocol: "http" } },
+  anomaly: { name: "Anomaly", params: { source_type: "ANOMALY" } },
 };
 const ICONS = {
   search: "M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 14 15.5l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z",
@@ -103,6 +105,10 @@ const cache = {};   // key dòng -> { events, raw } (phiên) hoặc { detail }
 const rowKey = (a) => a.session_id || "e" + a.id;
 // shortcut: cắt tiền tố "HONEYPOT <loại> [<công cụ>] " bằng regex; lệnh bắt đầu bằng "[...]" mà không có công cụ sẽ bị cắt nhầm, chỉ ảnh hưởng hiển thị (Raw log vẫn đủ)
 const shortSummary = (a) => a.source_type === "HONEYPOT" ? a.summary.replace(/^HONEYPOT \S+(?: \[[^\]]*\])? /, "") : a.summary;
+// Nhãn nguồn cảnh báo; cảnh báo không có SID của honeypot và anomaly hiện "–", của AI worker hiện "AI"
+const SOURCE_LABELS = { HONEYPOT: "Honeypot", ANOMALY: "Anomaly" };
+const sourceLabel = (a) => SOURCE_LABELS[a.source_type] || "NIDS";
+const noSid = (a) => SOURCE_LABELS[a.source_type] ? "–" : "AI";
 const kindLabel = (a) => KIND_LABELS[a.attack_type] || a.attack_type;
 const fmtTime = (iso) => new Date(iso).toLocaleTimeString("vi-VN");
 function fmtDuration(s) {
@@ -200,7 +206,7 @@ function renderRows(list) {
       sidCell.append(link);
       actions.append(iconBtn("plus", "Chỉ xem SID " + a.sid, () => setFilter("sid", a.sid)));
     } else {
-      sidCell.append(a.source_type === "HONEYPOT" ? "–" : "AI");
+      sidCell.append(noSid(a));
     }
     if (!a.session_id) actions.append(iconBtn("close", "Xoá cảnh báo này", () => deleteOne(a.id), "del"));   // chưa có API xoá theo phiên
     sidCell.append(actions);
@@ -209,7 +215,7 @@ function renderRows(list) {
     const http = [a.http_method, a.http_uri].filter(Boolean).join(" ");
     if (http) desc.append(el("span", "sub uri", http));
 
-    tr.append(when, pri, el("td", "", a.source_type === "HONEYPOT" ? "Honeypot" : "NIDS"), el("td", "", a.protocol),
+    tr.append(when, pri, el("td", "", sourceLabel(a)), el("td", "", a.protocol),
       el("td", "", a.session_id ? "Phiên " + a.protocol.toUpperCase() : kindLabel(a)),
       endpointCell(a.src_ip, "src_ip"), el("td", "", a.src_port ?? ""),
       endpointCell(a.dst_ip, "dst_ip"), el("td", "", a.dst_port ?? ""), sidCell, desc);
