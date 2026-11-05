@@ -210,6 +210,7 @@ def build_recon(target: str, src: Optional[str] = None) -> list:
         PacketAttack("DNS zone transfer AXFR", (1000506,), [_tcp(target, src, 53, "PA", b"\x00\x1c" + dns_query("example.com", qtype=252))]),
         PacketAttack("SSDP M-SEARCH", (1000507,), [_udp(target, src, 1900, b"M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\n\r\n")]),
         PacketAttack("DNS version.bind", (1000508,), [_udp(target, src, 53, dns_query("version.bind", qtype=16, qclass=3))]),
+        PacketAttack("DNS dị dạng (ngắn hơn header)", (1000509,), [_udp(target, src, 53, b"DNS Query")]),
     ]
 
 

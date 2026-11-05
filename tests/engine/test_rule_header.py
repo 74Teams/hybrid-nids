@@ -286,6 +286,6 @@ def test_every_vendor_header_is_understood():
 def test_enabled_rules_keep_their_default_header_meaning():
     manager = RuleManager("rules")
     manager.load_all_rules()
-    assert len(manager.rules) == 67
+    assert len(manager.rules) == 68
     assert all(r.src_addrs.wildcard and r.dst_addrs.wildcard and r.src_ports.wildcard for r in manager.rules)
     assert ANY_PORTS.wildcard and ANY_ADDRS.wildcard
