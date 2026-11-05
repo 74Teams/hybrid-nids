@@ -2,6 +2,8 @@
 from scapy.all import DNS, DNSQR, Ether, IP, Padding, Raw, TCP, UDP
 
 from nids.engine.decoder import PacketDecoder
+from nids.engine.detector import DetectionEngine
+from nids.engine.rule_manager import RuleManager
 
 # Header SMB1 Trans2 (DoublePulsar ping) lấy từ pcap Shadow Brokers, 82 byte
 SMB1_TRANS2_PING = bytes.fromhex(
@@ -52,3 +54,12 @@ def test_http_still_parsed_on_http_port():
     decoded = PacketDecoder.decode(wire)
     assert decoded.raw_payload == request
     assert decoded.http_data is not None and decoded.http_data.uri == "/a?b=1"
+
+
+def test_real_dns_any_query_fires_its_rule_through_the_decoder():
+    """Trước khi sửa, gói DNS thật qua decoder có payload rỗng nên SID 1000207 không bao giờ bắn ngoài test."""
+    manager = RuleManager("rules")
+    manager.load_all_rules()
+    engine = DetectionEngine(manager, enable_threshold=False)
+    pkt = Ether() / IP(src="10.0.0.5", dst="8.8.8.8") / UDP(sport=4000, dport=53) / DNS(rd=1, qd=DNSQR(qname="example.com", qtype=255))
+    assert 1000207 in {r.sid for r in engine.evaluate_packet(PacketDecoder.decode(_on_the_wire(pkt)))}

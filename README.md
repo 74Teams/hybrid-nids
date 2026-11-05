@@ -79,7 +79,7 @@ The engine, the API and each honeypot run as **separate processes** and talk to 
 - Packet decoding for IP/TCP/UDP/ICMP (including TCP flags) and HTTP request parsing (method, URI, headers, body)
 - Snort 3 rule parser: sticky buffers (`http_uri`, `http_header`, `http_client_body`, `http_method`), comma modifiers (`nocase`, `depth`, `offset`, `distance`, `within`), `pcre`, `flags`, `flow`, `dsize`, `itype`/`icode`, `detection_filter`
 - Four-stage matching funnel: protocol/port demux → Aho-Corasick prefilter (one matcher per buffer) → detailed option checks → `ThresholdManager` to stop alert storms
-- 67 bundled rules split into one file per group (`rules/web-attack.rules`, `scan.rules`, `dos.rules`, `auth.rules`, `malware-c2.rules`, `recon.rules`), plus `rules/custom.rules` for rules written in the web console (SID ≥ 2000000):
+- 68 bundled rules split into one file per group (`rules/web-attack.rules`, `scan.rules`, `dos.rules`, `auth.rules`, `malware-c2.rules`, `recon.rules`), plus `rules/custom.rules` for rules written in the web console (SID ≥ 2000000):
 
   | SID range | Group | Examples |
   |---|---|---|
@@ -280,7 +280,7 @@ Create `.env` first and fill in the three passwords (compose refuses to start wi
 ```bash
 cp .env.example .env     # set MYSQL_ROOT_PASSWORD, NIDS_DB_PASSWORD and NIDS_REDIS_PASSWORD
 docker compose up --build -d
-docker logs -f nids_engine                                        # wait for "Đã nạp 67 rule"
+docker logs -f nids_engine                                        # wait for "Đã nạp 68 rule"
 ```
 
 Use hex-only values (no `$`, quotes or backticks). Both passwords only take effect when MySQL first creates its data directory: a lab that already has a database keeps its old passwords. Either run `ALTER USER` for `root@'localhost'`, `root@'%'` and `nids_app@'%'` inside the `nids_mysql` container (connect with the old password) and then `docker compose up -d`, or recreate the DB volume (data in `events` is lost).

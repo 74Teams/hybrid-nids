@@ -11,3 +11,4 @@ alert udp any any -> any 137 (msg:"RECON NetBIOS name query (nbtstat)"; content:
 alert tcp any any -> any 53 (msg:"RECON DNS zone transfer (AXFR) attempt"; flow:to_server,established; content:"|00 00 FC 00 01|"; classtype:attempted-recon; priority:2; sid:1000506; rev:1;)
 alert udp any any -> any 1900 (msg:"RECON SSDP M-SEARCH discovery"; content:"M-SEARCH",depth 8; classtype:attempted-recon; priority:3; sid:1000507; rev:1;)
 alert udp any any -> any 53 (msg:"RECON DNS version.bind query"; content:"|07|version|04|bind|00|",nocase; classtype:attempted-recon; priority:2; sid:1000508; rev:1;)
+alert udp any any -> any 53 (msg:"RECON DNS malformed query (payload shorter than 12-byte DNS header)"; dsize:<12; classtype:bad-unknown; priority:2; sid:1000509; rev:1;)

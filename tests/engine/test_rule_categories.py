@@ -135,8 +135,8 @@ def test_duplicate_sid_across_files_logs_both_locations(rules_dir, caplog):
     assert any("Bỏ qua SID trùng 1" in r.getMessage() and "web.rules" in r.getMessage() for r in caplog.records)
 
 
-def test_repo_ruleset_default_loads_67_builtin_rules():
+def test_repo_ruleset_default_loads_68_builtin_rules():
     m = loaded("rules")
     builtin = ["web-attack", "scan", "dos", "auth", "malware-c2", "recon"]  # theo dải SID 10000xx..10005xx
-    assert sum(len(m.catalog[c]) for c in builtin) == 67
+    assert sum(len(m.catalog[c]) for c in builtin) == 68
     assert all((r.sid - 1000000) // 100 == i for i, c in enumerate(builtin) for r in m.catalog[c])
