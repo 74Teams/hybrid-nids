@@ -19,8 +19,11 @@ paths:
 - `GET /api/alerts/timeline?minutes&buckets` — số cảnh báo NIDS / honeypot / anomaly (khoá `nids`, `honeypot`, `anomaly`) theo cột thời gian.
 - `WS /api/alerts/ws` — gửi id mỗi cảnh báo mới (tin lấy từ Redis kênh `nids:alerts`); trình duyệt chỉ coi đó là tín hiệu rồi tải lại qua REST. Mỗi kết nối giữ một subscriber riêng, tối đa `MAX_WS_CLIENTS` (20). Redis tắt, lỗi hoặc hết chỗ thì đóng với code 1013 trước khi accept; subscribe phải xong trước `accept()` để không lỡ cảnh báo. Endpoint không xác thực, nhưng chỉ lộ id, không lộ thêm dữ liệu so với `GET /api/alerts`.
 - `DELETE /api/alerts/` (cùng bộ lọc; không lọc = xoá hết), `DELETE /api/alerts/{id}`.
+- `GET /api/redirects/?active=true` — IP đang bị chuyển hướng sang honeypot (`ip`, `created_at`, `expires_at`, `removed_at`, `alert_count`, `reason`); `active=false` thêm lịch sử, tối đa 200 dòng. Chỉ đọc, không xác thực, chưa có giao diện.
+
 - `GET /api/flows/` — flow đã kết thúc, mới nhất theo `first_seen`; lọc `src_ip/dst_ip/protocol/dst_port/since/until` (`since/until` so với `first_seen`, đổi múi giờ bằng `to_utc_naive` dùng chung với `log_filters`) và `matched=true|false` (có/không khớp rule nào, theo `alert_count`); `limit` tối đa 500, tổng ở `X-Total-Count`.
 - `GET /api/flows/stats?minutes&buckets&top` — top talker (theo byte), top cổng đích (theo số flow), phân bố protocol, và `buckets` `{t, bytes, flows, alerts}` cùng mốc cột với `/api/alerts/timeline`. Byte của flow tính vào cột chứa `first_seen`.
+
 - `/api/rules/` — danh sách rule kèm category và trạng thái bật/tắt; `categories`, `sids`, `sids/reset`, `categories/{name}/all`, `custom` để bật/tắt category, override SID và sửa `custom.rules`.
 - `/health`.
 

@@ -66,6 +66,19 @@ class FlowModel(Base):
     created_at = Column(DateTime, default=utc_now, nullable=False, index=True)  # dọn flow cũ theo mốc này
 
 
+class RedirectModel(Base):
+    """Nhật ký chuyển hướng IP đáng ngờ sang honeypot (do `nids.redirector` ghi); mỗi dòng là một lượt chuyển hướng."""
+    __tablename__ = "redirects"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ip = Column(String(45), nullable=False, index=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    removed_at = Column(DateTime, nullable=True)   # NULL = đang hiệu lực
+    alert_count = Column(Integer, nullable=False, default=0)
+    reason = Column(Text, nullable=True)
+
+
 class EventPayloadModel(Base):
     __tablename__ = "event_payloads"
 

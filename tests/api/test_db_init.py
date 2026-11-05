@@ -98,3 +98,12 @@ def test_init_db_raises_when_upgrade_keeps_failing(monkeypatch, old_db, caplog):
     with pytest.raises(Exception, match="denied"):
         database.init_db(max_retries=2, delay=0)
     assert any("2 lần" in m for m in db_records(caplog, logging.ERROR))
+
+
+def test_init_db_creates_redirects_table_and_is_idempotent(monkeypatch, tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'new.db'}")
+    monkeypatch.setattr(database, "engine", engine)
+    database.init_db(max_retries=1, delay=0)
+    database.init_db(max_retries=1, delay=0)
+    assert {"ip", "expires_at", "removed_at"} <= {c["name"] for c in inspect(engine).get_columns("redirects")}
+    engine.dispose()

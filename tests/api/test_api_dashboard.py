@@ -268,6 +268,29 @@ def test_timeline_counts_by_source_and_ignores_old_events(client):
     assert client.get("/api/alerts/timeline?minutes=0").status_code == 422
 
 
+def test_redirects_lists_only_active_by_default(client):
+    EventRepository.add_redirect("1.1.1.1", ttl_seconds=60, alert_count=5, reason="thử")
+    EventRepository.add_redirect("2.2.2.2", ttl_seconds=-1)
+    EventRepository.expire_redirects()
+    rows = client.get("/api/redirects/").json()
+    assert [r["ip"] for r in rows] == ["1.1.1.1"]
+    assert rows[0]["alert_count"] == 5 and rows[0]["removed_at"] is None
+    assert rows[0]["created_at"].endswith("Z") and rows[0]["expires_at"].endswith("Z")
+
+
+def test_redirects_active_false_includes_history_newest_first(client):
+    EventRepository.add_redirect("1.1.1.1", ttl_seconds=60)
+    EventRepository.add_redirect("2.2.2.2", ttl_seconds=-1)
+    EventRepository.expire_redirects()
+    rows = client.get("/api/redirects/?active=false").json()
+    assert [r["ip"] for r in rows] == ["2.2.2.2", "1.1.1.1"]
+    assert rows[0]["removed_at"].endswith("Z")
+
+
+def test_redirects_empty_when_none(client):
+    assert client.get("/api/redirects/").json() == []
+
+
 def test_anomaly_alerts_have_their_own_timeline_series_and_filter(client):
     EventRepository.save_alert(_alert(1, "SQLi", 1))
     EventRepository.save_alert({**_alert(None, "ANOMALY Port scan", 2), "source_type": "ANOMALY",
