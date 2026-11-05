@@ -1,40 +1,59 @@
-"""Payload do PacketDecoder trích ra: phải là mọi byte sau header L4, kể cả khi Scapy đã bóc thành lớp giao thức."""
-from scapy.all import DNS, DNSQR, ICMP, IP, TCP, UDP, Ether, Raw
+"""PacketDecoder phải trả đúng byte payload L4, kể cả khi Scapy tự bóc tiếp tầng ứng dụng."""
+from scapy.all import DNS, DNSQR, Ether, IP, Padding, Raw, TCP, UDP
 
 from nids.engine.decoder import PacketDecoder
 from nids.engine.detector import DetectionEngine
 from nids.engine.rule_manager import RuleManager
 
-
-def decode(pkt):
-    # Dựng lại từ byte để Scapy tự bóc lớp như khi bắt gói thật (cổng 53 thành DNS, frame ngắn có Padding)
-    return PacketDecoder.decode(pkt.__class__(bytes(pkt)))
-
-
-def test_dns_query_payload_is_kept_although_scapy_dissects_it_as_dns():
-    dns = DNS(rd=1, qd=DNSQR(qname="example.com", qtype=255))
-    d = decode(Ether() / IP(src="10.0.0.5", dst="8.8.8.8") / UDP(sport=4000, dport=53) / dns)
-    assert d.raw_payload == bytes(dns)
-    assert b"\x00\x00\xff\x00\x01" in d.raw_payload
+# Header SMB1 Trans2 (DoublePulsar ping) lấy từ pcap Shadow Brokers, 82 byte
+SMB1_TRANS2_PING = bytes.fromhex(
+    "0000004eff534d4232000000001807c00000000000000000000000000008fffe000841000f0c00000001"
+    "000000000000005886450000000c00420000004e0001000e000d0000000000000000000000000000"
+)
 
 
-def test_ethernet_padding_is_not_payload():
-    syn = Ether() / IP(src="10.0.0.5", dst="10.0.0.9") / TCP(sport=40000, dport=80, flags="S")
-    assert len(bytes(syn)) < 60
-    d = decode(Ether(bytes(syn) + b"\x00" * (60 - len(bytes(syn)))))
-    assert d.raw_payload == b""
+def _on_the_wire(pkt) -> Ether:
+    """Dựng gói, đưa qua byte rồi dissect lại như khi bắt từ mạng hoặc đọc pcap."""
+    return Ether(bytes(pkt))
 
 
-def test_raw_tcp_payload_is_unchanged():
-    req = b"GET /?id=1 HTTP/1.1\r\nHost: victim\r\n\r\n"
-    d = decode(Ether() / IP(src="10.0.0.5", dst="10.0.0.9") / TCP(sport=40000, dport=80, flags="PA") / Raw(req))
-    assert d.raw_payload == req
-    assert d.http_data is not None and d.http_data.uri == "/?id=1"
+def test_smb_payload_keeps_netbios_and_smb_header():
+    wire = _on_the_wire(Ether() / IP(dst="10.0.0.5") / TCP(sport=40000, dport=445, flags="PA") / Raw(SMB1_TRANS2_PING))
+    assert not wire.haslayer(Raw) or len(wire[Raw].load) < len(SMB1_TRANS2_PING)  # Scapy đã bóc NBTSession/SMB
+    assert PacketDecoder.decode(wire).raw_payload == SMB1_TRANS2_PING
 
 
-def test_icmp_echo_payload():
-    d = decode(Ether() / IP(src="10.0.0.5", dst="10.0.0.9") / ICMP(type=8) / Raw(b"A" * 900))
-    assert d.raw_payload == b"A" * 900
+def test_dns_payload_is_full_udp_payload():
+    query = bytes(DNS(rd=1, qd=DNSQR(qname="example.com", qtype=255)))
+    wire = _on_the_wire(Ether() / IP(dst="10.0.0.5") / UDP(sport=40001, dport=53) / Raw(query))
+    assert wire.haslayer(DNS)
+    assert PacketDecoder.decode(wire).raw_payload == query
+
+
+def test_ethernet_padding_is_not_part_of_payload():
+    wire = _on_the_wire(Ether() / IP(dst="10.0.0.5") / TCP(sport=40000, dport=4444, flags="PA") / Raw(b"id") / Padding(b"\x00" * 20))
+    assert PacketDecoder.decode(wire).raw_payload == b"id"
+
+
+def test_hand_built_packet_without_original_bytes():
+    pkt = IP(dst="10.0.0.5") / TCP(sport=40000, dport=4444, flags="PA") / Raw(b"/bin/bash -i")
+    assert PacketDecoder.decode(pkt).raw_payload == b"/bin/bash -i"
+    assert PacketDecoder.decode(IP(dst="10.0.0.5") / TCP(dport=80, flags="S")).raw_payload == b""
+
+
+def test_icmp_payload_unchanged():
+    from scapy.all import ICMP
+
+    wire = _on_the_wire(Ether() / IP(dst="10.0.0.5") / ICMP(type=8) / Raw(b"A" * 1000))
+    assert PacketDecoder.decode(wire).raw_payload == b"A" * 1000
+
+
+def test_http_still_parsed_on_http_port():
+    request = b"GET /a?b=1 HTTP/1.1\r\nHost: victim\r\n\r\n"
+    wire = _on_the_wire(Ether() / IP(dst="10.0.0.5") / TCP(sport=40000, dport=80, flags="PA") / Raw(request))
+    decoded = PacketDecoder.decode(wire)
+    assert decoded.raw_payload == request
+    assert decoded.http_data is not None and decoded.http_data.uri == "/a?b=1"
 
 
 def test_real_dns_any_query_fires_its_rule_through_the_decoder():
@@ -43,4 +62,4 @@ def test_real_dns_any_query_fires_its_rule_through_the_decoder():
     manager.load_all_rules()
     engine = DetectionEngine(manager, enable_threshold=False)
     pkt = Ether() / IP(src="10.0.0.5", dst="8.8.8.8") / UDP(sport=4000, dport=53) / DNS(rd=1, qd=DNSQR(qname="example.com", qtype=255))
-    assert 1000207 in {r.sid for r in engine.evaluate_packet(decode(pkt))}
+    assert 1000207 in {r.sid for r in engine.evaluate_packet(PacketDecoder.decode(_on_the_wire(pkt)))}

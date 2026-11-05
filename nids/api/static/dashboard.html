@@ -37,7 +37,7 @@
       <div class="chart" id="chart-time"></div>
       <details class="tableview"><summary>Xem dạng bảng</summary>
         <div class="table-wrap"><table>
-          <thead><tr><th>Bắt đầu</th><th>NIDS</th><th>Honeypot</th></tr></thead>
+          <thead><tr><th>Bắt đầu</th><th>NIDS</th><th>Honeypot</th><th>Anomaly</th></tr></thead>
           <tbody id="time-table"></tbody>
         </table></div>
       </details>
@@ -89,7 +89,7 @@
     </div>
   </section>
 </main>
-<script src="/static/charts.js?v=3"></script>
+<script src="/static/charts.js?v=4"></script>
 <script src="/static/live.js?v=2"></script>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -102,6 +102,10 @@ function el(tag, cls, text) {
   if (text !== undefined && text !== null) e.textContent = text;   // textContent: payload tấn công không bao giờ được render thành HTML
   return e;
 }
+// Nhãn nguồn cảnh báo; cảnh báo không có SID của honeypot và anomaly hiện "–", của AI worker hiện "AI"
+const SOURCE_LABELS = { HONEYPOT: "Honeypot", ANOMALY: "Anomaly" };
+const sourceLabel = (a) => SOURCE_LABELS[a.source_type] || "NIDS";
+const noSid = (a) => SOURCE_LABELS[a.source_type] ? "–" : "AI";
 const endpoint = (ip, port) => port != null ? ip + ":" + port : ip;
 
 // Tam giác cảnh báo tô màu theo priority
@@ -144,8 +148,8 @@ function renderAlerts(alerts) {
     seen.add(a.id);
     const time = a.timestamp ? new Date(a.timestamp).toLocaleTimeString("vi-VN") : "";
     const sevCell = el("td"); sevCell.append(priIcon(sev));
-    tr.append(el("td", "nw", time), sevCell, el("td", "", a.source_type === "HONEYPOT" ? "Honeypot" : "NIDS"),
-      el("td", "", a.sid ?? (a.source_type === "HONEYPOT" ? "–" : "AI")), el("td", "msg", a.summary),
+    tr.append(el("td", "nw", time), sevCell, el("td", "", sourceLabel(a)),
+      el("td", "", a.sid ?? noSid(a)), el("td", "msg", a.summary),
       el("td", "nw", endpoint(a.src_ip, a.src_port) + " → " + endpoint(a.dst_ip, a.dst_port)),
       el("td", "", a.http_method || ""), el("td", "uri", a.http_uri || ""));
     body.append(tr);
@@ -172,7 +176,7 @@ function renderTimeline(t) {
   body.replaceChildren();
   for (const b of t.buckets) {
     const tr = el("tr");
-    tr.append(el("td", "nw", new Date(b.t).toLocaleString("vi-VN")), el("td", "", b.nids), el("td", "", b.honeypot));
+    tr.append(el("td", "nw", new Date(b.t).toLocaleString("vi-VN")), el("td", "", b.nids), el("td", "", b.honeypot), el("td", "", b.anomaly));
     body.append(tr);
   }
 }
@@ -220,7 +224,7 @@ $("clear").addEventListener("click", async () => {
 });
 
 $("range").addEventListener("change", refresh);
-Charts.legend($("legend-time")); Charts.legend($("legend-ip"));
+Charts.legend($("legend-time")); Charts.legend($("legend-ip"), 2);   // Top IP chỉ có NIDS và honeypot
 liveAlerts(refresh, 2000, (mode) => { live = mode === "live"; if (connected) setStatus(true); });
 </script>
 </body>
