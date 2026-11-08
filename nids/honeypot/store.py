@@ -24,6 +24,16 @@ SEVERITY = {
 }
 
 
+MAX_FIELD_LEN = 256        # username, password, lệnh, user-agent, URI
+MAX_EVIDENCE_LEN = 1024    # matched_content (cột Text nên không có trần sẵn)
+MAX_IP_LEN = 45            # độ dài cột dst_ip
+
+
+def clip(value, limit: int):
+    """Cắt chuỗi về tối đa limit ký tự; giá trị None hoặc không phải chuỗi giữ nguyên."""
+    return value[:limit] if isinstance(value, str) else value
+
+
 def log_event(protocol: str, event_type: str, src_ip: str, *, src_port: Optional[int] = None,
               dst_ip: str = "", dst_port: Optional[int] = None, username: Optional[str] = None,
               password: Optional[str] = None, command: Optional[str] = None,
@@ -32,6 +42,10 @@ def log_event(protocol: str, event_type: str, src_ip: str, *, src_port: Optional
               hassh: Optional[str] = None, client_tool: Optional[str] = None,
               session_id: Optional[str] = None) -> None:
     """Ghi 1 sự kiện honeypot; nuốt mọi lỗi CSDL (chỉ ghi log)."""
+    # dữ liệu do attacker chọn: cắt độ dài để không phình CSDL/bộ nhớ; dst_ip lấy từ header Host nên cắt theo cột
+    username, password, command, user_agent, http_uri = (
+        clip(v, MAX_FIELD_LEN) for v in (username, password, command, user_agent, http_uri))
+    dst_ip = clip(dst_ip, MAX_IP_LEN)
     kind = f"{event_type}.{attack_tag}" if attack_tag else event_type
     detail = command if command is not None else f"{username}:{password}"
     tool = f" [{client_tool}]" if client_tool else ""
@@ -53,7 +67,7 @@ def log_event(protocol: str, event_type: str, src_ip: str, *, src_port: Optional
             "http_method": http_method,
             "http_uri": http_uri,
             "msg": f"HONEYPOT {event_type}{tool} {detail}"[:500],
-            "matched_content": evidence,
+            "matched_content": clip(evidence, MAX_EVIDENCE_LEN),
             "session_id": session_id,
         })
     except Exception as e:
