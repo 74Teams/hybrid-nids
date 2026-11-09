@@ -11,6 +11,7 @@ Hybrid NIDS + honeypot (đồ án PBL4): hệ thống phát hiện xâm nhập m
 - Python 3.10+
 - Scapy ≥ 2.5 (capture + decode), pyahocorasick ≥ 2.1 (prefilter)
 - SQLAlchemy 2.0 + PyMySQL (MySQL trong Docker, SQLite khi chạy local)
+- waitress ≥ 3.0 (server WSGI của honeypot HTTP)
 - FastAPI + Uvicorn (API, dashboard); HTML/CSS/JS thuần, biểu đồ SVG tự vẽ, không dùng thư viện frontend
 - Redis ≥ 7 (Docker) + redis-py ≥ 8.1: pub/sub đẩy tín hiệu cảnh báo mới tới WebSocket của dashboard (tuỳ chọn, tắt được)
 - paramiko ≥ 3.4 (honeypot SSH), Flask ≥ 3.0 (honeypot HTTP), pydantic-settings
@@ -71,7 +72,7 @@ Các process (engine, API, redirector, mỗi honeypot một process) chạy riê
 - Cảnh báo realtime qua Redis pub/sub + WebSocket (branch `feature/30-realtime-alert-push`, PLAN-001, issue #30).
 - Xem traffic và phát hiện bất thường theo ngưỡng (PLAN-004): API flows + trang Traffic (#40, #41, đã merge), cảnh báo `ANOMALY` theo ngưỡng (#42, branch `feature/42-anomaly-detection`).
 - Chuyển hướng IP đáng ngờ sang honeypot (branch `feature/29-redirect-to-honeypot`, PLAN-005, issue #29).
-- Phía honeypot chưa có route catch-all, giới hạn tài nguyên.
+- Giới hạn tài nguyên honeypot: cap kết nối, timeout idle, honeypot HTTP chạy bằng waitress (PLAN-006, issue #27, branch `feature/27-honeypot-resource-limits`). Honeypot HTTP chưa có route catch-all.
 
 ## Known Issues / Gotchas
 
