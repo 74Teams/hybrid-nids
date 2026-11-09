@@ -469,10 +469,19 @@ def test_shell_closes_after_session_deadline(monkeypatch):
     assert channel.closed and b"timed out" in channel.sent
 
 
+def tcp_socketpair():
+    """Cặp socket TCP loopback. socketpair() trên Linux là AF_UNIX nên getsockname() không có (ip, port)."""
+    listener = socket.create_server(("127.0.0.1", 0))
+    client = socket.create_connection(listener.getsockname())
+    server, _ = listener.accept()
+    listener.close()
+    return server, client
+
+
 def test_silent_client_is_dropped_after_handshake_timeout():
     """Kết nối mở rồi im lặng không được giữ thread mãi."""
     from nids.honeypot.ssh_honeypot import client_handle
-    server_side, client_side = socket.socketpair()
+    server_side, client_side = tcp_socketpair()
     started = time.monotonic()
     try:
         client_handle(server_side, ("10.0.0.9", 1), None, None, paramiko.RSAKey.generate(2048),
@@ -487,7 +496,7 @@ def test_dropping_silent_client_does_not_log_paramiko_traceback(caplog):
     """Đóng kết nối đang bắt tay làm thread paramiko báo 'Bad file descriptor'; đó không phải lỗi thật."""
     import logging
     from nids.honeypot.ssh_honeypot import client_handle
-    server_side, client_side = socket.socketpair()
+    server_side, client_side = tcp_socketpair()
     try:
         with caplog.at_level(logging.INFO):
             client_handle(server_side, ("10.0.0.9", 1), None, None, paramiko.RSAKey.generate(2048),
