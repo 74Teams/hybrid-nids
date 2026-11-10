@@ -1,6 +1,6 @@
 ---
 type: PLAN
-plan_id: PLAN-007
+plan_id: PLAN-008
 title: Lab ba máy ảo trên VMware (Kali, IDS gateway, Victim + Honeypot)
 status: REVIEW
 issue: "#68"
@@ -9,7 +9,7 @@ created: 2026-11-10
 updated: 2026-11-10
 ---
 
-# PLAN-007: Lab ba máy ảo trên VMware (Kali, IDS gateway, Victim + Honeypot)
+# PLAN-008: Lab ba máy ảo trên VMware (Kali, IDS gateway, Victim + Honeypot)
 
 ## 1. Bối cảnh
 
