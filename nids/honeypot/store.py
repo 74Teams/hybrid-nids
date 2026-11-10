@@ -21,12 +21,16 @@ SEVERITY = {
     "ssh.download": 1,
     "http.login": 2,
     "http.login.sqli": 1,
+    "http.request": 3,
 }
 
 
 MAX_FIELD_LEN = 256        # username, password, lệnh, user-agent, URI
 MAX_EVIDENCE_LEN = 1024    # matched_content (cột Text nên không có trần sẵn)
 MAX_IP_LEN = 45            # độ dài cột dst_ip
+MAX_METHOD_LEN = 10        # độ dài cột http_method; method do attacker chọn có thể dài hơn
+MAX_HEADERS_LEN = 8192     # http_headers
+MAX_BODY_LEN = 8192        # http_body
 
 
 def clip(value, limit: int):
@@ -40,14 +44,22 @@ def log_event(protocol: str, event_type: str, src_ip: str, *, src_port: Optional
               user_agent: Optional[str] = None, http_method: Optional[str] = None,
               http_uri: Optional[str] = None, attack_tag: Optional[str] = None,
               hassh: Optional[str] = None, client_tool: Optional[str] = None,
-              session_id: Optional[str] = None) -> None:
+              session_id: Optional[str] = None, http_headers: Optional[str] = None,
+              http_body: Optional[str] = None) -> None:
     """Ghi 1 sự kiện honeypot; nuốt mọi lỗi CSDL (chỉ ghi log)."""
     # dữ liệu do attacker chọn: cắt độ dài để không phình CSDL/bộ nhớ; dst_ip lấy từ header Host nên cắt theo cột
     username, password, command, user_agent, http_uri = (
         clip(v, MAX_FIELD_LEN) for v in (username, password, command, user_agent, http_uri))
     dst_ip = clip(dst_ip, MAX_IP_LEN)
+    http_method = clip(http_method, MAX_METHOD_LEN)
+    http_headers, http_body = clip(http_headers, MAX_HEADERS_LEN), clip(http_body, MAX_BODY_LEN)
     kind = f"{event_type}.{attack_tag}" if attack_tag else event_type
-    detail = command if command is not None else f"{username}:{password}"
+    if command is not None:
+        detail = command
+    elif username is None and password is None and http_method:
+        detail = f"{http_method} {http_uri}"          # request dò quét không có thông tin đăng nhập
+    else:
+        detail = f"{username}:{password}"
     tool = f" [{client_tool}]" if client_tool else ""
     evidence = " | ".join(f"{k}={v}" for k, v in
                           (("user", username), ("password", password), ("command", command),
@@ -68,6 +80,8 @@ def log_event(protocol: str, event_type: str, src_ip: str, *, src_port: Optional
             "http_uri": http_uri,
             "msg": f"HONEYPOT {event_type}{tool} {detail}"[:500],
             "matched_content": clip(evidence, MAX_EVIDENCE_LEN),
+            "http_headers": http_headers,
+            "http_body": http_body,
             "session_id": session_id,
         })
     except Exception as e:

@@ -37,8 +37,10 @@ class EventRepository:
                 status="NEW",
                 session_id=alert_data.get("session_id")
             )
-            if alert_data.get("matched_content"):
-                event.payload = EventPayloadModel(matched_content=alert_data["matched_content"])
+            payload = {k: alert_data[k] for k in ("matched_content", "http_headers", "http_body")
+                       if alert_data.get(k)}
+            if payload:
+                event.payload = EventPayloadModel(**payload)
             session.add(event)
             session.commit()
             session.refresh(event)

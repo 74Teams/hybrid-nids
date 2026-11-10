@@ -298,7 +298,8 @@ def test_parallel_ssh_sessions_from_one_ip_are_not_mixed():
 
 def web_login(client, **kwargs):
     client.post("/wp-admin-login", data={"username": "admin", "password": "bad"}, **kwargs)
-    return EventRepository.get_recent_events(limit=1)[0].session_id
+    logins = [e for e in EventRepository.get_recent_events() if e.attack_type == "http.login"]
+    return logins[0].session_id          # mới nhất đứng đầu; GET / cũng sinh http.request nên không lấy theo limit=1
 
 
 def test_web_cookie_keeps_session_across_requests():
@@ -569,3 +570,91 @@ def test_waitress_closes_silent_connection_after_channel_timeout():
         finally:
             sock.close()
         assert time.monotonic() - started < 8
+
+
+# ---- Ghi mọi request HTTP (PLAN-007, issue #26) ----
+
+def http_events():
+    return sorted(EventRepository.get_recent_events(), key=lambda e: e.id)
+
+
+def test_unknown_path_is_logged_with_headers_and_still_404():
+    client = web_honeypot().test_client()
+    response = client.get("/.env?x=1", headers={"X-Probe": "abc", "User-Agent": "zgrab"})
+    assert response.status_code == 404
+    (event,) = http_events()
+    assert (event.attack_type, event.protocol, event.http_method, event.http_uri) == (
+        "http.request", "http", "GET", "/.env?x=1")
+    assert event.severity == 3 and event.summary == "HONEYPOT http.request GET /.env?x=1"
+    payload = EventRepository.get_payload(event.id)
+    assert "X-Probe: abc" in payload["http_headers"] and "user_agent=zgrab" in payload["matched_content"]
+    assert payload["http_body"] is None
+
+
+@pytest.mark.parametrize("method", ["PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
+def test_every_method_is_logged_once(method):
+    client = web_honeypot().test_client()
+    client.open("/admin/upload", method=method, data="a=1" if method in ("PUT", "PATCH") else None)
+    (event,) = http_events()
+    assert event.http_method == method and event.attack_type == "http.request"
+
+
+def test_request_body_is_stored():
+    client = web_honeypot().test_client()
+    client.put("/admin/upload", data="a=1&b=ÿ".encode("latin-1"), headers={"Content-Type": "text/plain"})
+    (event,) = http_events()
+    body = EventRepository.get_payload(event.id)["http_body"]
+    assert body.startswith("a=1&b=")
+
+
+def test_get_on_login_path_is_logged_as_405():
+    client = web_honeypot().test_client()
+    assert client.get("/wp-admin-login").status_code == 405
+    (event,) = http_events()
+    assert event.attack_type == "http.request" and event.http_uri == "/wp-admin-login"
+
+
+def test_login_is_logged_once_with_form_and_raw_body():
+    client = web_honeypot().test_client()
+    client.post("/wp-admin-login", data={"username": "a' OR 1=1--", "password": "x"})
+    (event,) = http_events()
+    assert event.attack_type == "http.login" and event.severity == 1
+    payload = EventRepository.get_payload(event.id)
+    assert "user=a' OR 1=1--" in payload["matched_content"]
+    assert "username=" in payload["http_body"] and "Content-Type" in payload["http_headers"]
+
+
+def test_broken_multipart_login_is_logged_once():
+    client = web_honeypot().test_client()
+    client.post("/wp-admin-login", data=b"--x\r\nbroken", headers={"Content-Type": "multipart/form-data; boundary=x"})
+    (event,) = http_events()
+    assert event.attack_type in ("http.request", "http.login")
+
+
+def test_oversized_body_is_logged_without_body(monkeypatch):
+    monkeypatch.setattr(settings, "http_max_body_bytes", 100)
+    client = web_honeypot().test_client()
+    assert client.post("/wp-admin-login", data="username=" + "a" * 500,
+                       headers={"Content-Type": "application/x-www-form-urlencoded"}).status_code == 413
+    (event,) = http_events()
+    assert event.attack_type == "http.request" and EventRepository.get_payload(event.id)["http_body"] is None
+
+
+def test_long_method_uri_headers_and_body_are_clipped():
+    store.log_event("http", "http.request", "10.0.0.9", http_method="PROPFINDXXXXXXXX", http_uri="/" + "a" * 1000,
+                    http_headers="h" * 20000, http_body="b" * 20000)
+    (event,) = http_events()
+    assert event.http_method == "PROPFINDXX" and len(event.http_uri) == store.MAX_FIELD_LEN
+    payload = EventRepository.get_payload(event.id)
+    assert len(payload["http_headers"]) == store.MAX_HEADERS_LEN and len(payload["http_body"]) == store.MAX_BODY_LEN
+
+
+def test_save_alert_creates_payload_only_when_something_to_store():
+    base = {"classtype": "x", "src_ip": "1.1.1.1", "dst_ip": "2.2.2.2"}
+    for extra in ({"http_body": "b"}, {"http_headers": "h"}, {"matched_content": "m"}, {"http_body": ""}, {}):
+        EventRepository.save_alert({**base, **extra})
+    import nids.db as db
+    with db.SessionLocal() as session:
+        stored = sorted(((p.matched_content, p.http_headers, p.http_body)
+                         for p in session.query(models.EventPayloadModel)), key=str)
+    assert sorted(stored, key=str) == sorted([(None, None, "b"), (None, "h", None), ("m", None, None)], key=str)

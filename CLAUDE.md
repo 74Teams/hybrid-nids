@@ -72,7 +72,7 @@ Các process (engine, API, redirector, mỗi honeypot một process) chạy riê
 - Cảnh báo realtime qua Redis pub/sub + WebSocket (branch `feature/30-realtime-alert-push`, PLAN-001, issue #30).
 - Xem traffic và phát hiện bất thường theo ngưỡng (PLAN-004): API flows + trang Traffic (#40, #41, đã merge), cảnh báo `ANOMALY` theo ngưỡng (#42, branch `feature/42-anomaly-detection`).
 - Chuyển hướng IP đáng ngờ sang honeypot (branch `feature/29-redirect-to-honeypot`, PLAN-005, issue #29).
-- Giới hạn tài nguyên honeypot: cap kết nối, timeout idle, honeypot HTTP chạy bằng waitress (PLAN-006, issue #27, branch `feature/27-honeypot-resource-limits`). Honeypot HTTP chưa có route catch-all.
+- Giới hạn tài nguyên honeypot: cap kết nối, timeout idle, honeypot HTTP chạy bằng waitress (PLAN-006, issue #27, branch `feature/27-honeypot-resource-limits`). Honeypot HTTP ghi mọi request (`http.request`, PLAN-007, issue #26, branch `feature/26-http-catch-all`).
 
 ## Known Issues / Gotchas
 

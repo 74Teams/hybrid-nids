@@ -10,4 +10,5 @@ Bảng tổng hợp mọi plan của dự án. Quy trình và ý nghĩa trạng 
 | PLAN-004 | [Tra cứu flow, trang Traffic và phát hiện bất thường theo ngưỡng](2026-11-03-flow-traffic-anomaly.md) | IN_PROGRESS | #40, #41, #42 | nmchien1106 | 2026-11-03 | [#61](https://github.com/74Teams/hybrid-nids/pull/61) |
 | PLAN-005 | [Chuyển hướng traffic của IP đáng ngờ sang honeypot](2026-11-01-redirect-to-honeypot.md) | IN_PROGRESS | #29 | ngoccu2006 | 2026-11-01 | |
 | PLAN-006 | [Giới hạn tài nguyên cho honeypot SSH và HTTP](2026-11-08-honeypot-resource-limits.md) | IN_PROGRESS | #27 | ngoccu2006 | 2026-11-08 | |
-| PLAN-007 | [Lab ba máy ảo trên VMware (Kali, IDS gateway, Victim + Honeypot)](2026-11-10-vmware-multi-vm-lab.md) | REVIEW | #68 | ngoccu2006 | 2026-11-10 | |
+| PLAN-007 | [Honeypot HTTP ghi mọi request (catch-all)](2026-11-09-http-catch-all.md) | IN_PROGRESS | #26 | ngoccu2006 | 2026-11-10 | |
+| PLAN-008 | [Lab ba máy ảo trên VMware (Kali, IDS gateway, Victim + Honeypot)](2026-11-10-vmware-multi-vm-lab.md) | REVIEW | #68 | ngoccu2006 | 2026-11-10 | |
