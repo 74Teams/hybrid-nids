@@ -2,11 +2,11 @@
 type: PLAN
 plan_id: PLAN-007
 title: Honeypot HTTP ghi mọi request (catch-all)
-status: REVIEW
+status: IN_PROGRESS
 issue: 26
 owner: Vo Ngoc Cu (ngoccu2006)
 created: 2026-11-09
-updated: 2026-11-09
+updated: 2026-11-10
 ---
 
 # PLAN-007: Honeypot HTTP ghi mọi request (catch-all)
@@ -144,13 +144,13 @@ Chạy từ gốc repo, trong Docker lab (`docker compose up --build -d`, không
 
 Nhánh: `feature/26-http-catch-all`
 
-- [ ] Xác nhận issue #26 được assign cho ai
-- [ ] `store.py` + `repository.py`: header/body xuống payload, test `save_alert`
-- [ ] `web_honeypot.py`: hook ghi `http.request`, cờ `g.logged`, `login()` truyền header/body, test
-- [ ] Nhãn `http.request` trong `logs.html`
-- [ ] Cập nhật tài liệu ở mục 7
+- [ ] Xác nhận issue #26 được assign cho ai (chưa xác nhận được, máy không có `gh`)
+- [x] `store.py` + `repository.py`: header/body xuống payload, test `save_alert`
+- [x] `web_honeypot.py`: hook ghi `http.request`, cờ `g.logged`, `login()` truyền header/body, test
+- [x] Nhãn `http.request` trong `logs.html`
+- [x] Cập nhật tài liệu ở mục 7
 - [ ] Chạy `pytest`, xác minh theo mục 9
-- [ ] Rebase lên `main` sau khi #27 merge, chạy lại test
+- [x] Rebase lên `main` sau khi #27 merge, chạy lại test
 - [ ] Tạo PR (tiêu đề tiếng Anh, mô tả tiếng Việt, `Closes #26`), cập nhật bảng tổng hợp
 
 ## 12. Quyết định và nhật ký
@@ -169,6 +169,7 @@ Nhánh: `feature/26-http-catch-all`
 **Nhật ký thực hiện**
 
 - 2026-11-09: Tạo nhánh `feature/26-http-catch-all` từ `main`, soạn plan.
+- 2026-11-10: Người dùng yêu cầu code trên nhánh (coi là duyệt plan). #27 đã merge nên dùng `MAX_CONTENT_LENGTH`/`settings.http_max_body_bytes` có sẵn thay vì hằng 64 KiB, và `clip()`/`MAX_FIELD_LEN` (256) cho `http_uri` thay vì 2048. Đã code và test: 54 test honeypot pass; toàn bộ `pytest` còn 3 lỗi sẵn có trên Windows (2 test engine, `test_realtime_ws` thất thường), không liên quan. Chưa chạy bước E2E mục 9 trong Docker.
 
 **Câu hỏi còn mở**
 
