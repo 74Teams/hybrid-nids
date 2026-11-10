@@ -83,7 +83,7 @@ def test_alert_shown_even_if_db_fails(monkeypatch, caplog):
 
 def test_no_print_calls_left():
     files = []
-    for folder in ("nids",):
+    for folder in ("nids", "tools"):
         files += (ROOT / folder).rglob("*.py")
     offenders = []
     for path in files:
