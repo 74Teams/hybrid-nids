@@ -78,12 +78,66 @@ class BruteForceTracker:
 bruteforce = BruteForceTracker(settings.ssh_bruteforce_threshold, settings.ssh_bruteforce_window)
 
 
+class ConnectionLimiter:
+    """Giới hạn số kết nối SSH đồng thời, tổng và theo IP; giá trị 0 là tắt giới hạn đó."""
+
+    LOG_INTERVAL = 10            # giây giữa hai dòng log từ chối của cùng một IP, để flood không làm đầy log
+
+    def __init__(self, max_total, max_per_ip):
+        self.max_total = max_total
+        self.max_per_ip = max_per_ip
+        self.total = 0
+        self.per_ip = {}                           # ip -> số kết nối đang mở
+        self.last_log = {}                         # ip -> lần log từ chối gần nhất
+        self.lock = threading.Lock()
+
+    def acquire(self, ip):
+        with self.lock:
+            if self.max_total and self.total >= self.max_total:
+                return False
+            if self.max_per_ip and self.per_ip.get(ip, 0) >= self.max_per_ip:
+                return False
+            self.total += 1
+            self.per_ip[ip] = self.per_ip.get(ip, 0) + 1
+            return True
+
+    def release(self, ip):
+        with self.lock:
+            self.total = max(0, self.total - 1)
+            left = self.per_ip.get(ip, 0) - 1
+            if left > 0:
+                self.per_ip[ip] = left
+            else:
+                self.per_ip.pop(ip, None)          # xoá khoá để dict không phình khi đổi IP liên tục
+
+    def should_log_rejection(self, ip, now=None):
+        """True nếu đã đủ LOG_INTERVAL kể từ lần log từ chối trước của ip này."""
+        now = time.monotonic() if now is None else now
+        with self.lock:
+            self.last_log = {k: t for k, t in self.last_log.items() if now - t < self.LOG_INTERVAL}
+            if ip in self.last_log:
+                return False
+            self.last_log[ip] = now
+            return True
+
+
+limiter = ConnectionLimiter(settings.ssh_max_connections, settings.ssh_max_connections_per_ip)
+
+
 class HasshTransport(paramiko.Transport):
     """Transport ghi HASSH của client vào conn, nên mọi sự kiện của kết nối đều mang giá trị này."""
 
     def __init__(self, sock, conn):
         super().__init__(sock)
         self.conn = conn
+        self.quiet_close = False
+
+    def _log(self, level, msg, *args):
+        # đóng kết nối đang bắt tay (hết thời gian, bị giới hạn) khiến thread paramiko in traceback "Bad file
+        # descriptor"; chỉ hạ mức log của lần đóng chủ động này, lỗi thật lúc đang chạy vẫn giữ nguyên
+        if self.quiet_close and level >= logging.ERROR:
+            level = logging.DEBUG
+        super()._log(level, msg, *args)
 
     def _really_parse_kex_init(self, m, ignore_first_byte=False):
         # tính ở đây vì _parse_kex_init sẽ xoá ext-info-* và kex-strict-* khỏi danh sách kex
@@ -98,13 +152,50 @@ class HasshTransport(paramiko.Transport):
         return parsed
 
 
+class SessionLimit(Exception):
+    """Phiên shell vượt giới hạn tài nguyên (im lặng quá lâu hoặc sống quá lâu)."""
+
+
 # emulated shell
-def emulated_shell(channel, conn, shell=None):
+def emulated_shell(channel, conn, shell=None, idle_timeout=None, session_max_seconds=None,
+                   max_command_bytes=None):
     shell = shell or FakeShell()
+    idle_timeout = settings.ssh_idle_timeout if idle_timeout is None else idle_timeout
+    session_max_seconds = settings.ssh_session_max_seconds if session_max_seconds is None else session_max_seconds
+    max_command_bytes = settings.ssh_max_command_bytes if max_command_bytes is None else max_command_bytes
+    deadline = time.monotonic() + session_max_seconds if session_max_seconds else None
+
+    def recv():
+        """Đọc 1 byte; ném SessionLimit khi im quá idle_timeout hoặc quá tổng thời gian phiên."""
+        wait = idle_timeout or None
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise SessionLimit("quá thời gian tối đa của phiên")
+            wait = min(wait, remaining) if wait else remaining
+        if hasattr(channel, "settimeout"):
+            channel.settimeout(wait)
+        try:
+            return channel.recv(1)
+        except socket.timeout:
+            raise SessionLimit("im lặng quá thời gian cho phép") from None
+
+    try:
+        _shell_loop(channel, conn, shell, recv, max_command_bytes)
+    except SessionLimit as limit:
+        logger.info("Đóng phiên SSH của %s: %s", conn["src_ip"], limit)
+        try:
+            channel.send(b'\r\nConnection timed out\r\n')
+        except Exception:
+            pass
+    channel.close()
+
+
+def _shell_loop(channel, conn, shell, recv, max_command_bytes):
     channel.send(shell.prompt().encode())
     command = b''
     while True:
-        char = channel.recv(1)
+        char = recv()
         if not char:                               # client ngắt kết nối
             break
 
@@ -129,10 +220,10 @@ def emulated_shell(channel, conn, shell=None):
             continue
 
         if char == b'\x1b':                        # chuỗi escape (mũi tên, Delete, Home...)
-            nxt = channel.recv(1)
+            nxt = recv()
             if nxt == b'[':
                 while True:
-                    b = channel.recv(1)
+                    b = recv()
                     if not b or b'@' <= b <= b'~':
                         break
             continue
@@ -143,6 +234,8 @@ def emulated_shell(channel, conn, shell=None):
         channel.send(char)                         # echo
         if char != b'\r':
             command += char
+            if max_command_bytes and len(command) > max_command_bytes:
+                raise SessionLimit(f"dòng lệnh dài quá {max_command_bytes} byte")
             continue
 
         cmd = command.strip().decode(errors='replace')
@@ -160,8 +253,6 @@ def emulated_shell(channel, conn, shell=None):
         if response:
             channel.send(crlf(response) + b'\r\n')
         channel.send(shell.prompt().encode())
-
-    channel.close()
 
 
 # ssh server + socket
@@ -214,7 +305,11 @@ class Server(paramiko.ServerInterface):
         return True
 
 
-def client_handle(client, addr, username, password, host_key):
+def client_handle(client, addr, username, password, host_key, handshake_timeout=None,
+                  auth_timeout=None, idle_timeout=None, session_max_seconds=None, max_command_bytes=None):
+    """Xử lý một kết nối SSH; các giới hạn không truyền thì lấy từ settings (0 = không giới hạn)."""
+    handshake_timeout = settings.ssh_handshake_timeout if handshake_timeout is None else handshake_timeout
+    auth_timeout = settings.ssh_auth_timeout if auth_timeout is None else auth_timeout
     local_ip, local_port = client.getsockname()[:2]
     conn = {"src_ip": addr[0], "src_port": addr[1], "dst_ip": local_ip, "dst_port": local_port,
             "session_id": uuid.uuid4().hex}
@@ -227,9 +322,14 @@ def client_handle(client, addr, username, password, host_key):
         server = Server(conn, input_username=username, input_password=password)
 
         transport.add_server_key(host_key)
-        transport.start_server(server=server)
+        # truyền event để start_server không chặn: client im lặng sau khi nối thì bị đóng sau handshake_timeout
+        negotiated = threading.Event()
+        transport.start_server(event=negotiated, server=server)
+        if not negotiated.wait(handshake_timeout or None) or not transport.is_active():
+            logger.info("Đóng kết nối SSH của %s: không hoàn tất bắt tay trong %ss", addr[0], handshake_timeout)
+            return
 
-        channel = transport.accept(100)
+        channel = transport.accept(auth_timeout or None)
         if channel is None:
             logger.debug("Không có channel nào được mở")
             return
@@ -252,17 +352,51 @@ def client_handle(client, addr, username, password, host_key):
 
         standard_banner = settings.ssh_motd + "\r\n\r\n"
         channel.send(standard_banner.encode())
-        emulated_shell(channel, conn, shell)
+        emulated_shell(channel, conn, shell, idle_timeout=idle_timeout,
+                       session_max_seconds=session_max_seconds, max_command_bytes=max_command_bytes)
 
     except Exception as e:
         logger.warning("Lỗi phiên SSH: %s", e)
     finally:
         if transport is not None:
             try:
+                transport.quiet_close = True       # lỗi socket do chính ta đóng không phải lỗi đáng báo
                 transport.close()
             except Exception:
                 pass
         client.close()
+
+
+def accept_connection(client, addr, username, password, host_key, conn_limiter=None, handler=None):
+    """Nhận một kết nối: vượt giới hạn thì đóng ngay, ngược lại chạy client_handle ở thread riêng.
+
+    Trả về True nếu đã giao cho thread. Không bao giờ ném lỗi ra ngoài để vòng accept không sập.
+    """
+    conn_limiter = conn_limiter or limiter
+    handler = handler or client_handle
+    ip = addr[0]
+    if not conn_limiter.acquire(ip):
+        if conn_limiter.should_log_rejection(ip):
+            logger.warning("Từ chối kết nối SSH từ %s: vượt giới hạn kết nối đồng thời", ip)
+        client.close()
+        return False
+
+    def run():
+        try:
+            handler(client, addr, username, password, host_key)
+        except Exception as error:                 # lỗi một phiên không được kéo theo sensor
+            logger.error("Lỗi không mong đợi ở phiên SSH từ %s: %s", ip, error)
+        finally:
+            conn_limiter.release(ip)
+
+    try:
+        threading.Thread(target=run, daemon=True).start()
+    except Exception as error:                     # ví dụ cạn thread: trả lại chỗ, honeypot vẫn chạy
+        conn_limiter.release(ip)
+        client.close()
+        logger.error("Không tạo được thread cho kết nối SSH từ %s: %s", ip, error)
+        return False
+    return True
 
 
 # Provision SSH-based Honeypot
@@ -285,9 +419,6 @@ def honeypot(address, port, username, password):
             except OSError as error:
                 logger.error("Lỗi socket: %s", error)
                 break
-            t = threading.Thread(target=client_handle,
-                                 args=(client, addr, username, password, host_key),
-                                 daemon=True)
-            t.start()
+            accept_connection(client, addr, username, password, host_key)
     finally:
         socks.close()

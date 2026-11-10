@@ -3,6 +3,7 @@ import importlib
 import re
 import socket
 import threading
+import time
 from contextlib import contextmanager
 
 import paramiko
@@ -321,3 +322,250 @@ def test_web_rejects_session_cookie_with_trailing_newline():
     """Regex có `$` hoặc re.match sẽ để lọt giá trị này và vượt cột String(32)."""
     from nids.honeypot.web_honeypot import SESSION_ID
     assert SESSION_ID.fullmatch("0" * 32) and not SESSION_ID.fullmatch("0" * 32 + "\n")
+
+
+# ---- Giới hạn tài nguyên (PLAN-006, issue #27) ----
+
+def wait_until(condition, seconds=5):
+    deadline = time.monotonic() + seconds
+    while not condition() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    return condition()
+
+
+def test_resource_limit_settings_defaults_and_env(monkeypatch):
+    s = Settings()
+    assert (s.ssh_max_connections, s.ssh_max_connections_per_ip) == (100, 20)
+    assert (s.ssh_handshake_timeout, s.ssh_auth_timeout, s.ssh_idle_timeout) == (30, 90, 120)
+    assert (s.http_threads, s.http_max_connections, s.http_max_body_bytes) == (8, 100, 16 * 1024)
+    monkeypatch.setenv("HONEYPY_SSH_MAX_CONNECTIONS", "5")
+    monkeypatch.setenv("HONEYPY_HTTP_REQUEST_TIMEOUT", "7")
+    s = Settings()
+    assert s.ssh_max_connections == 5 and s.http_request_timeout == 7
+
+
+def test_connection_limiter_total_and_per_ip():
+    from nids.honeypot.ssh_honeypot import ConnectionLimiter
+    lim = ConnectionLimiter(max_total=3, max_per_ip=2)
+    assert lim.acquire("a") and lim.acquire("a")
+    assert not lim.acquire("a")                    # chạm trần theo IP
+    assert lim.acquire("b")                        # IP khác vẫn được
+    assert not lim.acquire("c")                    # chạm trần tổng
+    lim.release("a")
+    assert lim.acquire("c")                        # trả chỗ thì dùng lại được
+
+
+def test_connection_limiter_zero_disables_and_cleans_up():
+    from nids.honeypot.ssh_honeypot import ConnectionLimiter
+    lim = ConnectionLimiter(max_total=0, max_per_ip=0)
+    assert all(lim.acquire("a") for _ in range(500))
+    for _ in range(500):
+        lim.release("a")
+    assert lim.total == 0 and lim.per_ip == {}     # không để lại khoá khi hết kết nối
+
+
+def test_connection_limiter_rejection_log_is_rate_limited():
+    from nids.honeypot.ssh_honeypot import ConnectionLimiter
+    lim = ConnectionLimiter(1, 1)
+    assert lim.should_log_rejection("a", now=0) is True
+    assert lim.should_log_rejection("a", now=5) is False
+    assert lim.should_log_rejection("b", now=5) is True
+    assert lim.should_log_rejection("a", now=11) is True
+
+
+class FakeSocket:
+    def __init__(self):
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+def test_accept_connection_rejects_over_limit_and_closes_socket():
+    from nids.honeypot.ssh_honeypot import ConnectionLimiter, accept_connection
+    lim = ConnectionLimiter(1, 0)
+    gate = threading.Event()
+
+    def handler(*args):
+        gate.wait(5)
+
+    first, second = FakeSocket(), FakeSocket()
+    assert accept_connection(first, ("10.0.0.9", 1), None, None, None, lim, handler) is True
+    assert accept_connection(second, ("10.0.0.9", 2), None, None, None, lim, handler) is False
+    assert second.closed and not first.closed and lim.total == 1
+    gate.set()
+    assert wait_until(lambda: lim.total == 0)      # release chạy sau handler, trong finally của thread
+    assert lim.per_ip == {}
+
+
+def test_accept_connection_releases_slot_when_handler_raises():
+    from nids.honeypot.ssh_honeypot import ConnectionLimiter, accept_connection
+    lim = ConnectionLimiter(1, 0)
+
+    def handler(*args):
+        raise RuntimeError("boom")
+
+    assert accept_connection(FakeSocket(), ("10.0.0.9", 1), None, None, None, lim, handler)
+    assert wait_until(lambda: lim.total == 0)
+
+
+def test_accept_connection_rolls_back_when_thread_cannot_start(monkeypatch):
+    from nids.honeypot import ssh_honeypot
+    lim = ssh_honeypot.ConnectionLimiter(1, 0)
+
+    def cannot_start(self):
+        raise RuntimeError("cannot start new thread")
+
+    monkeypatch.setattr(threading.Thread, "start", cannot_start)
+    sock = FakeSocket()
+    assert ssh_honeypot.accept_connection(sock, ("10.0.0.9", 1), None, None, None, lim, lambda *a: None) is False
+    assert sock.closed and lim.total == 0 and lim.per_ip == {}
+
+
+class TimingOutChannel(FakeChannel):
+    """Channel hết dữ liệu thì recv ném socket.timeout, như khi hết settimeout."""
+
+    def __init__(self, data=b""):
+        super().__init__(data)
+        self.timeouts, self.closed = [], False
+
+    def settimeout(self, value):
+        self.timeouts.append(value)
+
+    def recv(self, n):
+        if self.data:
+            return super().recv(n)
+        raise socket.timeout()
+
+    def close(self):
+        self.closed = True
+
+
+def test_shell_closes_on_idle_timeout(monkeypatch):
+    from nids.honeypot import ssh_honeypot
+    monkeypatch.setattr(ssh_honeypot, "log_event", lambda *a, **k: None)
+    channel = TimingOutChannel(b"id\r")
+    ssh_honeypot.emulated_shell(channel, {"src_ip": "10.0.0.9"}, idle_timeout=5, session_max_seconds=0)
+    assert channel.closed and channel.timeouts[0] == 5 and b"timed out" in channel.sent
+
+
+def test_shell_closes_when_command_too_long(monkeypatch):
+    from nids.honeypot import ssh_honeypot
+    logged = []
+    monkeypatch.setattr(ssh_honeypot, "log_event", lambda *a, **k: logged.append(a))
+    channel = FakeChannel(b"A" * 50)               # không có Enter
+    ssh_honeypot.emulated_shell(channel, {"src_ip": "10.0.0.9"}, max_command_bytes=10, idle_timeout=0,
+                                session_max_seconds=0)
+    assert not logged and b"timed out" in channel.sent
+
+
+def test_shell_closes_after_session_deadline(monkeypatch):
+    from nids.honeypot import ssh_honeypot
+    monkeypatch.setattr(ssh_honeypot, "log_event", lambda *a, **k: None)
+    ticks = iter([0, 0, 100, 100, 100])             # monotonic: tính deadline, rồi đã quá hạn
+    monkeypatch.setattr(ssh_honeypot.time, "monotonic", lambda: next(ticks))
+    channel = TimingOutChannel(b"a" * 5)
+    ssh_honeypot.emulated_shell(channel, {"src_ip": "10.0.0.9"}, idle_timeout=0, session_max_seconds=10)
+    assert channel.closed and b"timed out" in channel.sent
+
+
+def tcp_socketpair():
+    """Cặp socket TCP loopback. socketpair() trên Linux là AF_UNIX nên getsockname() không có (ip, port)."""
+    listener = socket.create_server(("127.0.0.1", 0))
+    client = socket.create_connection(listener.getsockname())
+    server, _ = listener.accept()
+    listener.close()
+    return server, client
+
+
+def test_silent_client_is_dropped_after_handshake_timeout():
+    """Kết nối mở rồi im lặng không được giữ thread mãi."""
+    from nids.honeypot.ssh_honeypot import client_handle
+    server_side, client_side = tcp_socketpair()
+    started = time.monotonic()
+    try:
+        client_handle(server_side, ("10.0.0.9", 1), None, None, paramiko.RSAKey.generate(2048),
+                      handshake_timeout=0.5, auth_timeout=0.5)
+        assert time.monotonic() - started < 5
+        assert server_side.fileno() == -1          # socket đã được đóng
+    finally:
+        client_side.close()
+
+
+def test_dropping_silent_client_does_not_log_paramiko_traceback(caplog):
+    """Đóng kết nối đang bắt tay làm thread paramiko báo 'Bad file descriptor'; đó không phải lỗi thật."""
+    import logging
+    from nids.honeypot.ssh_honeypot import client_handle
+    server_side, client_side = tcp_socketpair()
+    try:
+        with caplog.at_level(logging.INFO):
+            client_handle(server_side, ("10.0.0.9", 1), None, None, paramiko.RSAKey.generate(2048),
+                          handshake_timeout=0.3, auth_timeout=0.3)
+            time.sleep(0.5)                        # chờ thread paramiko thoát
+    finally:
+        client_side.close()
+    assert not [r for r in caplog.records if r.name == "paramiko.transport" and r.levelno >= logging.ERROR]
+
+
+def test_log_event_clips_attacker_controlled_fields():
+    store.log_event("http", "http.login", "10.0.0.9", dst_ip="h" * 300, username="u" * 5000,
+                    password="p" * 5000, user_agent="a" * 5000, http_uri="/" + "x" * 5000)
+    event = EventRepository.get_recent_events()[0]
+    assert len(event.dst_ip) == store.MAX_IP_LEN and len(event.http_uri) <= store.MAX_FIELD_LEN
+    import nids.db as db
+    with db.SessionLocal() as session:
+        payload = session.query(models.EventPayloadModel).one()
+    assert len(payload.matched_content) <= store.MAX_EVIDENCE_LEN
+
+
+def test_run_web_honeypot_passes_limits_to_waitress(monkeypatch):
+    from nids.honeypot import web_honeypot as web
+    seen = {}
+    monkeypatch.setattr(web, "serve", lambda app, **kw: seen.update(kw))
+    web.run_web_honeypot(host="127.0.0.1", port=1234)
+    assert seen == {"host": "127.0.0.1", "port": 1234, "threads": settings.http_threads,
+                    "connection_limit": settings.http_max_connections,
+                    "channel_timeout": settings.http_request_timeout,
+                    "max_request_body_size": settings.http_max_body_bytes}
+
+
+@contextmanager
+def waitress_server(**options):
+    """Honeypot HTTP chạy bằng waitress thật trên cổng tạm."""
+    from waitress import create_server
+    server = create_server(web_honeypot(), host="127.0.0.1", port=0, **options)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    try:
+        yield server.effective_port
+    finally:
+        server.close()
+        thread.join(5)
+
+
+def test_waitress_rejects_oversized_body_and_still_logs_normal_login():
+    import http.client
+    form = {"Content-Type": "application/x-www-form-urlencoded"}
+    with waitress_server(max_request_body_size=1024) as port:
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        conn.request("POST", "/wp-admin-login", body="username=" + "a" * 5000, headers=form)
+        assert conn.getresponse().status == 413
+        assert EventRepository.get_recent_events() == []          # body quá lớn không sinh sự kiện
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        conn.request("POST", "/wp-admin-login", body="username=admin&password=bad", headers=form)
+        assert conn.getresponse().status == 200
+    (event,) = EventRepository.get_recent_events()
+    assert event.attack_type == "http.login" and event.dst_ip == "127.0.0.1"
+    assert event.src_port is not None
+
+
+def test_waitress_closes_silent_connection_after_channel_timeout():
+    with waitress_server(channel_timeout=1, cleanup_interval=1) as port:
+        sock = socket.create_connection(("127.0.0.1", port))
+        sock.settimeout(10)
+        started = time.monotonic()
+        try:
+            assert sock.recv(1) == b""                            # server đóng kết nối im lặng
+        finally:
+            sock.close()
+        assert time.monotonic() - started < 8

@@ -3,6 +3,7 @@ import re
 import uuid
 
 from flask import Flask, g, render_template, request
+from waitress import serve
 
 from .settings import settings
 from .store import log_event
@@ -17,6 +18,13 @@ SESSION_ID = re.compile(r"[0-9a-f]{32}")
 
 def web_honeypot(input_username=settings.http_username, input_password=settings.http_password):
     app = Flask(__name__)
+    # lớp thứ hai sau max_request_body_size của waitress; không ghi sự kiện chứa body quá lớn
+    app.config["MAX_CONTENT_LENGTH"] = settings.http_max_body_bytes or None
+
+    @app.errorhandler(413)
+    def too_large(_):
+        logger.warning("Từ chối request quá lớn từ %s", request.remote_addr)
+        return "Request Entity Too Large", 413
 
     @app.before_request
     def load_session():
@@ -42,7 +50,9 @@ def web_honeypot(input_username=settings.http_username, input_password=settings.
         ip_address = request.remote_addr
         logger.info("Đăng nhập web từ %s: %s / %s", ip_address, username, password)
 
-        local_ip, local_port = request.environ.get('SERVER_NAME', ''), request.environ.get('SERVER_PORT')
+        # waitress đặt SERVER_NAME theo cấu hình server (thường 0.0.0.0), nên ưu tiên host mà client gọi tới
+        local_ip = request.host.partition(':')[0] or request.environ.get('SERVER_NAME', '')
+        local_port = request.environ.get('SERVER_PORT')
         log_event('http', 'http.login', ip_address,
                   src_port=request.environ.get('REMOTE_PORT'),
                   dst_ip=local_ip, dst_port=int(local_port) if local_port else None,
@@ -60,6 +70,14 @@ def web_honeypot(input_username=settings.http_username, input_password=settings.
 
 
 def run_web_honeypot(host=settings.bind_address, port=settings.http_port,
-                     input_username=settings.http_username, input_password=settings.http_password):
+                     input_username=settings.http_username, input_password=settings.http_password,
+                     **serve_options):
+    """Chạy honeypot HTTP bằng waitress; giới hạn tài nguyên lấy từ settings, serve_options ghi đè (dùng cho test)."""
     app = web_honeypot(input_username, input_password)
-    app.run(debug=False, port=port, host=host)
+    options = {"threads": settings.http_threads, "connection_limit": settings.http_max_connections,
+               "channel_timeout": settings.http_request_timeout,
+               "max_request_body_size": settings.http_max_body_bytes}
+    options.update(serve_options)
+    logger.info("HTTP honeypot đang lắng nghe tại %s:%d (waitress: %d thread, tối đa %d kết nối)",
+                host, port, options["threads"], options["connection_limit"])
+    serve(app, host=host, port=port, **options)

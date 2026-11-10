@@ -182,7 +182,7 @@ redis:
   password: ""
 ```
 
-The `NIDS_DB_HOST`, `NIDS_DB_PORT`, `NIDS_DB_NAME`, `NIDS_DB_USER` and `NIDS_DB_PASSWORD` environment variables override the MySQL settings; `NIDS_REDIS_HOST`, `NIDS_REDIS_PORT` and `NIDS_REDIS_PASSWORD` do the same for Redis. Honeypots read `HONEYPY_*` variables (for example `HONEYPY_SSH_PORT`, `HONEYPY_HTTP_USERNAME`).
+The `NIDS_DB_HOST`, `NIDS_DB_PORT`, `NIDS_DB_NAME`, `NIDS_DB_USER` and `NIDS_DB_PASSWORD` environment variables override the MySQL settings; `NIDS_REDIS_HOST`, `NIDS_REDIS_PORT` and `NIDS_REDIS_PASSWORD` do the same for Redis. Honeypots read `HONEYPY_*` variables (for example `HONEYPY_SSH_PORT`, `HONEYPY_HTTP_USERNAME`). Resource limits are set the same way (`HONEYPY_SSH_MAX_CONNECTIONS`, `HONEYPY_SSH_MAX_CONNECTIONS_PER_IP`, `HONEYPY_SSH_IDLE_TIMEOUT`, `HONEYPY_HTTP_MAX_CONNECTIONS`, `HONEYPY_HTTP_REQUEST_TIMEOUT`, ...; `0` disables a limit); the HTTP honeypot runs on waitress.
 
 ---
 
