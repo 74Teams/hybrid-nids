@@ -25,7 +25,14 @@ ENV/
 
 # Database & SQLite
 *.db
+*.db-wal
+*.db-shm
 *.sqlite3
+
+# File pcap lớn (dữ liệu CIC, bản bắt tay); chỉ giữ pcap nhỏ dùng trong test
+pcap/*.pcap
+pcap/*.pcapng
+!pcap/ipv4frags.pcap
 
 
 # IDE
