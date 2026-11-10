@@ -32,11 +32,38 @@ def web_honeypot(input_username=settings.http_username, input_password=settings.
         cookie = request.cookies.get(SESSION_COOKIE, '')
         g.new_session = not SESSION_ID.fullmatch(cookie)
         g.session_id = uuid.uuid4().hex if g.new_session else cookie
+        # đọc body đúng một lần, trước mọi route: get_data(cache=True) để request.form trong login() vẫn parse được;
+        # MAX_CONTENT_LENGTH chặn body quá lớn (kể cả chunked), khi đó sự kiện chỉ không có body
+        try:
+            g.body = request.get_data(cache=True).decode('utf-8', errors='replace') or None
+        except Exception:
+            g.body = None
+
+    def request_fields():
+        """Trường chung của mọi sự kiện HTTP; waitress đặt SERVER_NAME theo cấu hình server nên dst_ip lấy từ Host."""
+        local_ip = request.host.partition(':')[0] or request.environ.get('SERVER_NAME', '')
+        local_port = request.environ.get('SERVER_PORT')
+        return dict(src_port=request.environ.get('REMOTE_PORT'),
+                    dst_ip=local_ip, dst_port=int(local_port) if local_port else None,
+                    user_agent=request.headers.get('User-Agent'),
+                    http_method=request.method, http_uri=request.full_path.rstrip('?'),
+                    http_headers="\n".join(f"{k}: {v}" for k, v in request.headers),
+                    http_body=g.get('body'), session_id=g.session_id)
 
     @app.after_request
     def save_session(response):
         if g.new_session:
             response.set_cookie(SESSION_COOKIE, g.session_id, httponly=True, samesite='Lax')
+        return response
+
+    @app.after_request
+    def log_other_requests(response):
+        """Ghi mọi request mà route chưa tự ghi (404, 405, HEAD, OPTIONS, trang chủ...)."""
+        if not g.get('logged'):
+            try:
+                log_event('http', 'http.request', request.remote_addr or '', **request_fields())
+            except Exception as e:
+                logger.error("Không thể ghi request HTTP: %s", e)
         return response
 
     @app.route('/')
@@ -51,16 +78,10 @@ def web_honeypot(input_username=settings.http_username, input_password=settings.
         logger.info("Đăng nhập web từ %s: %s / %s", ip_address, username, password)
 
         # waitress đặt SERVER_NAME theo cấu hình server (thường 0.0.0.0), nên ưu tiên host mà client gọi tới
-        local_ip = request.host.partition(':')[0] or request.environ.get('SERVER_NAME', '')
-        local_port = request.environ.get('SERVER_PORT')
-        log_event('http', 'http.login', ip_address,
-                  src_port=request.environ.get('REMOTE_PORT'),
-                  dst_ip=local_ip, dst_port=int(local_port) if local_port else None,
-                  username=username, password=password,
-                  user_agent=request.headers.get('User-Agent'),
-                  http_method=request.method, http_uri=request.full_path.rstrip('?'),
+        log_event('http', 'http.login', ip_address, username=username, password=password,
                   attack_tag='sqli' if SQLI.search(username + ' ' + password) else None,
-                  session_id=g.session_id)
+                  **request_fields())
+        g.logged = True        # log_event nuốt lỗi CSDL nên tới được đây là đã xử lý xong
 
         if username == input_username and password == input_password:
             return 'DEEBOODAH!'
