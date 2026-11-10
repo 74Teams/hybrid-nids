@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
 from nids.config import get_db_url
@@ -12,10 +12,17 @@ db_url = get_db_url()
 
 engine = create_engine(
     db_url,
-    connect_args={"check_same_thread": False} if "sqlite" in db_url else {},
+    # timeout: chờ tối đa 30s khi engine, API, honeypot cùng ghi SQLite thay vì lỗi "database is locked"
+    connect_args={"check_same_thread": False, "timeout": 30} if "sqlite" in db_url else {},
     pool_pre_ping=True,   # Tự động kiểm tra kết nối trước khi dùng (quan trọng với MySQL)
     echo=False,
 )
+
+if "sqlite" in db_url:
+    @event.listens_for(engine, "connect")
+    def _sqlite_wal(dbapi_conn, _record):
+        # WAL cho phép đọc (API) song song với ghi (engine)
+        dbapi_conn.execute("PRAGMA journal_mode=WAL")
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
