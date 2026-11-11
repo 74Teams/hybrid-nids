@@ -4,9 +4,9 @@ plan_id: PLAN-009
 title: Bộ đo có nhãn CIC-IDS2017 và tối ưu toàn hệ thống trong 3 tuần
 status: IN_PROGRESS
 issue: "#71"
-owner: nldd0507 (tuần 1 làm một mình; tuần 2–3 thêm 1 thành viên, chưa chốt)
+owner: nldd0507 (người A, toàn bộ AI), nmchien1106 (người B, 12–24/11 và hỗ trợ tuần cuối)
 created: 2026-11-10
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 # PLAN-009: Bộ đo có nhãn CIC-IDS2017 và tối ưu toàn hệ thống trong 3 tuần
@@ -288,7 +288,7 @@ flowchart LR
 
 ### 6.8 Chia việc cho 2 người
 
-> **Cập nhật 11/11:** bảng dưới là lịch cũ. Lịch hiện hành (so khớp trước, AI ở tuần cuối) nằm ở `docs/lo-trinh-3-tuan.md`.
+> **Cập nhật 11/11:** bảng dưới là lịch cũ. Lịch hiện hành nằm ở `docs/lo-trinh-3-tuan.md`: so khớp trước, AI ở tuần cuối. Người A là nldd0507 (rule, so khớp, engine, toàn bộ AI); người B là nmchien1106 (bộ đo, ANOMALY, CSDL, API, CI, thử live; tuần cuối làm tài liệu, demo và tái lập).
 
 | Tuần | Người A (engine, rule) | Người B (dữ liệu, AI) |
 | :--- | :--- | :--- |
@@ -454,10 +454,15 @@ Thứ tự: PR2 trước PR3 vì bộ đo cần module nhãn. Baseline (PR3) ph�
 | 2026-11-11 | Ghi nhận: `FlowLog` vẫn ghi CSDL trong worker; CSDL bị khoá thì worker chờ tới 30 giây | Claude | Thấy khi thử khoá CSDL 35 giây; đề xuất chuyển flow sang thread ghi riêng (việc tuần sau) |
 | 2026-11-11 | Tuần 2 đo thêm độ chính xác theo cặp IP hoặc theo flow, và cho bộ đo lưu danh sách cảnh báo | Claude | Sau khi bộ chặn gộp cảnh báo trùng, độ chính xác theo số cảnh báo tụt 30,3% → 6,6% dù báo nhầm giảm 87.011 → 3.881: con số bị số cảnh báo trùng chi phối (xem `docs/eval/sau-sua-engine.md`, `docs/nhat-ky-ngay-2.md`) |
 | 2026-11-11 | Sắp lại lộ trình: tối ưu so khớp và các điểm chưa tốt trước (12–24/11, đo đủ 5 ngày CIC), AI dồn vào tuần cuối (25/11–01/12); lịch theo ngày ở `docs/lo-trinh-3-tuan.md` thay cho bảng ở mục 6.8 | Người dùng | Tập trung tối ưu ứng dụng trước; AI dùng dataset 5 ngày và engine đã ổn định |
+| 2026-11-11 | Chốt vai: A là nldd0507, làm rule, so khớp, engine và **toàn bộ AI**; B là nmchien1106, cùng A chia việc tối ưu trong 12–24/11 | Người dùng | |
+| 2026-11-11 | A làm sớm phần AI không phụ thuộc kết quả tối ưu (bộ đếm `Flow`, `features.py`, khung worker với mô hình giả, nhãn dashboard) trong 21–23/11, công tắc AI vẫn tắt; dataset và huấn luyện giữ ở 25/11 trở đi | Claude | Một người làm hết AI trong 7 ngày quá sát; phần làm sớm không đổi số liệu rule và ANOMALY của lần thi 24/11 |
+| 2026-11-11 | B nhận ANOMALY (#79, #80), `FlowTracker.expire` (#84), CSDL/API (#86–#88), CI (#89), thử live (#90), bộ đo theo cặp IP (#76); A nhận lượt đo dài trên 5 ngày vì dữ liệu CIC nằm trên máy A | Claude | B đã làm flow, ANOMALY (PLAN-004) và WebSocket (PLAN-001); tránh hai người sửa `flow.py` cùng lúc (#84 merge trước #92) |
+| 2026-11-11 | #85 chỉ làm nguyên mẫu decoder đọc byte thô (A), phải chốt dùng hay không trước 20/11; bỏ nguyên mẫu hai process khỏi lịch | Claude | Decoder ảnh hưởng đặc trưng AI, nên phải chốt trước khi dựng dataset; không còn người cho nguyên mẫu thứ hai |
+| 2026-11-11 | Tuần cuối B chạy lại bộ đo, `build_dataset.py` và `train.py` trên máy mình để kiểm tra tiêu chí 9 | Claude | Có sẵn máy thứ hai; không chiếm phần AI của A |
 
 **Câu hỏi còn mở**
 
-- Thành viên thứ hai là ai? Ai là người A, ai là người B?
+- B (nmchien1106) có lấy được 49 GB pcap 5 ngày trước 15/11 không? Không kịp thì A chạy lượt đo 5 ngày cho #79, #80 (xem `docs/lo-trinh-3-tuan.md` mục 8).
 
 **Kết quả phản biện**
 
