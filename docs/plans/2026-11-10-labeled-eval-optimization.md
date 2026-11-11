@@ -404,9 +404,9 @@ Lệnh: `pytest` (toàn bộ; CI chạy cho mỗi PR). Test trong `tests/tools/`
 Mỗi PR một nhánh; tên nhánh thêm số issue khi đã tạo issue.
 
 - [x] Tạo issue cho plan (#71); cập nhật trường `issue` của plan và bảng tổng hợp
-- [ ] PR2 `feature/cic-label-tools`: `tools/cic/labels.py`, `manifest.py`, `tests/tools/test_cic_labels.py`
-- [ ] PR3 `feature/labeled-eval-harness`: `tools/eval/`, `tests/tools/test_evaluate.py`, `docs/eval/baseline.md` trên code chưa sửa
-- [ ] PR1 `feature/engine-alert-writer`: offline backpressure, `AlertWriter` + `save_alerts`, WAL, threshold (cả ANOMALY), layer filter, `.gitignore`/`.dockerignore`, test; chạy lại bộ đo
+- [x] PR2 `feature/cic-label-tools`: `tools/cic/labels.py`, `manifest.py`, `tests/tools/test_cic_labels.py` (gộp với PR3 thành nhánh `feature/cic-eval-tools`)
+- [x] PR3 `feature/labeled-eval-harness`: `tools/eval/`, `tests/tools/test_evaluate.py`, `docs/eval/baseline.md` trên code chưa sửa
+- [x] PR1 `feature/engine-alert-writer`: offline backpressure, `AlertWriter` + `save_alerts`, WAL, threshold (cả ANOMALY), layer filter, `.gitignore`/`.dockerignore`, test; chạy lại bộ đo (WAL đã có sẵn trên `main`; layer filter làm luôn ở nhánh này)
 - [ ] PR4 `feature/rule-precision-cic`: sửa 4 rule, rule mới + đòn demo, ngưỡng ANOMALY; `docs/eval/tuan-2-dev.md`
 - [ ] PR5 `feature/ai-flow-features`: bộ đếm `Flow`, `nids/ai/features.py`, test
 - [ ] PR6 `feature/ai-dataset-training`: `build_dataset.py`, `train.py`, mô hình nền, `docs/ai/ket-qua-danh-gia.md`
@@ -445,6 +445,11 @@ Thứ tự: PR2 trước PR3 vì bộ đo cần module nhãn. Baseline (PR3) ph�
 | 2026-11-10 | `handle_alert` vẫn ghi đồng bộ khi chưa có `AlertWriter` (test gọi trực tiếp) | Claude | Không phải sửa `test_alert_shown_even_if_db_fails` |
 | 2026-11-10 | Thư mục `split/` cũ đã bị xoá; cắt lại bằng `editcap -i 600` (49 file, tổng 9.997.874 gói, đã kiểm tra) | Người dùng / Claude | Bộ cắt theo 10 phút là bộ duy nhất cần |
 | 2026-11-10 | Duyệt plan: REVIEW → APPROVED → IN_PROGRESS (nhánh `feature/cic-eval-tools`) | Người dùng | |
+| 2026-11-11 | Layer filter (T7) làm luôn trong PR1 thay vì để tuần 3 | Claude | Đo lại: đọc gói nhanh gấp đôi (26,5 → 12,8 giây), decode nhanh hơn 23%, và sửa lỗi `raw_packet` bị Scapy dựng lại sai ở 117/107.996 gói |
+| 2026-11-11 | Giữ mọi lớp của `scapy.layers.l2/inet/inet6` thay cho danh sách lớp cố định | Claude | Danh sách cố định làm ICMPv6 thành `Raw` và đổi `raw_payload`; giữ theo module thì decode giống hệt ở mọi gói |
+| 2026-11-11 | Test chạy `main.main()` dùng SQLite dạng file | Claude | Flow và cảnh báo ghi từ hai thread; in-memory + `StaticPool` dùng một kết nối chung nên mất dữ liệu ngẫu nhiên |
+| 2026-11-11 | Ghi nhận: nút thắt tốc độ chính là GIL (thread đọc gói và worker tranh CPU) và Scapy, không phải CSDL | Claude | Tắt hẳn CSDL chỉ nhanh hơn 4 giây trên 51 giây; tiêu chí 2 (≥ 3.000 gói/giây) chưa đạt sau tuần 1 (2.735) |
+| 2026-11-11 | Ghi nhận: `FlowLog` vẫn ghi CSDL trong worker; CSDL bị khoá thì worker chờ tới 30 giây | Claude | Thấy khi thử khoá CSDL 35 giây; đề xuất chuyển flow sang thread ghi riêng (việc tuần sau) |
 
 **Câu hỏi còn mở**
 

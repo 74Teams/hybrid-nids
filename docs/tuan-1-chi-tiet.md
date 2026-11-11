@@ -410,18 +410,18 @@ git switch -c feature/engine-alert-writer
 
 **Ngày 1**
 
-- [ ] T0: plan `APPROVED`, issue `#N`, 49 file pcap, nhánh `feature/cic-eval-tools`
+- [x] T0: plan `APPROVED`, issue `#N`, 49 file pcap, nhánh `feature/cic-eval-tools`
 - [x] T1: `labels.py` + test; thử thật ra 118 flow PortScan
 - [x] T2: `manifest.py`; `docs/eval/manifest.md` có 49 chunk, 6 chunk test
 - [x] T3: `evaluate.py` + test; `docs/eval/baseline.md`; commit
 
 **Ngày 2**
 
-- [ ] T4: offline không vứt gói, worker chết không treo
-- [ ] T5: `AlertWriter`, `save_alerts`, WAL, thứ tự kết thúc, tổng kết có gói/giây
-- [ ] T6: khoá chặn theo `track`, giờ theo gói (rule và ANOMALY)
-- [ ] T7 (tuỳ chọn): lọc tầng Scapy + test hồi quy
-- [ ] T8: đo lại, so baseline, 2 PR, báo nmchien1106
+- [x] T4: offline không vứt gói, worker chết không treo
+- [x] T5: `AlertWriter`, `save_alerts`, WAL, thứ tự kết thúc, tổng kết có gói/giây
+- [x] T6: khoá chặn theo `track`, giờ theo gói (rule và ANOMALY)
+- [x] T7 (tuỳ chọn): lọc tầng Scapy + test hồi quy
+- [x] T8: đo lại, so baseline, 2 PR, báo nmchien1106
 
 ## Khi bị kẹt
 
