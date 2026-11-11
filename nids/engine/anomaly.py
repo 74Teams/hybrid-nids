@@ -55,7 +55,7 @@ class AnomalyDetector:
         self.common_ports = set(cfg.get("common_ports") or DEFAULTS["common_ports"])
         self.max_tracked = int(cfg.get("max_tracked", DEFAULTS["max_tracked"]))
         self.alert_callback = alert_callback
-        # shortcut: ThresholdManager tính cửa sổ chặn theo giờ hệ thống, replay pcap dài chỉ ra một cảnh báo mỗi loại; đổi sang giờ gói nếu cần đếm chính xác khi replay
+        # Cửa sổ chặn tính theo giờ của gói (truyền ở _emit), nên replay pcap ra cùng số cảnh báo như chạy thật
         self.threshold = ThresholdManager(default_window_seconds=float(cfg.get("suppress_seconds", DEFAULTS["suppress_seconds"])))
         self._scans: "OrderedDict[str, _ScanWindow]" = OrderedDict()
         self._floods: "OrderedDict[str, tuple]" = OrderedDict()   # dst_ip -> (deque mọi gói, deque SYN)
@@ -134,7 +134,8 @@ class AnomalyDetector:
 
     def _emit(self, kind: str, packet: DecodedPacket, msg: str, severity: int, classtype: str, evidence: str,
               key_src: str, key_dst: str, key_port: Optional[int]) -> None:
-        allow, _ = self.threshold.should_alert(sid=kind, src_ip=key_src, dst_ip=key_dst, dst_port=key_port)
+        allow, _ = self.threshold.should_alert(sid=kind, src_ip=key_src, dst_ip=key_dst, dst_port=key_port,
+                                               now=packet.timestamp)
         if not allow or self.alert_callback is None:
             return
         self.alert_callback({

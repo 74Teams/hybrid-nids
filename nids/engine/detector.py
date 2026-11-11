@@ -359,6 +359,8 @@ class DetectionEngine:
                 src_ip=packet.src_ip,
                 dst_ip=packet.dst_ip,
                 dst_port=packet.dst_port,
+                now=packet.timestamp,   # giờ của gói: replay pcap ra cùng kết quả dù chạy nhanh hay chậm
+                track=rule.detection_filter.track if rule.detection_filter else None,
             )
             if not allow:
                 return
