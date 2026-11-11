@@ -12,3 +12,4 @@ Bảng tổng hợp mọi plan của dự án. Quy trình và ý nghĩa trạng 
 | PLAN-006 | [Giới hạn tài nguyên cho honeypot SSH và HTTP](2026-11-08-honeypot-resource-limits.md) | IN_PROGRESS | #27 | ngoccu2006 | 2026-11-08 | |
 | PLAN-007 | [Honeypot HTTP ghi mọi request (catch-all)](2026-11-09-http-catch-all.md) | IN_PROGRESS | #26 | ngoccu2006 | 2026-11-10 | |
 | PLAN-008 | [Lab ba máy ảo trên VMware (Kali, IDS gateway, Victim + Honeypot)](2026-11-10-vmware-multi-vm-lab.md) | REVIEW | #68 | ngoccu2006 | 2026-11-10 | |
+| PLAN-009 | [Bộ đo có nhãn CIC-IDS2017 và tối ưu toàn hệ thống trong 3 tuần](2026-11-10-labeled-eval-optimization.md) | IN_PROGRESS | #71 | nldd0507 | 2026-11-11 | [#72](https://github.com/74Teams/hybrid-nids/pull/72), [#73](https://github.com/74Teams/hybrid-nids/pull/73) |
