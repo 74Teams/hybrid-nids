@@ -448,8 +448,9 @@ Thứ tự: PR2 trước PR3 vì bộ đo cần module nhãn. Baseline (PR3) ph�
 | 2026-11-11 | Layer filter (T7) làm luôn trong PR1 thay vì để tuần 3 | Claude | Đo lại: đọc gói nhanh gấp đôi (26,5 → 12,8 giây), decode nhanh hơn 23%, và sửa lỗi `raw_packet` bị Scapy dựng lại sai ở 117/107.996 gói |
 | 2026-11-11 | Giữ mọi lớp của `scapy.layers.l2/inet/inet6` thay cho danh sách lớp cố định | Claude | Danh sách cố định làm ICMPv6 thành `Raw` và đổi `raw_payload`; giữ theo module thì decode giống hệt ở mọi gói |
 | 2026-11-11 | Test chạy `main.main()` dùng SQLite dạng file | Claude | Flow và cảnh báo ghi từ hai thread; in-memory + `StaticPool` dùng một kết nối chung nên mất dữ liệu ngẫu nhiên |
-| 2026-11-11 | Ghi nhận: nút thắt tốc độ chính là GIL (thread đọc gói và worker tranh CPU) và Scapy, không phải CSDL | Claude | Tắt hẳn CSDL chỉ nhanh hơn 4 giây trên 51 giây; tiêu chí 2 (≥ 3.000 gói/giây) chưa đạt sau tuần 1 (2.735) |
+| 2026-11-11 | Ghi nhận: nút thắt tốc độ chính là GIL (thread đọc gói và worker tranh CPU) và Scapy, không phải CSDL | Claude | Tắt hẳn CSDL chỉ nhanh hơn 4 giây trên 51 giây; tiêu chí 2 (≥ 3.000 gói/giây) sau tuần 1: đạt trên chunk 09:19 (3.189), chưa đạt trên chunk 14:09 (2.735) |
 | 2026-11-11 | Ghi nhận: `FlowLog` vẫn ghi CSDL trong worker; CSDL bị khoá thì worker chờ tới 30 giây | Claude | Thấy khi thử khoá CSDL 35 giây; đề xuất chuyển flow sang thread ghi riêng (việc tuần sau) |
+| 2026-11-11 | Tuần 2 đo thêm độ chính xác theo cặp IP hoặc theo flow, và cho bộ đo lưu danh sách cảnh báo | Claude | Sau khi bộ chặn gộp cảnh báo trùng, độ chính xác theo số cảnh báo tụt 30,3% → 6,6% dù báo nhầm giảm 87.011 → 3.881: con số bị số cảnh báo trùng chi phối (xem `docs/eval/sau-sua-engine.md`, `docs/nhat-ky-ngay-2.md`) |
 
 **Câu hỏi còn mở**
 
