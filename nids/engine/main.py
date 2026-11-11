@@ -14,7 +14,7 @@ from nids.db.repository import EventRepository
 from nids.engine.decoder import PacketDecoder
 from nids.engine.flow import Flow, FlowTracker
 from nids.engine.alert_writer import AlertWriter
-from nids.engine.capture import PacketCapture
+from nids.engine.capture import PacketCapture, apply_layer_filter
 from nids.engine.rule import SnortRule
 from nids.engine.rule_manager import RuleManager
 from nids.engine.detector import DetectionEngine
@@ -393,6 +393,7 @@ def main():
     bpf = SETTINGS.get("network", {}).get("bpf_filter", "ip")
     iface = SETTINGS.get("network", {}).get("interface", None) or None
     capturer = PacketCapture(raw_callback=on_raw_packet, bpf_filter=bpf)
+    apply_layer_filter()   # Scapy chỉ bóc tới L4: nhanh hơn và raw_packet đúng byte gốc
 
     try:
         if capture_mode == "offline":
