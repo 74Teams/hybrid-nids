@@ -16,31 +16,37 @@ class EventRepository:
     """Quản lý thao tác CRUD các sự kiện cảnh báo trong CSDL."""
 
     @staticmethod
+    def _build_event(alert_data: Dict[str, Any]) -> EventModel:
+        """Dựng bản ghi `events` (kèm payload nếu có) từ dict cảnh báo của engine hoặc honeypot."""
+        event = EventModel(
+            timestamp=utc_from_epoch(alert_data.get("timestamp", time.time())),
+            sid=alert_data.get("sid"),
+            source_type=alert_data.get("source_type", "RULE_ENGINE"),
+            attack_type=alert_data.get("classtype") or "UNKNOWN_ATTACK",
+            severity=alert_data.get("severity", 2),
+            src_ip=alert_data.get("src_ip", ""),
+            src_port=alert_data.get("src_port"),
+            dst_ip=alert_data.get("dst_ip", ""),
+            dst_port=alert_data.get("dst_port"),
+            protocol=alert_data.get("protocol", "TCP"),
+            http_method=alert_data.get("http_method"),
+            http_uri=alert_data.get("http_uri"),
+            summary=alert_data.get("msg", ""),
+            status="NEW",
+            session_id=alert_data.get("session_id")
+        )
+        payload = {k: alert_data[k] for k in ("matched_content", "http_headers", "http_body")
+                   if alert_data.get(k)}
+        if payload:
+            event.payload = EventPayloadModel(**payload)
+        return event
+
+    @staticmethod
     def save_alert(alert_data: Dict[str, Any]) -> EventModel:
         from nids.db import SessionLocal
         session = SessionLocal()
         try:
-            event = EventModel(
-                timestamp=utc_from_epoch(alert_data.get("timestamp", time.time())),
-                sid=alert_data.get("sid"),
-                source_type=alert_data.get("source_type", "RULE_ENGINE"),
-                attack_type=alert_data.get("classtype") or "UNKNOWN_ATTACK",
-                severity=alert_data.get("severity", 2),
-                src_ip=alert_data.get("src_ip", ""),
-                src_port=alert_data.get("src_port"),
-                dst_ip=alert_data.get("dst_ip", ""),
-                dst_port=alert_data.get("dst_port"),
-                protocol=alert_data.get("protocol", "TCP"),
-                http_method=alert_data.get("http_method"),
-                http_uri=alert_data.get("http_uri"),
-                summary=alert_data.get("msg", ""),
-                status="NEW",
-                session_id=alert_data.get("session_id")
-            )
-            payload = {k: alert_data[k] for k in ("matched_content", "http_headers", "http_body")
-                       if alert_data.get(k)}
-            if payload:
-                event.payload = EventPayloadModel(**payload)
+            event = EventRepository._build_event(alert_data)
             session.add(event)
             session.commit()
             session.refresh(event)
@@ -48,6 +54,27 @@ class EventRepository:
             return event
         finally:
             session.close()
+
+    @staticmethod
+    def save_alerts(alerts: Iterable[Dict[str, Any]]) -> List[int]:
+        """Ghi một lô cảnh báo trong một giao dịch (một `commit`); trả về id theo đúng thứ tự.
+
+        `publish_alert` chỉ gọi sau khi `commit` thành công, giống `save_alert`.
+        """
+        from nids.db import SessionLocal
+        events = [EventRepository._build_event(a) for a in alerts]
+        if not events:
+            return []
+        session = SessionLocal()
+        try:
+            session.add_all(events)
+            session.commit()
+            ids = [event.id for event in events]
+        finally:
+            session.close()
+        for event_id in ids:
+            publish_alert(event_id)
+        return ids
 
     @staticmethod
     def _apply_filters(query, source_type: Optional[str] = None, protocol: Optional[str] = None,

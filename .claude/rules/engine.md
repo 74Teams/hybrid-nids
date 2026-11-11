@@ -9,7 +9,9 @@ paths:
 
 ## Pipeline
 
-`nids/engine/main.py` (chạy bằng `python -m nids.engine`): `PacketCapture` (Scapy, live hoặc pcap offline) → `PacketDecoder.decode` (L2–L4 + HTTP L7 qua `http_parser`) → `queue.Queue` có giới hạn → một worker thread duy nhất gọi `DetectionEngine.evaluate_packet` rồi `AITrafficWorker.analyze_packet`. Alert đi qua callback `handle_alert` → `EventRepository.save_alert`.
+`nids/engine/main.py` (chạy bằng `python -m nids.engine`): `PacketCapture` (Scapy, live hoặc pcap offline) → `PacketDecoder.decode` (L2–L4 + HTTP L7 qua `http_parser`) → `queue.Queue` có giới hạn → một worker thread duy nhất gọi `DetectionEngine.evaluate_packet` rồi `AITrafficWorker.analyze_packet`. Alert đi qua callback `handle_alert` → `AlertWriter` (`nids/engine/alert_writer.py`): thread `alert-writer` gom tối đa 200 cảnh báo hoặc 1 giây rồi gọi `EventRepository.save_alerts` (một `commit` mỗi lô, `publish_alert` sau `commit`). Lỗi CSDL chỉ log và bỏ lô. Khi `main()` chưa chạy (test gọi `handle_alert` trực tiếp) thì vẫn ghi đồng bộ bằng `save_alert`.
+
+Hàng đợi gói (`enqueue_packet`): live thì đầy là bỏ gói và đếm (`DropCounter`); offline thì chờ chỗ trống (`put` có timeout 0,5 giây để Ctrl+C trên Windows vẫn ngắt được), không bỏ gói. Worker chết thì việc đọc pcap dừng (`stop_filter`), `wait_until_processed` thay cho `packet_queue.join()` để không treo. Một gói lỗi trong worker chỉ được log (gộp đếm), worker chạy tiếp. Thứ tự kết thúc offline: worker join (ghi nốt flow) → `AlertWriter.close()` (ghi nốt cảnh báo) → in `format_summary` (có thời gian và gói/giây). Test chạy `main.main()` phải dùng SQLite dạng file, không dùng in-memory + `StaticPool`: flow và cảnh báo được ghi từ hai thread, một kết nối chung sẽ làm mất dữ liệu.
 
 ## Rule
 
@@ -24,7 +26,7 @@ paths:
 
 - `DetectionEngine.rebuild_index` dựng danh sách rule theo protocol, cùng các matcher Aho-Corasick riêng (`MultiPatternMatcher`) cho URI, header, body và raw payload.
 - Mỗi rule được index bằng fast pattern của nó (content có `fast_pattern`, nếu không thì content dài nhất). Rule không có fast pattern vào `no_content_rules` và luôn được đánh giá.
-- `evaluate_packet` là phễu 4 tầng: demux theo protocol/port → prefilter Aho-Corasick → kiểm tra chi tiết (flags, flow, dsize, itype/icode, content theo buffer, pcre, `detection_filter`) → `ThresholdManager` chặn bớt để tránh bão alert.
+- `evaluate_packet` là phễu 4 tầng: demux theo protocol/port → prefilter Aho-Corasick → kiểm tra chi tiết (flags, flow, dsize, itype/icode, content theo buffer, pcre, `detection_filter`) → `ThresholdManager` chặn bớt để tránh bão alert. Cửa sổ chặn tính theo `packet.timestamp` (replay pcap lặp lại được). Khoá chặn: rule có `detection_filter` theo `track` (`by_dst` → `(sid, dst_ip)`, `by_src` → `(sid, src_ip)`), rule khác `(sid, src_ip, dst_ip, dst_port)`.
 
 ## Header rule và biến
 
@@ -66,7 +68,7 @@ IP đã chạm honeypot trong 1 giờ gần nhất chắc chắn là attacker. `
 - `nids/engine/anomaly.py` (`AnomalyDetector`) bắt tấn công chưa có rule bằng thống kê theo cửa sổ thời gian của gói (`packet.timestamp`, replay pcap lặp lại được); module thuần, không biết CSDL hay `SETTINGS`. Worker gọi `main.py::observe_anomaly(anomaly, packet)` sau `flow_log.on_packet`; lỗi chỉ được log.
 - Gói "mở kết nối" là TCP SYN không ACK, ICMP echo, và UDP không xuất phát từ cổng trong `common_ports` (để trả lời của DNS server không bị coi là quét).
 - Port scan / host sweep: một nguồn mở kết nối tới `scan.ports` cặp (IP, cổng) hoặc `scan.hosts` máy trong `scan.window` giây (P2). SYN flood / packet flood: một đích nhận `flood.syn` SYN hoặc `flood.packets` gói trong `flood.window` giây (P1). Rare: TCP SYN tới cổng ngoài `common_ports`, UDP tới cổng < 1024 ngoài danh sách, ICMP type ngoài {0, 3, 8, 11} (P3); bỏ qua khi nguồn đang bị đánh dấu scan.
-- Cảnh báo đi qua `handle_alert` với `source_type="ANOMALY"`, `sid=None`, bằng chứng ở `matched_content`; `format_alert` in nhãn `ANOMALY`. Chặn bớt bằng `ThresholdManager` riêng (`suppress_seconds`): scan và rare khoá theo nguồn, flood theo đích. Cửa sổ chặn theo giờ hệ thống nên replay pcap chỉ ra một cảnh báo mỗi loại.
+- Cảnh báo đi qua `handle_alert` với `source_type="ANOMALY"`, `sid=None`, bằng chứng ở `matched_content`; `format_alert` in nhãn `ANOMALY`. Chặn bớt bằng `ThresholdManager` riêng (`suppress_seconds`): scan và rare khoá theo nguồn, flood theo đích. Cửa sổ chặn tính theo giờ của gói, nên replay pcap ra cùng số cảnh báo như chạy thật.
 - Bộ nhớ: tối đa `max_tracked` IP mỗi bảng (đầy thì bỏ IP lâu nhất không có gói), mỗi nguồn nhớ tối đa 10000 gói trong cửa sổ scan, mục hết cửa sổ được dọn mỗi giây theo giờ gói.
 - Báo cả khi rule cũng bắt cùng traffic (ví dụ 1000107 và ANOMALY Port scan). `alert_count` của flow chỉ đếm rule.
 

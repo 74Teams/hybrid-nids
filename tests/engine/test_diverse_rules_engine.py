@@ -1,3 +1,4 @@
+import dataclasses
 import time
 import pytest
 from nids.engine.packet import DecodedPacket, ParsedHTTPRequest
@@ -323,10 +324,10 @@ def test_threshold_suppresses_alert_flood():
     # Chỉ được nhận duy nhất 1 alert trong cửa sổ 2.0s
     assert len(alerts_received) == 1
 
-    # Chờ hết cửa sổ thời gian
-    time.sleep(2.1)
+    # Cửa sổ chặn tính theo giờ của gói: gói đến sau 2,1 giây (giờ gói) thì hết cửa sổ, không cần chờ thật
+    later = dataclasses.replace(pkt, timestamp=pkt.timestamp + 2.1)
 
     # Gói tiếp theo được phép bắn alert và mang theo số lượng đã bị dồn
-    engine.evaluate_packet(pkt)
+    engine.evaluate_packet(later)
     assert len(alerts_received) == 2
     assert alerts_received[1]["suppressed_hits"] == 9

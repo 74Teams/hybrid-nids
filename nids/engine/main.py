@@ -13,7 +13,8 @@ from nids.db.models import utc_now
 from nids.db.repository import EventRepository
 from nids.engine.decoder import PacketDecoder
 from nids.engine.flow import Flow, FlowTracker
-from nids.engine.capture import PacketCapture
+from nids.engine.alert_writer import AlertWriter
+from nids.engine.capture import PacketCapture, apply_layer_filter
 from nids.engine.rule import SnortRule
 from nids.engine.rule_manager import RuleManager
 from nids.engine.detector import DetectionEngine
@@ -45,11 +46,17 @@ def format_alert(alert_data: dict) -> str:
     return f"[P{alert_data.get('severity', 2)}] {label}  {alert_data.get('msg')}  {src} → {dst}"
 
 
-def format_summary(total_packets: int, by_priority: Counter) -> str:
-    """Dựng dòng tổng kết: luôn có P1, P2, P3; priority khác (nếu có) nối thêm theo thứ tự tăng dần."""
+def format_summary(total_packets: int, by_priority: Counter, elapsed: Optional[float] = None) -> str:
+    """Dựng dòng tổng kết: luôn có P1, P2, P3; priority khác (nếu có) nối thêm theo thứ tự tăng dần.
+
+    Có `elapsed` (giây) thì nối thêm thời gian chạy và tốc độ, để đo thông lượng của engine.
+    """
     keys = [1, 2, 3] + sorted(k for k in by_priority if k not in (1, 2, 3))
     detail = ", ".join(f"P{k}: {by_priority.get(k, 0)}" for k in keys)
-    return f"Hoàn tất: {total_packets} gói, {sum(by_priority.values())} cảnh báo ({detail})"
+    line = f"Hoàn tất: {total_packets} gói, {sum(by_priority.values())} cảnh báo ({detail})"
+    if elapsed is not None and elapsed > 0:
+        line += f" trong {elapsed:.1f} giây ({total_packets / elapsed:.0f} gói/giây)"
+    return line
 
 
 class DropCounter:
@@ -70,6 +77,53 @@ class DropCounter:
             self._last_report = now
             return dropped
         return None
+
+
+# Thời gian chờ mỗi lượt khi hàng đợi đầy ở chế độ offline. Có timeout thì Ctrl+C trên Windows vẫn ngắt được
+# và thread đọc pcap kịp nhận ra worker đã dừng, thay vì treo mãi.
+OFFLINE_PUT_TIMEOUT = 0.5
+
+
+def enqueue_packet(packet_queue: queue.Queue, packet, live: bool, stop_event: threading.Event,
+                   worker_alive, drops: DropCounter) -> bool:
+    """Đưa gói vào hàng đợi phân tích; trả về True nếu gói đã vào hàng đợi.
+
+    - Live: hàng đợi đầy thì bỏ gói và đếm vào `drops` (bắt gói trực tiếp không thể chờ).
+    - Offline: đọc file không cần vội, nên hàng đợi đầy thì chờ chỗ trống, không bỏ gói. Ngừng chờ khi
+      `stop_event` được đặt hoặc `worker_alive()` trả về False; khi worker đã dừng thì tự đặt `stop_event`
+      để việc đọc pcap dừng theo.
+    """
+    if live:
+        try:
+            packet_queue.put_nowait(packet)
+            return True
+        except queue.Full:
+            dropped = drops.record(time.monotonic())
+            if dropped:
+                logger.warning("Queue đầy, đã bỏ %d gói", dropped)
+            return False
+    while not stop_event.is_set():
+        try:
+            packet_queue.put(packet, timeout=OFFLINE_PUT_TIMEOUT)
+            return True
+        except queue.Full:
+            if not worker_alive():
+                logger.error("Worker thread đã dừng, ngừng đọc pcap")
+                stop_event.set()
+    return False
+
+
+def wait_until_processed(packet_queue: queue.Queue, worker_alive, poll: float = 0.5) -> bool:
+    """Chờ worker xử lý hết các gói đã đưa vào hàng đợi; trả về False nếu worker dừng trước khi xong.
+
+    Thay cho `packet_queue.join()`: hàm đó chờ mãi khi worker đã chết và không còn ai gọi `task_done()`.
+    """
+    with packet_queue.all_tasks_done:
+        while packet_queue.unfinished_tasks:
+            if not worker_alive():
+                return False
+            packet_queue.all_tasks_done.wait(poll)
+    return True
 
 
 class RuleReloader:
@@ -236,18 +290,30 @@ def handle_alert(alert_data: dict) -> None:
     alert_counts[severity] += 1
     # Hiện cảnh báo trước khi lưu DB để lỗi CSDL không làm mất cảnh báo trên màn hình
     alert_logger.warning(format_alert(alert_data), extra={"priority": severity})
+    if alert_writer is not None:
+        # Engine đang chạy: ghi theo lô ở thread riêng, worker không phải chờ CSDL
+        alert_writer.submit(alert_data)
+        return
     try:
         EventRepository.save_alert(alert_data)
     except Exception as e:
         logger.error("Không thể lưu cảnh báo vào CSDL: %s", e)
 
 
+# Bộ ghi cảnh báo theo lô của engine đang chạy; None khi chưa chạy main() (ví dụ test gọi handle_alert trực tiếp)
+alert_writer: Optional[AlertWriter] = None
+
+
 def main():
+    global alert_writer
     setup_logging(SETTINGS.get("system", {}).get("log_level", "INFO"))
     capture_mode = SETTINGS.get("network", {}).get("capture_mode", "live")
+    live = capture_mode != "offline"
     logger.info("Khởi động Hybrid NIDS (chế độ: %s)", capture_mode)
 
     init_db()
+    # Offline thì chờ chứ không bỏ cảnh báo (đọc file dùng để đo, không được mất dữ liệu); live thì bỏ và đếm
+    alert_writer = AlertWriter(EventRepository.save_alerts, block=not live).start()
 
     # Nạp rule từ thư mục rules/ (RuleManager tự ghi log số rule đã nạp)
     rules_dir = SETTINGS.get("detection", {}).get("rules_dir", "rules")
@@ -279,25 +345,22 @@ def main():
     # Hàng đợi đệm bất đồng bộ giữa luồng bắt gói và luồng phân tích, chống rớt gói
     packet_queue = queue.Queue(maxsize=SETTINGS.get("detection", {}).get("queue_max_size", 10000))
     drops = DropCounter()
+    analysis_errors = DropCounter()
     stats = {"packets": 0}
+    stop_event = threading.Event()
+
+    def worker_alive() -> bool:
+        return worker_thread.is_alive()
 
     def on_raw_packet(scapy_pkt):
         """Callback từ PacketCapture: giải mã gói tin thô rồi đẩy vào hàng đợi."""
         decoded = PacketDecoder.decode(scapy_pkt)
         if decoded is None:
             return  # Bỏ qua gói tin không phải IP
-        try:
-            packet_queue.put_nowait(decoded)
+        if enqueue_packet(packet_queue, decoded, live, stop_event, worker_alive, drops):
             stats["packets"] += 1  # Chỉ đếm gói thực sự được đưa vào phân tích
-        except queue.Full:
-            dropped = drops.record(time.monotonic())
-            if dropped:
-                logger.warning("Queue đầy, đã bỏ %d gói", dropped)
 
     reloader = RuleReloader(rule_manager, detection_engine)
-
-    stop_event = threading.Event()
-    live = capture_mode != "offline"
 
     # Luồng worker xử lý phân tích
     def worker_loop():
@@ -314,6 +377,11 @@ def main():
                 ai_worker.analyze_packet(packet)
                 flow_log.on_packet(packet, len(matched))  # sau evaluate_packet để biết gói có khớp rule
                 observe_anomaly(anomaly, packet)
+            except Exception as e:
+                # Một gói lỗi không được làm dừng worker: ghi log (gộp đếm) rồi xử lý gói tiếp theo
+                failed = analysis_errors.record(time.monotonic())
+                if failed:
+                    logger.error("Lỗi khi phân tích gói, đã bỏ qua %d gói: %s", failed, e)
             finally:
                 packet_queue.task_done()
         flow_log.close()  # thread này là nơi duy nhất đụng vào bảng flow nên đóng ở đây
@@ -325,18 +393,29 @@ def main():
     bpf = SETTINGS.get("network", {}).get("bpf_filter", "ip")
     iface = SETTINGS.get("network", {}).get("interface", None) or None
     capturer = PacketCapture(raw_callback=on_raw_packet, bpf_filter=bpf)
+    apply_layer_filter()   # Scapy chỉ bóc tới L4: nhanh hơn và raw_packet đúng byte gốc
 
     try:
         if capture_mode == "offline":
             pcap_file = SETTINGS.get("network", {}).get("pcap_file", "")
             capture_logger.info("Đọc file PCAP: %s", pcap_file)
-            capturer.start_offline(pcap_file)
+            started = time.perf_counter()
+            # stop_filter: worker dừng giữa chừng thì enqueue_packet đặt stop_event và việc đọc pcap dừng theo
+            capturer.start_offline(pcap_file, stop_filter=lambda _pkt: stop_event.is_set())
             # Đợi worker xử lý hết các gói còn trong hàng đợi
-            packet_queue.join()
-            time.sleep(0.5)  # Chờ các cảnh báo cuối cùng được ghi xong
+            if not wait_until_processed(packet_queue, worker_alive):
+                logger.error("Worker thread đã dừng trước khi xử lý hết hàng đợi, kết quả có thể thiếu")
+            # Thứ tự kết thúc: dừng worker (ghi nốt flow) → ghi nốt cảnh báo → mới in tổng kết,
+            # để ai đọc CSDL ngay sau khi engine dừng cũng thấy đủ dữ liệu
+            stop_event.set()
+            worker_thread.join(timeout=10)
+            alert_writer.close()
+            elapsed = time.perf_counter() - started
+            if analysis_errors.total:
+                logger.warning("Tổng cộng %d gói bị bỏ qua vì lỗi khi phân tích", analysis_errors.total)
             if drops.total:
                 logger.warning("Tổng cộng %d gói bị bỏ do queue đầy, kết quả có thể thiếu cảnh báo", drops.total)
-            logger.info(format_summary(stats["packets"], alert_counts))
+            logger.info(format_summary(stats["packets"], alert_counts, elapsed))
             logger.info("Xem cảnh báo tại http://localhost:8000/api/alerts/")
         else:
             capture_logger.info("Lắng nghe trực tiếp trên card mạng (BPF: '%s', nhấn Ctrl+C để dừng)", bpf)
@@ -349,6 +428,8 @@ def main():
         # sniff có thể nuốt Ctrl+C và trả về bình thường nên phải dừng worker ở đây để flow còn mở được ghi nốt
         stop_event.set()
         worker_thread.join(timeout=10)
+        alert_writer.close()   # gọi lần hai (sau nhánh offline) không làm gì
+        alert_writer = None
 
 
 if __name__ == "__main__":

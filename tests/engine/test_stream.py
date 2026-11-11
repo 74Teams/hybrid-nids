@@ -5,7 +5,6 @@ import pytest
 from scapy.all import Ether, IP, Raw, TCP, UDP, wrpcap
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 import nids.db as database
 import nids.engine.main as main
@@ -311,7 +310,9 @@ def test_reassembly_error_keeps_the_per_packet_result(engine):
 
 
 def test_replaying_a_pcap_with_split_attack_alerts_and_marks_the_flow(monkeypatch, tmp_path):
-    db_engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    # SQLite dạng file: main.main() ghi flow và cảnh báo từ hai thread, StaticPool (một kết nối chung) sẽ mất dữ liệu
+    db_engine = create_engine(f"sqlite:///{tmp_path / 'test.db'}",
+                              connect_args={"check_same_thread": False, "timeout": 30})
     Base.metadata.create_all(db_engine)
     factory = sessionmaker(bind=db_engine)
     monkeypatch.setattr(database, "SessionLocal", factory)
