@@ -10,6 +10,7 @@ Kết quả không phụ thuộc máy chạy:
 - `decoder.HTTP_PORTS` được đặt lại theo đúng bộ biến đó trước khi decode.
 - Tham số `stream`, `flow`, `anomaly` lấy từ `config/settings.example.yaml` (file được commit).
 - Mặc định bỏ qua `rules/state.yaml` (trạng thái bật/tắt rule local của từng máy).
+- Nếu engine có `apply_layer_filter` (PLAN-009 T7) thì bật giống engine, xong thì gỡ.
 """
 import logging
 import time
@@ -30,6 +31,11 @@ from nids.engine.main import evaluate_with_stream, observe_anomaly
 from nids.engine.rule_header import DEFAULT_RULE_VARIABLES, http_ports
 from nids.engine.rule_manager import RuleManager
 from nids.engine.stream import StreamReassembler
+
+try:   # có từ PLAN-009 T7: engine chỉ cho Scapy bóc tới L4; bộ đo dùng đúng cách decode của engine
+    from nids.engine.capture import apply_layer_filter, reset_layer_filter
+except ImportError:   # code engine cũ (baseline) chưa có bộ lọc
+    apply_layer_filter = reset_layer_filter = None
 
 logger = logging.getLogger("nids.eval")
 
@@ -107,6 +113,8 @@ def run_chunk(path: str, config: RunConfig) -> dict:
     started = time.perf_counter()
     old_http_ports = decoder.HTTP_PORTS
     decoder.HTTP_PORTS = http_ports(config.variables)
+    if apply_layer_filter is not None:
+        apply_layer_filter()
     try:
         manager = load_rules(config.rules_dir, config.variables, config.use_state)
         alerts: List[dict] = []
@@ -169,6 +177,8 @@ def run_chunk(path: str, config: RunConfig) -> dict:
         flows.extend(tracker.flush())
     finally:
         decoder.HTTP_PORTS = old_http_ports
+        if reset_layer_filter is not None:
+            reset_layer_filter()
     return {
         "file": Path(path).name,
         "rules_loaded": len(manager.rules),
