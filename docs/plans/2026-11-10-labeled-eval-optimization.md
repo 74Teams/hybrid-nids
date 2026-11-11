@@ -288,6 +288,8 @@ flowchart LR
 
 ### 6.8 Chia việc cho 2 người
 
+> **Cập nhật 11/11:** bảng dưới là lịch cũ. Lịch hiện hành (so khớp trước, AI ở tuần cuối) nằm ở `docs/lo-trinh-3-tuan.md`.
+
 | Tuần | Người A (engine, rule) | Người B (dữ liệu, AI) |
 | :--- | :--- | :--- |
 | 1 (11/11–17/11) | PR1: tối ưu engine 6.5 mục 1–4; đo trên `chienbuoito.pcap` | PR2: `tools/cic/` (labels, manifest) |
@@ -451,6 +453,7 @@ Thứ tự: PR2 trước PR3 vì bộ đo cần module nhãn. Baseline (PR3) ph�
 | 2026-11-11 | Ghi nhận: nút thắt tốc độ chính là GIL (thread đọc gói và worker tranh CPU) và Scapy, không phải CSDL | Claude | Tắt hẳn CSDL chỉ nhanh hơn 4 giây trên 51 giây; tiêu chí 2 (≥ 3.000 gói/giây) sau tuần 1: đạt trên chunk 09:19 (3.189), chưa đạt trên chunk 14:09 (2.735) |
 | 2026-11-11 | Ghi nhận: `FlowLog` vẫn ghi CSDL trong worker; CSDL bị khoá thì worker chờ tới 30 giây | Claude | Thấy khi thử khoá CSDL 35 giây; đề xuất chuyển flow sang thread ghi riêng (việc tuần sau) |
 | 2026-11-11 | Tuần 2 đo thêm độ chính xác theo cặp IP hoặc theo flow, và cho bộ đo lưu danh sách cảnh báo | Claude | Sau khi bộ chặn gộp cảnh báo trùng, độ chính xác theo số cảnh báo tụt 30,3% → 6,6% dù báo nhầm giảm 87.011 → 3.881: con số bị số cảnh báo trùng chi phối (xem `docs/eval/sau-sua-engine.md`, `docs/nhat-ky-ngay-2.md`) |
+| 2026-11-11 | Sắp lại lộ trình: tối ưu so khớp và các điểm chưa tốt trước (12–24/11, đo đủ 5 ngày CIC), AI dồn vào tuần cuối (25/11–01/12); lịch theo ngày ở `docs/lo-trinh-3-tuan.md` thay cho bảng ở mục 6.8 | Người dùng | Tập trung tối ưu ứng dụng trước; AI dùng dataset 5 ngày và engine đã ổn định |
 
 **Câu hỏi còn mở**
 
