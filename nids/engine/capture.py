@@ -5,7 +5,6 @@ from scapy.packet import Packet
 
 logger = logging.getLogger("nids.capture")
 
-
 class PacketCapture:
     """
     Module chuyên trách duy nhất: thu nhận gói tin thô từ card mạng hoặc file PCAP.
@@ -44,12 +43,13 @@ class PacketCapture:
             store=False,  # Không lưu vào RAM, tiết kiệm bộ nhớ
         )
 
-    def start_offline(self, pcap_path: str) -> None:
+    def start_offline(self, pcap_path: str, stop_filter: Optional[Callable[[Packet], bool]] = None) -> None:
         """
         Đọc và phát lại toàn bộ gói tin từ file .pcap (chế độ offline/replay).
 
         Args:
-            pcap_path: Đường dẫn đến file .pcap cần phân tích.
+            pcap_path:   Đường dẫn đến file .pcap cần phân tích.
+            stop_filter: Gọi sau mỗi gói; trả về True thì dừng đọc (ví dụ khi worker đã dừng).
         """
         try:
             sniff(
@@ -57,6 +57,7 @@ class PacketCapture:
                 filter=self.bpf_filter,
                 prn=self.raw_callback,
                 store=False,
+                stop_filter=stop_filter,
             )
         except Exception as e:
             # Dự phòng: BPF filter cần tcpdump (Windows không có sẵn)
@@ -67,6 +68,7 @@ class PacketCapture:
                     offline=pcap_path,
                     prn=self.raw_callback,
                     store=False,
+                    stop_filter=stop_filter,
                 )
             else:
                 raise

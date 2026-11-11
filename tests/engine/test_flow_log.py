@@ -5,7 +5,6 @@ import pytest
 from scapy.all import Ether, IP, Raw, TCP, UDP, wrpcap
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 import nids.db as database
 import nids.engine.main as main
@@ -19,9 +18,14 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
-def db(monkeypatch):
-    """SQLite in-memory dùng chung cho EventRepository; trả về sessionmaker để đọc kết quả."""
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+def db(monkeypatch, tmp_path):
+    """SQLite dạng file cho EventRepository; trả về sessionmaker để đọc kết quả.
+
+    Dùng file chứ không dùng in-memory + StaticPool: khi chạy main.main(), flow (worker thread) và cảnh báo
+    (thread alert-writer) được ghi song song. StaticPool chỉ có một kết nối cho mọi thread, nên session của
+    thread này rollback mất dữ liệu đang ghi dở của thread kia. Với file, mỗi session có kết nối riêng như khi chạy thật.
+    """
+    engine = create_engine(f"sqlite:///{tmp_path / 'test.db'}", connect_args={"check_same_thread": False, "timeout": 30})
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(database, "SessionLocal", factory)
