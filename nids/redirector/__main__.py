@@ -31,7 +31,12 @@ def main() -> int:
 
     init_db()
     stop_event = threading.Event()
-    redirector = Redirector(settings, IptablesFirewall(settings.ports), stop_event)
+    firewall = IptablesFirewall(settings.ports, target_host=settings.target_host)
+    if settings.target_host:
+        logger.info("Chế độ DNAT: chuyển kết nối tới %s sang honeypot cùng host", settings.target_host)
+    else:
+        logger.info("Chế độ REDIRECT: chuyển sang honeypot trên cùng máy")
+    redirector = Redirector(settings, firewall, stop_event)
     try:
         redirector.start()
     except FirewallError as e:

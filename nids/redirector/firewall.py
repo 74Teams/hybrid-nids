@@ -1,4 +1,7 @@
-"""Bọc lệnh iptables: một chain NAT riêng chứa rule REDIRECT cho từng IP bị chuyển hướng.
+"""Bọc lệnh iptables: một chain NAT riêng chứa rule chuyển hướng cho từng IP bị chuyển hướng.
+
+Mặc định dùng REDIRECT (honeypot chung máy với iptables). Đặt `target_host` thì dùng DNAT tới host đó, cho lab nhiều VM
+nơi iptables ở gateway còn honeypot ở máy victim.
 
 Chỉ nhận IPv4 hợp lệ và luôn gọi iptables với argv dựng sẵn (không qua shell), vì `src_ip` đến từ gói tin của attacker.
 """
@@ -36,10 +39,13 @@ def normalize_ip(ip: str) -> str:
 
 
 class IptablesFirewall:
-    def __init__(self, ports: Dict[int, int], runner: Optional[Runner] = None, chain: str = CHAIN):
+    def __init__(self, ports: Dict[int, int], runner: Optional[Runner] = None, chain: str = CHAIN,
+                 target_host: str = ""):
         self.ports = dict(ports)
         self.chain = chain
         self._runner = runner or default_runner
+        # Rỗng: REDIRECT (honeypot cùng máy). Có IP: DNAT tới honeypot ở máy khác; sai IP thì ném lỗi ngay, chưa chạy lệnh nào
+        self.target_host = normalize_ip(target_host) if target_host else ""
 
     def _run(self, args: List[str], check: bool = True) -> int:
         """Chạy `iptables -w -t nat <args>`; trả về mã thoát. `check=False` cho phép mã khác 0 (lệnh kiểm tra `-C`, `-S`)."""
@@ -53,6 +59,10 @@ class IptablesFirewall:
         return result.returncode
 
     def _rule(self, ip: str, src_port: int) -> List[str]:
+        if self.target_host:
+            # `-d` giới hạn ở kết nối tới victim; kết nối tới chính gateway (vd. SSH vào IDS) không bị chuyển
+            return ["-s", ip, "-d", self.target_host, "-p", "tcp", "--dport", str(src_port),
+                    "-j", "DNAT", "--to-destination", f"{self.target_host}:{self.ports[src_port]}"]
         return ["-s", ip, "-p", "tcp", "--dport", str(src_port), "-j", "REDIRECT", "--to-ports", str(self.ports[src_port])]
 
     def check_available(self) -> None:

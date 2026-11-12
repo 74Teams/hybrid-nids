@@ -91,6 +91,8 @@ class RedirectSettings:
     poll_interval: float = 5.0
     ports: Dict[int, int] = field(default_factory=lambda: dict(DEFAULT_REDIRECT_PORTS))
     allowlist: List[str] = field(default_factory=lambda: list(DEFAULT_REDIRECT_ALLOWLIST))
+    # Rỗng: dùng REDIRECT (honeypot cùng máy với iptables, Docker lab). Có IP: dùng DNAT tới host đó (lab nhiều VM)
+    target_host: str = ""
 
 
 def get_redirect_settings(cfg: Optional[Dict[str, Any]] = None) -> RedirectSettings:
@@ -141,4 +143,15 @@ def get_redirect_settings(cfg: Optional[Dict[str, Any]] = None) -> RedirectSetti
             except ValueError:
                 logger.error("redirect.allowlist: bỏ qua %r (không phải IP hoặc CIDR)", entry)
         result.allowlist = valid
+
+    if "target_host" in cfg:
+        raw = cfg["target_host"]
+        if raw not in (None, ""):
+            try:
+                address = ipaddress.ip_address(str(raw).strip())
+                if address.version != 4:
+                    raise ValueError
+                result.target_host = str(address)
+            except ValueError:
+                logger.error("redirect.target_host=%r không phải IPv4, bỏ qua và dùng chế độ REDIRECT", raw)
     return result

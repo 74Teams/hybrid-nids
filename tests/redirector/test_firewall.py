@@ -98,6 +98,44 @@ def test_nonzero_exit_becomes_firewall_error():
         IptablesFirewall(PORTS, runner=denied).check_available()
 
 
+def test_add_builds_dnat_rule_when_target_host_set(fake):
+    firewall = IptablesFirewall(PORTS, runner=fake, target_host="10.10.2.50")
+    firewall.ensure_setup()
+    firewall.add("10.10.1.100")
+    assert fake.chains["NIDS_REDIRECT"] == [
+        ("-s", "10.10.1.100", "-d", "10.10.2.50", "-p", "tcp", "--dport", "22",
+         "-j", "DNAT", "--to-destination", "10.10.2.50:2222"),
+        ("-s", "10.10.1.100", "-d", "10.10.2.50", "-p", "tcp", "--dport", "80",
+         "-j", "DNAT", "--to-destination", "10.10.2.50:8080"),
+    ]
+    assert not [r for r in fake.chains["NIDS_REDIRECT"] if "REDIRECT" in r]
+
+
+def test_remove_and_flush_work_in_dnat_mode(fake):
+    firewall = IptablesFirewall(PORTS, runner=fake, target_host="10.10.2.50")
+    firewall.ensure_setup()
+    firewall.add("10.10.1.100")
+    firewall.add("10.10.1.101")
+    firewall.remove("10.10.1.100")
+    assert fake.rules_for("10.10.1.100") == [] and len(fake.rules_for("10.10.1.101")) == 2
+    firewall.flush()
+    assert fake.chains["NIDS_REDIRECT"] == []
+
+
+@pytest.mark.parametrize("bad", ["1.2.3.4;rm", "::1", "2001:db8::1", "abc", "1.2.3.4 -j ACCEPT"])
+def test_invalid_target_host_raises(fake, bad):
+    with pytest.raises(FirewallError):
+        IptablesFirewall(PORTS, runner=fake, target_host=bad)
+    assert fake.calls == []
+
+
+def test_empty_target_host_keeps_redirect_mode(fake):
+    firewall = IptablesFirewall(PORTS, runner=fake, target_host="")
+    firewall.ensure_setup()
+    firewall.add("1.2.3.4")
+    assert all("REDIRECT" in r and "DNAT" not in r for r in fake.chains["NIDS_REDIRECT"])
+
+
 def test_commands_use_wait_flag_and_no_shell(firewall, fake):
     firewall.ensure_setup()
     firewall.add("1.2.3.4")

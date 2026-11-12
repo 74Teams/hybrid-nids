@@ -43,5 +43,24 @@ def test_invalid_allowlist_entries_are_dropped(caplog):
     assert len(errors(caplog)) == 2
 
 
+def test_target_host_missing_is_empty(caplog):
+    assert get_redirect_settings({}).target_host == ""
+    assert get_redirect_settings({"target_host": ""}).target_host == ""
+    assert get_redirect_settings({"target_host": None}).target_host == ""
+    assert errors(caplog) == []
+
+
+def test_target_host_valid_ipv4_is_kept(caplog):
+    assert get_redirect_settings({"target_host": "10.10.2.50"}).target_host == "10.10.2.50"
+    assert errors(caplog) == []
+
+
+def test_target_host_invalid_falls_back_to_empty_with_one_error(caplog):
+    for bad in ("abc", "1.2.3.4;rm", "::1", "10.10.2.0/24"):
+        caplog.clear()
+        assert get_redirect_settings({"target_host": bad}).target_host == ""
+        assert len(errors(caplog)) == 1
+
+
 def test_enabled_must_be_true_boolean():
     assert get_redirect_settings({"enabled": "false"}).enabled is False

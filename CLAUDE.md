@@ -30,7 +30,7 @@ Lệnh luôn chạy từ thư mục gốc repo (`pytest.ini` đặt `pythonpath 
 - `nids/ai.py` — `AITrafficWorker` (stub); `nids/config.py` — `SETTINGS`, `get_db_url()`, `get_redis_settings()`, `get_redirect_settings()`; `nids/logger.py` — `setup_logging`; `nids/realtime.py` — `publish_alert` (đẩy id cảnh báo mới lên Redis)
 - `rules/` — file `.rules` theo category, `custom.rules`, `vendor/`, `state.yaml` (gitignore)
 - `config/settings.example.yaml` — file mẫu được commit; `config/settings.yaml` — cấu hình local (bị git ignore, thiếu thì dùng file mẫu)
-- `lab/` — Docker lab: `attacker/attack_demo.py`, `victim/`
+- `lab/` — Docker lab: `attacker/attack_demo.py`, `victim/`; `vmware/` — lab 3 máy ảo VMware (compose cho IDS và Victim, `settings.ids.yaml`, netplan mẫu)
 - `tests/` — chia theo khu vực: `engine/`, `api/`, `honeypot/`, `redirector/`, `lab/`
 - `docs/` — `demo/kich-ban-demo.md` (kịch bản thuyết trình), `ai/` (thiết kế AI worker), `plans/` (plan và bảng tổng hợp)
 - `.claude/rules/` — quy tắc chi tiết theo khu vực; `.claude/commands/` — slash command (`them-rule`); `.claude/skills/` — skill (`idea-to-plan`); `.claude/agents/` — subagent (`plan-critic`, `git-workflow`)
@@ -73,6 +73,7 @@ Các process (engine, API, redirector, mỗi honeypot một process) chạy riê
 - Xem traffic và phát hiện bất thường theo ngưỡng (PLAN-004): API flows + trang Traffic (#40, #41, đã merge), cảnh báo `ANOMALY` theo ngưỡng (#42, branch `feature/42-anomaly-detection`).
 - Chuyển hướng IP đáng ngờ sang honeypot (branch `feature/29-redirect-to-honeypot`, PLAN-005, issue #29).
 - Giới hạn tài nguyên honeypot: cap kết nối, timeout idle, honeypot HTTP chạy bằng waitress (PLAN-006, issue #27, branch `feature/27-honeypot-resource-limits`). Honeypot HTTP ghi mọi request (`http.request`, PLAN-007, issue #26, branch `feature/26-http-catch-all`).
+- Lab 3 máy ảo trên VMware (Kali, IDS gateway, Victim + honeypot): redirector có chế độ DNAT qua `redirect.target_host`, cấu hình trong `lab/vmware/` (PLAN-008, issue #68, branch `feature/68-vmware-lab`).
 
 ## Known Issues / Gotchas
 

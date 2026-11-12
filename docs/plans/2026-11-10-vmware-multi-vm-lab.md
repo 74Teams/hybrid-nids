@@ -2,7 +2,7 @@
 type: PLAN
 plan_id: PLAN-008
 title: Lab ba máy ảo trên VMware (Kali, IDS gateway, Victim + Honeypot)
-status: REVIEW
+status: IN_PROGRESS
 issue: "#68"
 owner: ngoccu2006
 created: 2026-11-10
@@ -159,12 +159,12 @@ Lệnh: `pytest tests/redirector` rồi `pytest`
 
 Nhánh: `feature/68-vmware-lab`
 
-- [ ] Thêm `target_host` vào `RedirectSettings` và `get_redirect_settings`, kèm test cấu hình
-- [ ] Thêm chế độ DNAT vào `IptablesFirewall`, truyền từ `__main__.py`, kèm test firewall
-- [ ] Thêm `target_host: ""` vào `config/settings.example.yaml`
-- [ ] Tạo `lab/vmware/` (2 file compose, `settings.ids.yaml`, netplan, `.env.example`)
-- [ ] Viết mục VMware trong `docs/setup-linux.md`
-- [ ] Cập nhật `.claude/rules/redirector.md`, `.claude/rules/config-db-docker.md`, `CLAUDE.md`, `README.md`
+- [x] Thêm `target_host` vào `RedirectSettings` và `get_redirect_settings`, kèm test cấu hình
+- [x] Thêm chế độ DNAT vào `IptablesFirewall`, truyền từ `__main__.py`, kèm test firewall
+- [x] Thêm `target_host: ""` vào `config/settings.example.yaml`
+- [x] Tạo `lab/vmware/` (2 file compose, `settings.ids.yaml`, netplan, `.env.example`)
+- [x] Viết mục VMware trong `docs/setup-linux.md`
+- [x] Cập nhật `.claude/rules/redirector.md`, `.claude/rules/config-db-docker.md`, `CLAUDE.md`, `README.md`
 - [ ] Chạy `pytest`, xác minh theo mục 9 (Docker lab và 3 VM)
 - [ ] Tạo PR, cập nhật bảng tổng hợp
 

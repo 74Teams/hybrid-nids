@@ -1,0 +1,86 @@
+# Cấu hình cho lab 3 máy ảo VMware, mount vào /app/config/settings.yaml (xem compose.ids.yml, compose.victim.yml).
+# Dựa trên config/settings.example.yaml; chỗ khác biệt có chú thích "VMware".
+# Dùng chung cho IDS (engine, API, redirector) và Victim (honeypot); mật khẩu DB/Redis lấy từ biến môi trường (.env).
+
+system:
+  env: "development"
+  log_level: "INFO"
+
+network:
+  # VMware: card phía Kali (VMnet2). libpcap bắt gói trước netfilter nên engine vẫn thấy cổng gốc 22/80 trước khi DNAT.
+  # Sai tên card thì engine báo "No such device": kiểm tra bằng `ip -br link` rồi sửa ở đây và trong netplan.
+  interface: "ens34"
+  # Giữ loại port 3306 (engine không được tự sniff câu INSERT chứa chuỗi tấn công của chính nó).
+  # VMware: Redis của lab nằm ở 10.10.2.1.
+  bpf_filter: "ip and not port 3306 and not (host 10.10.2.1 and port 6379)"
+  promiscuous: true
+  capture_mode: "live"
+
+detection:
+  rules_dir: "rules"
+  enable_rule_engine: true
+  enable_ai_worker: true
+  queue_max_size: 10000
+  variables:
+    HTTP_PORTS: "80,8080,8000,3000,5000"
+
+stream:
+  enabled: true
+  depth: 65536
+  max_total_bytes: 67108864
+  max_streams: 50000
+  idle_timeout: 30
+  max_pending_segments: 32
+
+flow:
+  idle_timeout: 30
+  active_timeout: 120
+  closing_timeout: 2
+  max_flows: 100000
+  batch_size: 500
+  flush_interval: 5
+  retention_hours: 24
+
+database:
+  type: "mysql"
+  host: "10.10.2.1"       # VMware: MySQL nghe ở card phía Victim của IDS
+  port: 3306
+  user: "nids_app"
+  password: ""            # lấy từ NIDS_DB_PASSWORD
+  name: "nids_db"
+
+anomaly:
+  enabled: true
+  suppress_seconds: 60
+  max_tracked: 10000
+  scan:  { window: 5, ports: 15, hosts: 10 }
+  flood: { window: 1, packets: 500, syn: 100 }
+  common_ports: [20, 21, 22, 23, 25, 53, 67, 68, 80, 110, 123, 143, 161, 443, 445, 993, 995, 2222, 3000, 3306, 3389, 5000, 6379, 8000, 8080]
+
+redis:
+  host: "10.10.2.1"       # VMware: Redis nghe ở card phía Victim của IDS
+  port: 6379
+  password: ""            # lấy từ NIDS_REDIS_PASSWORD
+
+redirect:
+  enabled: true
+  window_seconds: 60
+  min_alerts: 5
+  max_priority: 2
+  ttl_seconds: 600
+  poll_interval: 5
+  # VMware: honeypot nằm ở máy Victim, iptables nằm ở IDS nên dùng DNAT thay cho REDIRECT.
+  # Kết nối của Kali tới chính IDS (vd. SSH vào gateway) không bị chuyển vì rule có `-d` theo địa chỉ này.
+  target_host: "10.10.2.50"
+  ports:
+    22: 2222
+    80: 8080
+  allowlist:
+    - "127.0.0.0/8"
+    - "10.10.1.1"         # IDS phía Kali
+    - "10.10.2.1"         # IDS phía Victim
+    - "10.10.2.50"        # Victim
+
+api:
+  host: "0.0.0.0"
+  port: 8000

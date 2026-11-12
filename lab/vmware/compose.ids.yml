@@ -1,0 +1,101 @@
+# Lab 3 máy ảo VMware — chạy trên VM IDS (gateway giữa Kali và Victim):
+#   cd lab/vmware && cp .env.example .env   # điền mật khẩu
+#   docker compose -f lab/vmware/compose.ids.yml up --build -d    (chạy từ thư mục gốc repo)
+#
+# Mọi service dùng network_mode: host nên chia sẻ card mạng của VM:
+#   ens34 (10.10.1.1, phía Kali) — engine sniff ở đây, trước khi DNAT đổi cổng
+#   ens35 (10.10.2.1, phía Victim) — MySQL và Redis nghe ở đây để honeypot của Victim ghi về
+# Docker mặc định đặt chain FORWARD là DROP nên phải thêm rule DOCKER-USER (xem docs/setup-linux.md, mục Cách C).
+name: nids-ids
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: nids_mysql
+    network_mode: host
+    # Chỉ nghe ở card phía Victim, Kali không tới được; tắt X Protocol (33060) vì không dùng
+    command: ["--bind-address=10.10.2.1", "--mysqlx=OFF"]
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?đặt trong .env}"
+      MYSQL_DATABASE: nids_db
+      MYSQL_USER: nids_app
+      MYSQL_PASSWORD: "${NIDS_DB_PASSWORD:?đặt trong .env}"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$$MYSQL_ROOT_PASSWORD\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Kênh đẩy tín hiệu "có cảnh báo mới"; sensor vẫn chạy khi Redis chết nên các service không depends_on nó.
+  redis:
+    image: redis:7-alpine
+    container_name: nids_redis
+    network_mode: host
+    command: redis-server --bind 10.10.2.1 127.0.0.1 --requirepass "${NIDS_REDIS_PASSWORD:?đặt trong .env}" --save "" --appendonly no
+    restart: unless-stopped
+
+  # Chỉ engine build image; các service Python còn lại dùng lại (tránh build song song).
+  engine:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: hybrid-nids-app
+    pull_policy: never
+    container_name: nids_engine
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ../..:/app
+      - ./settings.ids.yaml:/app/config/settings.yaml:ro
+    environment: &nids_env
+      NIDS_DB_HOST: "10.10.2.1"
+      NIDS_DB_PORT: "3306"
+      NIDS_DB_NAME: "nids_db"
+      NIDS_DB_USER: "nids_app"
+      NIDS_DB_PASSWORD: "${NIDS_DB_PASSWORD:?đặt trong .env}"
+      NIDS_REDIS_HOST: "10.10.2.1"
+      NIDS_REDIS_PASSWORD: "${NIDS_REDIS_PASSWORD:?đặt trong .env}"
+    restart: unless-stopped
+
+  # API + dashboard nghe mọi card (cổng 8000): mở từ Windows qua IP của ens33 (NAT). Thao tác ghi rule cần NIDS_API_KEY.
+  api:
+    image: hybrid-nids-app
+    pull_policy: never
+    container_name: nids_api
+    network_mode: host
+    command: uvicorn nids.api.main:app --host 0.0.0.0 --port 8000
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ../..:/app
+      - ./settings.ids.yaml:/app/config/settings.yaml:ro
+    environment:
+      <<: *nids_env
+      NIDS_API_KEY: "${NIDS_API_KEY:-}"
+    restart: unless-stopped
+
+  # Đặt rule DNAT vào bảng nat của chính VM IDS (network host + NET_ADMIN), chuyển kết nối tới Victim sang honeypot.
+  # Không đặt restart: iptables không dùng được thì thoát mã 1; redirect.enabled: false thoát mã 0.
+  redirector:
+    image: hybrid-nids-app
+    pull_policy: never
+    container_name: nids_redirector
+    network_mode: host
+    command: python -m nids.redirector
+    cap_add:
+      - NET_ADMIN
+    stop_grace_period: 10s
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ../..:/app
+      - ./settings.ids.yaml:/app/config/settings.yaml:ro
+    environment: *nids_env

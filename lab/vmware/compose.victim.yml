@@ -1,0 +1,49 @@
+# Lab 3 máy ảo VMware — chạy trên VM Victim (10.10.2.50, gateway 10.10.2.1 là IDS):
+#   cd lab/vmware && cp .env.example .env   # dùng CÙNG mật khẩu với VM IDS
+#   docker compose -f lab/vmware/compose.victim.yml up --build -d    (chạy từ thư mục gốc repo)
+#
+# Cần tắt ssh.service và ssh.socket của Ubuntu trước, vì sshd trong container victim chiếm cổng 22.
+# Honeypot ghi sự kiện về MySQL/Redis của VM IDS (10.10.2.1), không có DB ở máy này.
+name: nids-victim
+
+services:
+  victim:
+    build: ../victim
+    container_name: nids_victim
+    network_mode: host      # nginx :80, vsftpd :21, sshd :22, ncat :3333 và :4444 nằm thẳng trên card của VM
+    restart: unless-stopped
+
+  # Honeypot SSH (2222) và HTTP (8080); redirector ở IDS DNAT kết nối của IP đáng ngờ vào hai cổng này.
+  honeypot_ssh:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: hybrid-nids-app
+    pull_policy: never
+    container_name: nids_honeypot_ssh
+    network_mode: host
+    command: python -m nids.honeypot ssh
+    volumes:
+      - ../..:/app
+      - ./settings.ids.yaml:/app/config/settings.yaml:ro
+    environment: &nids_env
+      NIDS_DB_HOST: "10.10.2.1"
+      NIDS_DB_PORT: "3306"
+      NIDS_DB_NAME: "nids_db"
+      NIDS_DB_USER: "nids_app"
+      NIDS_DB_PASSWORD: "${NIDS_DB_PASSWORD:?đặt trong .env}"
+      NIDS_REDIS_HOST: "10.10.2.1"
+      NIDS_REDIS_PASSWORD: "${NIDS_REDIS_PASSWORD:?đặt trong .env}"
+    restart: unless-stopped
+
+  honeypot_http:
+    image: hybrid-nids-app
+    pull_policy: never
+    container_name: nids_honeypot_http
+    network_mode: host
+    command: python -m nids.honeypot http
+    volumes:
+      - ../..:/app
+      - ./settings.ids.yaml:/app/config/settings.yaml:ro
+    environment: *nids_env
+    restart: unless-stopped

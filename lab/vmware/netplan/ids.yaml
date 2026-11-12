@@ -1,0 +1,15 @@
+# VM IDS (Ubuntu) — chép thành /etc/netplan/50-lab.yaml rồi `sudo chmod 600` và `sudo netplan apply`.
+# Tên card ở đây là ví dụ: kiểm tra bằng `ip -br link`, đối chiếu MAC với Settings của VM trong VMware.
+network:
+  version: 2
+  ethernets:
+    ens33:                      # VMnet8 (NAT): mở dashboard từ Windows, cài gói
+      dhcp4: true
+    ens34:                      # VMnet2: phía Kali, engine sniff ở đây
+      dhcp4: false
+      addresses: [10.10.1.1/24]
+    ens35:                      # VMnet3: phía Victim
+      dhcp4: false
+      addresses: [10.10.2.1/24]
+# Không đặt gateway ở ens34/ens35: default route chỉ đi qua ens33.
+# Bật chuyển tiếp gói: echo 'net.ipv4.ip_forward=1' | sudo tee /etc/sysctl.d/99-lab.conf && sudo sysctl --system

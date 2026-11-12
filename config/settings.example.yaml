@@ -81,7 +81,8 @@ redirect:
   max_priority: 2         # chỉ đếm cảnh báo rule engine P1..P2 (số nhỏ = nặng)
   ttl_seconds: 600        # chuyển hướng bao lâu rồi tự gỡ
   poll_interval: 5        # giây giữa hai lần kiểm tra
-  ports:                  # cổng gốc của victim: cổng honeypot
+  target_host: ""         # rỗng: REDIRECT (honeypot cùng máy, Docker lab). IPv4: DNAT tới host đó (lab nhiều VM, xem lab/vmware/)
+  ports:                # cổng gốc của victim: cổng honeypot
     22: 2222
     80: 8080
   allowlist:              # IP/CIDR không bao giờ bị chuyển hướng (hạ tầng lab)
