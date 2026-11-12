@@ -285,7 +285,7 @@ docker logs -f nids_engine                                        # wait for "Đ
 
 Use hex-only values (no `$`, quotes or backticks). Both passwords only take effect when MySQL first creates its data directory: a lab that already has a database keeps its old passwords. Either run `ALTER USER` for `root@'localhost'`, `root@'%'` and `nids_app@'%'` inside the `nids_mysql` container (connect with the old password) and then `docker compose up -d`, or recreate the DB volume (data in `events` is lost).
 
-To run the lab as three separate VMs on VMware Workstation (Kali, an IDS acting as gateway, and a victim with honeypots), see "Cách C" in [docs/setup-linux.md](docs/setup-linux.md); the files live in [lab/vmware/](lab/vmware/).
+To run the lab as three separate VMs on VMware Workstation (Kali, an IDS acting as gateway, and a victim with honeypots), follow the step-by-step guide [docs/setup-vmware-lab.md](docs/setup-vmware-lab.md) (summary: "Cách C" in [docs/setup-linux.md](docs/setup-linux.md)); the files live in [lab/vmware/](lab/vmware/).
 
 Open http://localhost:8000/, then launch attacks from the attacker container:
 

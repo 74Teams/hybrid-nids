@@ -1,17 +1,22 @@
 # VM Victim (Ubuntu) — chép thành /etc/netplan/50-lab.yaml rồi `sudo chmod 600` và `sudo netplan apply`.
-# Tên card ở đây là ví dụ: kiểm tra bằng `ip -br link`.
+#
+# Mẫu này viết theo máy đã dựng thật: Ubuntu được cài khi chỉ có card NAT, nên
+#   ens33 = card NAT (VMnet8), nhận DHCP từ file netplan lúc cài đặt (/etc/netplan/*.yaml có sẵn, GIỮ NGUYÊN)
+#   ens34 = card VMnet3, nối tới IDS (file này chỉ cấu hình card này)
+# Tên card có thể khác trên máy bạn: chạy `ip -br link`, đối chiếu MAC với Settings → Network Adapter → Advanced
+# của VMware (hoặc card nào nhận IP 192.168.x.x qua DHCP là card NAT), rồi sửa `ens34` cho đúng card VMnet3.
+# Đặt IP lab nhầm lên card NAT thì IDS ping Victim không thông và card đó có cả IP tĩnh lẫn IP DHCP.
 network:
   version: 2
   ethernets:
-    ens33:                      # VMnet3: nối tới IDS
+    ens34:                      # VMnet3
       dhcp4: false
       addresses: [10.10.2.50/24]
       routes:
         - to: default
           via: 10.10.2.1
-          metric: 200           # card NAT tạm (DHCP, metric thấp hơn) thắng khi còn cắm; rút ra thì mọi traffic đi qua IDS
-    ens34:                      # VMnet8 (NAT) TẠM: để git clone, cài Docker và docker build
-      dhcp4: true
-      optional: true            # không chặn lúc khởi động khi đã ngắt card
+          metric: 200           # card NAT (DHCP, metric 100) thắng khi còn cắm: có Internet để clone/build;
+                                # ngắt NAT thì mọi traffic đi qua IDS
 # Khi card NAT còn cắm, gói trả lời Kali cũng đi ra NAT chứ không qua IDS, nên Kali sẽ không ping được Victim.
-# Trước khi kiểm tra/demo từ Kali: ngắt card NAT của Victim trong VMware (Settings → Network Adapter 2 → bỏ Connected).
+# Trước khi kiểm tra/demo từ Kali: ngắt card NAT của Victim trong VMware (Settings → Network Adapter
+# → bỏ Connected và Connect at power on; không bấm Remove và không ngắt nhầm card VMnet3).

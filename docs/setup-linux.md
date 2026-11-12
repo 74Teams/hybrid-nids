@@ -171,6 +171,8 @@ pytest tests/engine/test_diverse_rules_engine.py::test_name   # chạy một tes
 
 ## 4. Cách C: lab 3 máy ảo trên VMware
 
+Bản tóm tắt. Hướng dẫn từng bước theo đúng quá trình đã dựng thật (kèm lỗi đã gặp) nằm ở [setup-vmware-lab.md](setup-vmware-lab.md).
+
 Mô hình: Kali tấn công Victim, nhưng mọi gói phải đi qua máy IDS (gateway) nên engine thấy hết. Redirector trên IDS dùng `DNAT` để chuyển IP đáng ngờ sang honeypot nằm ở Victim. Docker lab ở Cách A không bị ảnh hưởng.
 
 ```
@@ -204,8 +206,8 @@ Tắt VM rồi gắn card (**Settings → Add → Network Adapter → Custom: Sp
 | IDS | 1 | VMnet8 (NAT) |
 | IDS | 2 | VMnet2 |
 | IDS | 3 | VMnet3 |
-| Victim | 1 | VMnet3 |
-| Victim | 2 (tạm) | VMnet8 (NAT), ngắt sau khi build xong |
+| Victim | NAT (cài Ubuntu bằng card này, thường là `ens33`) | VMnet8 (NAT), tạm: clone và build, ngắt trước khi demo |
+| Victim | VMnet3 (thêm sau, thường là `ens34`) | VMnet3 |
 | Kali | 2 (tạm) | VMnet8 (NAT), chỉ để `git clone` |
 
 ### 4.2. Đặt IP tĩnh
@@ -226,7 +228,7 @@ sudo nmcli con up lab
 
 Kali chỉ thêm route tới `10.10.2.0/24` qua IDS, không đặt default gateway, để card NAT tạm vẫn cho Kali ra Internet khi `git clone`.
 
-Trên Victim, route mặc định qua IDS có metric 200 nên card NAT tạm (DHCP) thắng khi còn cắm. Nhờ vậy Victim có Internet để clone và build; rút card NAT ra thì mọi traffic đi qua IDS. Cái giá là khi card NAT còn cắm, gói trả lời Kali cũng đi ra NAT và Kali không ping được Victim: **trước khi kiểm tra hoặc demo từ Kali, hãy ngắt card NAT của Victim** (VMware: Settings → Network Adapter 2 → bỏ Connected).
+Trên Victim, route mặc định qua IDS có metric 200 nên card NAT tạm (DHCP) thắng khi còn cắm. Nhờ vậy Victim có Internet để clone và build; rút card NAT ra thì mọi traffic đi qua IDS. Cái giá là khi card NAT còn cắm, gói trả lời Kali cũng đi ra NAT và Kali không ping được Victim: **trước khi kiểm tra hoặc demo từ Kali, hãy ngắt card NAT của Victim** (VMware: Settings → card đang dùng NAT, trên máy mẫu là `ens33` → bỏ **Connected** và **Connect at power on**; không bấm Remove, không ngắt nhầm card VMnet3). Trên Victim, `lab/vmware/netplan/victim.yaml` chỉ cấu hình card VMnet3 (`ens34` trên máy mẫu); card NAT giữ DHCP từ file netplan lúc cài đặt. Tên card tuỳ máy: đối chiếu `ip -br link` với MAC trong VMware, hoặc card nào nhận IP `192.168.x.x` là card NAT.
 
 Chưa có repo trên VM thì clone trước (mục 1; đang thử nhánh chưa merge thì `git clone -b feature/68-vmware-lab <url>`). Victim và Kali cần card NAT tạm mới clone được; Victim không có Internet thì clone ở IDS rồi `scp -r` sang (làm trước khi tắt sshd ở mục 4.4).
 
@@ -315,7 +317,7 @@ Muốn thử Redis tắt: `docker compose -f lab/vmware/compose.ids.yml stop red
 | Ping tới nhưng không có đường về | Victim thiếu default gateway `10.10.2.1`, hoặc card NAT tạm của Victim còn cắm (gói trả lời ra NAT thay vì qua IDS): ngắt card NAT trong VMware. |
 | Không ping được cả IDS | Gắn nhầm card vào VMnet, hoặc sai tên card trong netplan. |
 | IP `10.10.x.1` báo trùng hoặc chập chờn | Windows đang giữ host virtual adapter (chưa tắt ở mục 4.1). |
-| `docker build` trên Victim lỗi mạng | Card NAT tạm chưa bật (VMware: Network Adapter 2 phải ở trạng thái Connected), hoặc `ens34` chưa nhận DHCP: kiểm tra `ip -br addr`. |
+| `docker build` trên Victim lỗi mạng | Card NAT chưa bật (VMware: card NAT phải ở trạng thái Connected), hoặc chưa nhận DHCP (card NAT, trên máy mẫu là `ens33`): kiểm tra `ip -br addr`. |
 | Engine báo `No such device` | `network.interface` trong `lab/vmware/settings.ids.yaml` không trùng tên card phía Kali. |
 | Redirector có rule trong container nhưng `iptables -t nat -S` trên host không thấy | Container (Debian) dùng backend nft còn host dùng legacy hoặc ngược lại. Trên host: `sudo update-alternatives --set iptables /usr/sbin/iptables-nft` (hoặc `-legacy`) cho trùng với image rồi chạy lại redirector. |
 | Container victim không khởi động, cổng 22 bị chiếm | `ssh.service` hoặc `ssh.socket` của Ubuntu còn chạy: làm lại mục 4.4 bước 1. |
