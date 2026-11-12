@@ -3,15 +3,15 @@
 network:
   version: 2
   ethernets:
-    ens33:                      # VMnet3: nối tới IDS, gateway là IDS nên mọi traffic ra ngoài đều qua engine
+    ens33:                      # VMnet3: nối tới IDS
       dhcp4: false
       addresses: [10.10.2.50/24]
       routes:
         - to: default
           via: 10.10.2.1
-      nameservers:
-        addresses: [8.8.8.8]
-    ens34:                      # VMnet8 (NAT) TẠM, chỉ để docker build; xong thì ngắt card trong VMware
+          metric: 200           # card NAT tạm (DHCP, metric thấp hơn) thắng khi còn cắm; rút ra thì mọi traffic đi qua IDS
+    ens34:                      # VMnet8 (NAT) TẠM: để git clone, cài Docker và docker build
       dhcp4: true
-      dhcp4-overrides:
-        route-metric: 200       # đường ra Internet kém ưu tiên hơn gateway lab
+      optional: true            # không chặn lúc khởi động khi đã ngắt card
+# Khi card NAT còn cắm, gói trả lời Kali cũng đi ra NAT chứ không qua IDS, nên Kali sẽ không ping được Victim.
+# Trước khi kiểm tra/demo từ Kali: ngắt card NAT của Victim trong VMware (Settings → Network Adapter 2 → bỏ Connected).

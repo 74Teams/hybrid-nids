@@ -1,16 +1,14 @@
 # VM Kali — Kali dùng NetworkManager nên thường đặt IP bằng nmcli (đã có trong docs/setup-linux.md, Cách C):
 #   sudo nmcli con add type ethernet ifname eth0 con-name lab ipv4.method manual \
-#        ipv4.addresses 10.10.1.100/24 ipv4.gateway 10.10.1.1 ipv4.dns 8.8.8.8
+#        ipv4.addresses 10.10.1.100/24 ipv4.routes "10.10.2.0/24 10.10.1.1"
 #   sudo nmcli con up lab
 # Nếu bản Kali của bạn dùng netplan thì chép file này thành /etc/netplan/50-lab.yaml (đổi tên card cho đúng).
 network:
   version: 2
   ethernets:
-    eth0:                       # VMnet2: nối tới IDS; gateway là IDS nên đường tới 10.10.2.0/24 đi qua 10.10.1.1
+    eth0:                       # VMnet2: nối tới IDS
       dhcp4: false
       addresses: [10.10.1.100/24]
       routes:
-        - to: default
-          via: 10.10.1.1
-      nameservers:
-        addresses: [8.8.8.8]
+        - to: 10.10.2.0/24      # chỉ route tới mạng Victim qua IDS, KHÔNG đặt default gateway
+          via: 10.10.1.1        # để card NAT tạm (nếu có) vẫn cho Kali ra Internet

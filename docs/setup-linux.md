@@ -206,6 +206,7 @@ Tắt VM rồi gắn card (**Settings → Add → Network Adapter → Custom: Sp
 | IDS | 3 | VMnet3 |
 | Victim | 1 | VMnet3 |
 | Victim | 2 (tạm) | VMnet8 (NAT), ngắt sau khi build xong |
+| Kali | 2 (tạm) | VMnet8 (NAT), chỉ để `git clone` |
 
 ### 4.2. Đặt IP tĩnh
 
@@ -219,17 +220,23 @@ sudo chmod 600 /etc/netplan/50-lab.yaml && sudo netplan apply
 
 # Kali (NetworkManager); đổi eth0 nếu tên card khác
 sudo nmcli con add type ethernet ifname eth0 con-name lab ipv4.method manual \
-  ipv4.addresses 10.10.1.100/24 ipv4.gateway 10.10.1.1 ipv4.dns 8.8.8.8
+  ipv4.addresses 10.10.1.100/24 ipv4.routes "10.10.2.0/24 10.10.1.1"
 sudo nmcli con up lab
 ```
 
-Chưa có repo trên VM thì chép nội dung file mẫu bằng tay, hoặc clone repo trước (mục 1; đang thử nhánh chưa merge thì `git clone -b feature/68-vmware-lab <url>`). Victim cần card NAT tạm mới clone và build được.
+Kali chỉ thêm route tới `10.10.2.0/24` qua IDS, không đặt default gateway, để card NAT tạm vẫn cho Kali ra Internet khi `git clone`.
+
+Trên Victim, route mặc định qua IDS có metric 200 nên card NAT tạm (DHCP) thắng khi còn cắm. Nhờ vậy Victim có Internet để clone và build; rút card NAT ra thì mọi traffic đi qua IDS. Cái giá là khi card NAT còn cắm, gói trả lời Kali cũng đi ra NAT và Kali không ping được Victim: **trước khi kiểm tra hoặc demo từ Kali, hãy ngắt card NAT của Victim** (VMware: Settings → Network Adapter 2 → bỏ Connected).
+
+Chưa có repo trên VM thì clone trước (mục 1; đang thử nhánh chưa merge thì `git clone -b feature/68-vmware-lab <url>`). Victim và Kali cần card NAT tạm mới clone được; Victim không có Internet thì clone ở IDS rồi `scp -r` sang (làm trước khi tắt sshd ở mục 4.4).
+
+Sau khi đặt IP xong, chạy bước kiểm tra mạng của mục 4.6 (bước 1–3) khi chưa cài Docker, rồi chụp snapshot cả 3 VM (VM → Snapshot → Take Snapshot) để hỏng thì quay lại được.
 
 ### 4.3. VM IDS
 
 ```bash
 # 1. Chuyển tiếp gói giữa hai card
-echo 'net.ipv4.ip_forward=1' | sudo tee /etc/sysctl.d/99-lab.conf && sudo sysctl --system
+echo 'net.ipv4.ip_forward=1' | sudo tee /etc/sysctl.d/99-nids.conf && sudo sysctl --system
 sysctl net.ipv4.ip_forward                  # phải ra = 1
 
 # 2. Cài Docker (mục 2.1), rồi mở FORWARD cho hai chiều ens34 <-> ens35.
@@ -283,7 +290,7 @@ sudo python3 lab/attacker/attack_demo.py all --target 10.10.2.50     # hoặc: w
 
 ### 4.6. Kiểm tra từng tầng
 
-Tầng nào hỏng thì dừng ở đó, đừng đi tiếp.
+Tầng nào hỏng thì dừng ở đó, đừng đi tiếp. Các bước có Kali ↔ Victim chỉ đúng khi card NAT tạm của Victim đã ngắt (mục 4.2).
 
 | # | Chạy ở | Lệnh | Kết quả đúng |
 |---|--------|------|--------------|
@@ -305,10 +312,10 @@ Muốn thử Redis tắt: `docker compose -f lab/vmware/compose.ids.yml stop red
 | Triệu chứng | Nguyên nhân thường gặp |
 |-------------|------------------------|
 | Kali ping được IDS nhưng không ping được Victim | Chưa bật `ip_forward` hoặc chưa thêm rule `DOCKER-USER` (mục 4.3). |
-| Ping tới nhưng không có đường về | Victim thiếu default gateway `10.10.2.1`. |
+| Ping tới nhưng không có đường về | Victim thiếu default gateway `10.10.2.1`, hoặc card NAT tạm của Victim còn cắm (gói trả lời ra NAT thay vì qua IDS): ngắt card NAT trong VMware. |
 | Không ping được cả IDS | Gắn nhầm card vào VMnet, hoặc sai tên card trong netplan. |
 | IP `10.10.x.1` báo trùng hoặc chập chờn | Windows đang giữ host virtual adapter (chưa tắt ở mục 4.1). |
-| `docker build` trên Victim lỗi mạng | Card NAT tạm chưa bật, hoặc thiếu `nameservers` trong netplan. |
+| `docker build` trên Victim lỗi mạng | Card NAT tạm chưa bật (VMware: Network Adapter 2 phải ở trạng thái Connected), hoặc `ens34` chưa nhận DHCP: kiểm tra `ip -br addr`. |
 | Engine báo `No such device` | `network.interface` trong `lab/vmware/settings.ids.yaml` không trùng tên card phía Kali. |
 | Redirector có rule trong container nhưng `iptables -t nat -S` trên host không thấy | Container (Debian) dùng backend nft còn host dùng legacy hoặc ngược lại. Trên host: `sudo update-alternatives --set iptables /usr/sbin/iptables-nft` (hoặc `-legacy`) cho trùng với image rồi chạy lại redirector. |
 | Container victim không khởi động, cổng 22 bị chiếm | `ssh.service` hoặc `ssh.socket` của Ubuntu còn chạy: làm lại mục 4.4 bước 1. |
