@@ -1,6 +1,6 @@
 import logging
 from collections import deque
-from typing import AbstractSet, List, Optional, Callable, Dict, Tuple, Deque
+from typing import AbstractSet, List, Optional, Callable, Dict, Tuple, Deque, FrozenSet
 from nids.engine.packet import DecodedPacket
 from nids.engine.rule import SnortRule, ContentMatch, PcreMatch, BUFFER_PKT_DATA
 from nids.engine.rule_manager import RuleManager
@@ -48,6 +48,7 @@ class DetectionEngine:
 
         self._payload_groups: Dict[int, PayloadGroups] = {}
         self._detection_filter_hits: Dict[Tuple[int, str], Deque[float]] = {}
+        self._sids_by_proto: Dict[str, FrozenSet[int]] = {}
 
         self.rebuild_index()
 
@@ -62,6 +63,7 @@ class DetectionEngine:
         self.no_content_rules = []
         self._payload_groups = {}
         self._detection_filter_hits = {}
+        self._sids_by_proto = {}
 
         self.uri_matcher = MultiPatternMatcher()
         self.header_matcher = MultiPatternMatcher()
@@ -125,17 +127,21 @@ class DetectionEngine:
         """
         return bool(rule.contents or rule.pcres) and not (rule.dsize or rule.flags is not None or rule.detection_filter)
 
+    def _candidate_sids(self, pkt_proto: str) -> FrozenSet[int]:
+        """SID của rule áp dụng cho giao thức này (cộng rule `ip`); cache theo giao thức vì dựng lại mỗi gói rất tốn khi có hàng nghìn rule."""
+        sids = self._sids_by_proto.get(pkt_proto)
+        if sids is None:
+            rules = self.rules_by_proto.get(pkt_proto, []) + self.rules_by_proto.get("ip", [])
+            sids = self._sids_by_proto[pkt_proto] = frozenset(r.sid for r in rules)
+        return sids
+
     def evaluate_packet(self, packet: DecodedPacket, skip_sids: AbstractSet[int] = frozenset()) -> List[SnortRule]:
         """Đánh giá gói tin qua kiến trúc phễu lọc đa tầng."""
         pkt_proto = packet.protocol.lower()
 
-        proto_candidates: List[SnortRule] = (
-            self.rules_by_proto.get(pkt_proto, []) + self.rules_by_proto.get("ip", [])
-        )
-        if not proto_candidates:
+        proto_candidate_sids = self._candidate_sids(pkt_proto)
+        if not proto_candidate_sids:
             return []
-
-        proto_candidate_sids = {r.sid for r in proto_candidates}
 
         candidate_rules: Dict[int, SnortRule] = {}
 
