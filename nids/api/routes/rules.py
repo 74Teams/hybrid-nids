@@ -50,7 +50,7 @@ def _rule_dict(r, overridden: set) -> Dict[str, Any]:
         "sid": r.sid, "rev": r.rev, "msg": r.msg, "action": r.action, "protocol": r.protocol,
         "src_ip": r.src_ip, "src_port": r.src_port, "direction": r.direction,
         "dst_ip": r.dst_ip, "dst_port": r.dst_port, "classtype": r.classtype,
-        "severity": r.severity, "group": GROUPS.get((r.sid - 1000000) // 100, "KHÁC"),
+        "severity": r.severity, "group": "COMMUNITY" if r.category.startswith("community-") else GROUPS.get((r.sid - 1000000) // 100, "KHÁC"),
         "category": r.category, "enabled": r.enabled, "default_enabled": r.default_enabled,
         "overridden": r.sid in overridden,
         "unsupported_options": r.unsupported_options, "raw_rule": r.raw_rule,

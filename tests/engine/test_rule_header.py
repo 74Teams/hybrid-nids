@@ -268,7 +268,7 @@ def test_every_vendor_header_is_understood():
     manager = RuleManager(variables=config.get_rule_variables())
     header = re.compile(r"#?\s*((?:alert|log|pass|drop|reject|sdrop)\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+)\s*\(")
     failures, total = [], 0
-    for number, line in enumerate((ROOT / "rules/vendor/community.rules").read_text(encoding="utf-8").splitlines(), 1):
+    for number, line in enumerate((ROOT / "rules/upstream/community.rules").read_text(encoding="utf-8").splitlines(), 1):
         match = header.match(line)
         if not match:
             continue
@@ -286,6 +286,7 @@ def test_every_vendor_header_is_understood():
 def test_enabled_rules_keep_their_default_header_meaning():
     manager = RuleManager("rules")
     manager.load_all_rules()
-    assert len(manager.rules) == 68
-    assert all(r.src_addrs.wildcard and r.dst_addrs.wildcard and r.src_ports.wildcard for r in manager.rules)
+    own = [r for r in manager.rules if not r.category.startswith("community-")]
+    assert len(own) == 68
+    assert all(r.src_addrs.wildcard and r.dst_addrs.wildcard and r.src_ports.wildcard for r in own)
     assert ANY_PORTS.wildcard and ANY_ADDRS.wildcard
