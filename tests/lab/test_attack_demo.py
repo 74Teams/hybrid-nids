@@ -42,4 +42,6 @@ def test_all_attack_sids_exist_in_ruleset(rule_manager):
 
 def test_every_rule_is_covered_by_an_attack(rule_manager):
     covered = {sid for group in GROUPS for attack in _attacks(group) for sid in attack.sids}
-    assert not set(rule_manager.rules_by_sid) - covered, "Rule chưa có đòn trình diễn"
+    # Rule community sinh tự động từ bộ Snort Community, không cần đòn trình diễn riêng
+    own = {sid for sid, rule in rule_manager.rules_by_sid.items() if not rule.category.startswith("community-")}
+    assert not own - covered, "Rule chưa có đòn trình diễn"

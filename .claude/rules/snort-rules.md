@@ -112,6 +112,8 @@ Dùng `priority` để đặt mức độ. Cú pháp Snort 2 không được h�
 | `10005xx` | RECON (UDP / ICMP) | `rules/recon.rules` |
 | `≥ 2000000` | Rule tự viết trên web | `rules/custom.rules` |
 
+Rule community (`rules/community-{web,malware,server,protocol}.rules`, SID < 1000000) được **sinh tự động** từ `rules/upstream/community.rules` (Snort 2, GPLv2) bằng `python -m nids.tools.snort2_convert`; không sửa tay các file này (test `test_committed_community_files_match_the_converter` sẽ fail). Muốn loại một rule báo nhầm thì thêm SID vào `DENY_SIDS` trong `nids/tools/snort2_convert.py` rồi sinh lại. Rule community không cần đòn trong `attack_demo.py`; bật/tắt từng file trên trang Rules.
+
 Mỗi SID chỉ xuất hiện một lần trong mọi file. Nếu trùng, parser giữ rule nạp trước (file xếp theo tên) và bỏ rule sau.
 
 ## Giới hạn của engine
