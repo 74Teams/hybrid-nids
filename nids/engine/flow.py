@@ -43,11 +43,35 @@ class Flow:
     alert_count: int = 0
     end_reason: str = ""
 
+    # Bộ đếm cho đặc trưng AI (nids/ai/features.py); chỉ là số cộng dồn, không lưu từng gói
+    fwd_len_min: int = 0
+    fwd_len_max: int = 0
+    fwd_len_sq: float = 0.0          # tổng bình phương độ dài gói chiều đi, để tính độ lệch chuẩn
+    bwd_len_min: int = 0
+    bwd_len_max: int = 0
+    bwd_len_sq: float = 0.0
+    fwd_payload_bytes: int = 0
+    bwd_payload_bytes: int = 0
+    iat_sum: float = 0.0             # IAT: khoảng thời gian giữa hai gói liên tiếp của flow
+    iat_sq: float = 0.0
+    iat_min: float = 0.0
+    iat_max: float = 0.0
+    fwd_iat_sum: float = 0.0
+    bwd_iat_sum: float = 0.0
+    syn_count: int = 0
+    ack_count: int = 0
+    fin_count: int = 0
+    rst_count: int = 0
+    psh_count: int = 0
+    urg_count: int = 0
+
     # Trạng thái nội bộ để nhận biết flow TCP đang đóng
     _fin_fwd: bool = field(default=False, repr=False, compare=False)
     _fin_bwd: bool = field(default=False, repr=False, compare=False)
     _closing_since: Optional[float] = field(default=None, repr=False, compare=False)
 
+    _last_fwd_ts: Optional[float] = field(default=None, repr=False, compare=False)
+    _last_bwd_ts: Optional[float] = field(default=None, repr=False, compare=False)
     @property
     def duration(self) -> float:
         return max(0.0, self.last_seen - self.first_seen)
@@ -159,20 +183,51 @@ class FlowTracker:
 
     @staticmethod
     def _account(flow: Flow, packet: DecodedPacket, alert_count: int) -> None:
+        ts = packet.timestamp
+        before = flow.fwd_packets + flow.bwd_packets
+        if before > 0:                                   # AI: IAT tính từ gói thứ hai
+            iat = max(0.0, ts - flow.last_seen)          # gói đến trễ thứ tự thì coi IAT = 0
+            flow.iat_sum += iat
+            flow.iat_sq += iat * iat
+            flow.iat_min = iat if before == 1 else min(flow.iat_min, iat)
+            flow.iat_max = max(flow.iat_max, iat)
+
         forward = packet.src_ip == flow.src_ip and (packet.src_port or 0) == (flow.src_port or 0)
         size = len(packet.raw_packet) or len(packet.raw_payload)
+        payload = len(packet.raw_payload)
         if forward:
+            flow.fwd_len_min = size if flow.fwd_packets == 0 else min(flow.fwd_len_min, size)   # AI
+            flow.fwd_len_max = max(flow.fwd_len_max, size)
+            flow.fwd_len_sq += size * size
+            flow.fwd_payload_bytes += payload
+            if flow._last_fwd_ts is not None:
+                flow.fwd_iat_sum += max(0.0, ts - flow._last_fwd_ts)
+            flow._last_fwd_ts = ts
             flow.fwd_packets += 1
             flow.fwd_bytes += size
         else:
+            flow.bwd_len_min = size if flow.bwd_packets == 0 else min(flow.bwd_len_min, size)   # AI
+            flow.bwd_len_max = max(flow.bwd_len_max, size)
+            flow.bwd_len_sq += size * size
+            flow.bwd_payload_bytes += payload
+            if flow._last_bwd_ts is not None:
+                flow.bwd_iat_sum += max(0.0, ts - flow._last_bwd_ts)
+            flow._last_bwd_ts = ts
             flow.bwd_packets += 1
             flow.bwd_bytes += size
-        flow.last_seen = max(flow.last_seen, packet.timestamp)
+        flow.last_seen = max(flow.last_seen, ts)
         flow.alert_count += alert_count
 
         if packet.protocol != "TCP":
             return
-        raw_flags = packet.tcp_flags.get("raw_flags", "")
+        flags = packet.tcp_flags
+        flow.syn_count += bool(flags.get("SYN"))         # AI: True cộng như 1, False như 0
+        flow.ack_count += bool(flags.get("ACK"))
+        flow.fin_count += bool(flags.get("FIN"))
+        flow.rst_count += bool(flags.get("RST"))
+        flow.psh_count += bool(flags.get("PSH"))
+        flow.urg_count += bool(flags.get("URG"))
+        raw_flags = flags.get("raw_flags", "")
         flow.tcp_flags = "".join(sorted(set(flow.tcp_flags) | set(raw_flags)))
         if packet.tcp_flags.get("RST") and flow._closing_since is None:
             flow.end_reason, flow._closing_since = END_RST, packet.timestamp
