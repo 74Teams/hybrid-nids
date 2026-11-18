@@ -14,3 +14,4 @@ Bảng tổng hợp mọi plan của dự án. Quy trình và ý nghĩa trạng 
 | PLAN-008 | [Lab ba máy ảo trên VMware (Kali, IDS gateway, Victim + Honeypot)](2026-11-10-vmware-multi-vm-lab.md) | REVIEW | #68 | ngoccu2006 | 2026-11-10 | |
 | PLAN-009 | [Bộ đo có nhãn CIC-IDS2017 và tối ưu toàn hệ thống trong 3 tuần](2026-11-10-labeled-eval-optimization.md) | IN_PROGRESS | #71 | nldd0507 | 2026-11-11 | [#72](https://github.com/74Teams/hybrid-nids/pull/72), [#73](https://github.com/74Teams/hybrid-nids/pull/73) |
 | PLAN-010 | [Chuyển bộ rule Snort community sang Snort 3 và bật ~2000 rule](2026-11-16-community-ruleset.md) | IN_PROGRESS | | nmchien1106 | 2026-11-16 | |
+| PLAN-011 | [Tối ưu mô hình AI theo flow cho tấn công diện rộng (PortScan, DoS, DDoS)](2026-11-15-ai-flow-model-tuning.md) | IN_PROGRESS | #105 | nldd0507 | 2026-11-17 | |

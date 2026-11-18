@@ -225,6 +225,8 @@ flowchart LR
 
 ### 6.5 Tối ưu engine
 
+> **Ràng buộc từ PLAN-010 (17/11):** đặc trưng AI nhìn nhiều flow (`nids/ai/context.py`) dựa vào **thứ tự `FlowTracker` xuất flow**. Khi viết lại `FlowTracker.expire` (PR7), ngoài việc giữ số flow và tổng gói, phải giữ nguyên thứ tự xuất; test khoá nằm ở `tests/ai/test_context.py::test_flow_tracker_export_order_is_locked`. Nếu buộc phải đổi thứ tự thì dựng lại dataset AI và học lại mô hình.
+
 1. **Offline không rớt gói:**
    - Chế độ offline đẩy gói bằng vòng `put(decoded, timeout=0.5)`. Mỗi lần hết timeout thì kiểm tra `stop_event` và `worker_thread.is_alive()`: worker đã chết thì dừng đọc pcap, log `ERROR`, không treo. Có timeout thì Ctrl+C trên Windows vẫn ngắt được.
    - Live giữ nguyên hành vi bỏ gói và `DropCounter`.
@@ -260,6 +262,8 @@ flowchart LR
 - Chỉnh ngưỡng ANOMALY (`scan.ports`, `scan.hosts`, `flood.*`) bằng grid search trên dev, mục tiêu: phát hiện mọi đợt dev mà FPR flow BENIGN ≤ 1%. Giá trị chọn được ghi vào `settings.example.yaml` kèm lý do.
 
 ### 6.7 AI worker
+
+> **Cập nhật PLAN-010 (17/11):** phần huấn luyện đã làm xong theo [PLAN-010](2026-11-15-ai-flow-model-tuning.md). Khác với mô tả dưới đây: (1) thêm đặc trưng nhìn nhiều flow (`nids/ai/context.py`), `FEATURE_NAMES` có 40 cột; (2) lớp của AI là `BENIGN, PortScan, DoS, DDoS, Bot, BruteForce`, `WebAttack` để rule Snort lo; (3) IsolationForest không làm; (4) số liệu và báo cáo ở `docs/ai/ket-qua-danh-gia.md`. Phần tích hợp `AITrafficWorker` vào engine vẫn thuộc mục này (issue #105), với các ràng buộc ở `.claude/rules/engine.md`.
 
 - **Đặc trưng:** thêm vào `Flow` các bộ đếm tăng dần O(1) mỗi gói:
   - count/sum/sum²/min/max của độ dài gói theo từng chiều;

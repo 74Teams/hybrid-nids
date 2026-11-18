@@ -15,7 +15,7 @@ Hybrid NIDS + honeypot (đồ án PBL4): hệ thống phát hiện xâm nhập m
 - FastAPI + Uvicorn (API, dashboard); HTML/CSS/JS thuần, biểu đồ SVG tự vẽ, không dùng thư viện frontend
 - Redis ≥ 7 (Docker) + redis-py ≥ 8.1: pub/sub đẩy tín hiệu cảnh báo mới tới WebSocket của dashboard (tuỳ chọn, tắt được)
 - paramiko ≥ 3.4 (honeypot SSH), Flask ≥ 3.0 (honeypot HTTP), pydantic-settings
-- numpy, pandas, scikit-learn, joblib (dành cho AI worker, chưa dùng)
+- numpy, pandas, scikit-learn, joblib (mô hình AI theo flow: đã huấn luyện bằng `tools/ai/`, `AITrafficWorker` chưa gắn vào engine)
 - pytest; Docker Compose; GitHub Actions chạy pytest cho mỗi PR vào `main`
 
 ## Project Structure
@@ -27,7 +27,7 @@ Lệnh luôn chạy từ thư mục gốc repo (`pytest.ini` đặt `pythonpath 
 - `nids/honeypot/` — honeypot SSH và HTTP (`python -m nids.honeypot ssh|http`), `store.py` ghi sự kiện
 - `nids/redirector/` — process chuyển hướng IP đáng ngờ sang honeypot bằng iptables (`python -m nids.redirector`, chỉ chạy trong Docker lab)
 - `nids/db/` — `models.py` (`events`, `event_payloads`, `flows`), `repository.py` (`EventRepository`)
-- `nids/ai.py` — `AITrafficWorker` (stub); `nids/config.py` — `SETTINGS`, `get_db_url()`, `get_redis_settings()`, `get_redirect_settings()`; `nids/logger.py` — `setup_logging`; `nids/realtime.py` — `publish_alert` (đẩy id cảnh báo mới lên Redis)
+- `nids/ai/` — `worker.py` (`AITrafficWorker`, stub), `features.py` (`FEATURE_NAMES`, `extract_features`), `context.py` (`FlowContext`: đặc trưng nhìn nhiều flow); `tools/ai/` — dựng dataset và huấn luyện (`build_dataset.py`, `train.py`, `add_context.py`, `folds.csv`); `models/flow_model.joblib` — mô hình Random Forest; `nids/config.py` — `SETTINGS`, `get_db_url()`, `get_redis_settings()`, `get_redirect_settings()`; `nids/logger.py` — `setup_logging`; `nids/realtime.py` — `publish_alert` (đẩy id cảnh báo mới lên Redis)
 - `rules/` — file `.rules` theo category, `custom.rules`, `community-*.rules` (sinh tự động từ `upstream/community.rules` bằng `python -m nids.tools.snort2_convert`), `vendor/`, `state.yaml` (gitignore)
 - `config/settings.example.yaml` — file mẫu được commit; `config/settings.yaml` — cấu hình local (bị git ignore, thiếu thì dùng file mẫu)
 - `lab/` — Docker lab: `attacker/attack_demo.py`, `victim/`
@@ -68,7 +68,7 @@ Các process (engine, API, redirector, mỗi honeypot một process) chạy riê
 ## Current Focus
 
 - Quản lý rule nhiều file (branch `feature/rule-management`): category, override theo SID, sửa `custom.rules` trên trang Rules kiểu pfSense.
-- Thiết kế AI worker theo flow (`docs/ai/`) để thay stub trong `nids/ai.py` mà không phải sửa capture, decoder, DB hay API.
+- AI theo flow (PLAN-010, issue #105): đã có mô hình và báo cáo (`docs/ai/ket-qua-danh-gia.md`); còn gắn `AITrafficWorker` vào engine (`docs/ai/07-tutorial-huan-luyen.md` phần 10) mà không phải sửa capture, decoder, DB hay API.
 - Cảnh báo realtime qua Redis pub/sub + WebSocket (branch `feature/30-realtime-alert-push`, PLAN-001, issue #30).
 - Xem traffic và phát hiện bất thường theo ngưỡng (PLAN-004): API flows + trang Traffic (#40, #41, đã merge), cảnh báo `ANOMALY` theo ngưỡng (#42, branch `feature/42-anomaly-detection`).
 - Chuyển hướng IP đáng ngờ sang honeypot (branch `feature/29-redirect-to-honeypot`, PLAN-005, issue #29).
@@ -85,6 +85,6 @@ Các process (engine, API, redirector, mỗi honeypot một process) chạy riê
 - `nids_api` cố ý chạy ở network riêng để request của dashboard (poll dự phòng, WebSocket) không bị engine sniff nhầm.
 - `init_db()` thử lại 15 lần × 2s vì MySQL khởi động chậm. Đừng coi lần kết nối thất bại đầu tiên là lỗi.
 - Honeypot ghi từ process khác, nên cache IP honeypot trong engine có TTL 5 giây và cảnh báo có thể chưa được làm giàu ngay.
-- `nids/ai.py` mới là stub: đừng viết test hay demo giả định AI worker đã sinh cảnh báo.
+- `nids/ai/worker.py` mới là stub (mô hình đã có nhưng chưa nạp vào engine): đừng viết test hay demo giả định AI worker đã sinh cảnh báo.
 
 Quy tắc chi tiết: `.claude/rules/git-workflow.md`, `planning.md`, `engine.md`, `api-web.md`, `web-design.md`, `honeypot.md`, `redirector.md`, `config-db-docker.md`, `logging.md`, `lab-demo.md`, `snort-rules.md`.

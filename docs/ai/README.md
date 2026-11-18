@@ -20,6 +20,10 @@ Bộ tài liệu này mô tả kế hoạch xây dựng tầng phát hiện bấ
 | [03-kien-truc.md](03-kien-truc.md) | Luồng dữ liệu, các module dự kiến, logic quyết định, hợp đồng `alert_data`, cấu hình, hiệu năng |
 | [04-du-lieu-va-huan-luyen.md](04-du-lieu-va-huan-luyen.md) | Dataset, gán nhãn, tập đặc trưng, quy trình huấn luyện và xuất mô hình |
 | [05-lo-trinh-va-ket-qua.md](05-lo-trinh-va-ket-qua.md) | Các giai đoạn, tiêu chí nghiệm thu đo được, rủi ro và cách giảm |
+| [06-huan-luyen-ai-la-gi.md](06-huan-luyen-ai-la-gi.md) | Cho người mới: huấn luyện AI là gì, thuật ngữ, cách chấm điểm, các bẫy, vai trò của pcap và CSV |
+| [07-tutorial-huan-luyen.md](07-tutorial-huan-luyen.md) | Tutorial từng bước: bài khởi động trên CSV, đặc trưng từ pcap, dựng dataset, huấn luyện, gắn vào engine, thi |
+
+Người chưa từng làm AI: đọc 06 rồi làm theo 07. Các file 01–05 là thiết kế chi tiết để tra cứu.
 
 ## Issue liên quan
 

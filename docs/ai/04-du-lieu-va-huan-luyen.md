@@ -29,6 +29,13 @@ Chỉ dùng các đặc trưng **tính được từ `DecodedPacket` hiện có*
 
 Bỏ `src_ip`, `dst_ip` và timestamp tuyệt đối để mô hình không học thuộc địa chỉ của dataset. Danh sách cuối cùng được chốt khi làm giai đoạn 1 và chỉ được định nghĩa ở một chỗ duy nhất là `FEATURE_NAMES`.
 
+**Cập nhật PLAN-010 (17/11):** danh sách cuối là **40 cột** (32 cột nói trên cộng 8 cột ngữ cảnh nhiều flow từ `nids/ai/context.py`):
+
+- cửa sổ 60 giây: `src_dst_hosts_60s`, `src_short_ratio_60s`, `dst_flows_60s`;
+- cửa sổ 5 giây: `src_flows_5s`, `src_dst_ports_5s`, `src_dst_hosts_5s`, `src_port_diversity_5s`, `dst_flows_5s`.
+
+Lý do thêm: một flow quét cổng chỉ có 2 gói, giống hệt kết nối nhầm cổng bị từ chối; dấu hiệu thật là "một IP gõ hàng trăm cổng trong vài giây" nên phải nhìn nhiều flow. Hai cột đếm 60 giây theo IP nguồn (`src_flows_60s`, `src_dst_ports_60s`) đã bị bỏ vì chỉ đầy dần sau khoảng 20 giây nên bỏ lọt đầu đợt quét. Lớp của AI là `BENIGN, PortScan, DoS, DDoS, Bot, BruteForce`; `WebAttack` để rule Snort lo. Chi tiết và số liệu: [ket-qua-danh-gia.md](ket-qua-danh-gia.md).
+
 ## 4.4 Quy trình huấn luyện (`tools/ai/train.py`)
 
 1. **Dựng dataset:** `build_dataset.py` đọc pcap bằng Scapy (`PcapReader`, đọc dạng stream để không tốn RAM), đưa từng gói qua `PacketDecoder.decode` → `FlowTable` → `extract_features`, rồi gắn nhãn và ghi ra parquet hoặc CSV.

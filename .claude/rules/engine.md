@@ -1,7 +1,7 @@
 ---
 paths:
   - "nids/engine/**"
-  - "nids/ai.py"
+  - "nids/ai/**"
   - "tests/engine/**"
 ---
 
@@ -74,7 +74,13 @@ IP đã chạm honeypot trong 1 giờ gần nhất chắc chắn là attacker. `
 
 ## AI worker
 
-`nids/ai.py` (`AITrafficWorker`) mới là stub. Nó được khởi tạo với cùng callback `handle_alert` như rule engine, nên khi làm phần AI chỉ sửa bên trong `nids/ai.py`. Thiết kế nằm ở `docs/ai/`.
+`nids/ai/worker.py` (`AITrafficWorker`) mới là stub. Nó được khởi tạo với cùng callback `handle_alert` như rule engine. Mô hình, đặc trưng và cách chấm nằm ở `nids/ai/features.py`, `nids/ai/context.py`, `tools/ai/` và `docs/ai/ket-qua-danh-gia.md` (PLAN-010).
+
+Ràng buộc cho bước gắn worker (hợp đồng giữa dataset và lúc chạy):
+
+- Giữ một `FlowContext` và gọi `update(flow)` cho **mọi** flow kết thúc, theo đúng thứ tự `FlowLog` nhận (thứ tự `FlowTracker` xuất flow), rồi truyền kết quả vào `extract_features(flow, context)`. Tham số `FlowContext` phải bằng `bundle["context"]`; `bundle["feature_names"]` phải bằng `FEATURE_NAMES` (khác thì tắt AI và log lỗi).
+- Thứ tự `FlowTracker` xuất flow là một phần hợp đồng với mô hình: ai viết lại `FlowTracker.expire` phải giữ nguyên (có test khoá ở `tests/ai/test_context.py`).
+- Ngưỡng theo lớp ở `bundle["thresholds"]["per_class"]`; cảnh báo nếu `bundle["sklearn_version"]` khác bản đang cài.
 
 ## Test
 
