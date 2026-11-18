@@ -35,6 +35,9 @@ UNLABELED = "UNLABELED"
 # bị gắn BENIGN (Engelen và cộng sự, "Troubleshooting an Intrusion Detection Dataset: the CICIDS2017 Case
 # Study", IEEE SPW 2021; kiểm tra ngày 10/11/2026: 42 flow tới IP này lúc 14:09-14:19 thứ Sáu đều là BENIGN).
 C2_IP = "205.174.165.73"
+# Chỉ sửa nhãn ở các ngày có botnet. Thứ Năm, đợt Infiltration cũng dùng IP này (36 dòng Infiltration và 34 dòng
+# BENIGN ngoài đợt, kiểm tra ngày 11/11/2026); đổi những dòng đó thành Bot là sai, vì thứ Năm không có botnet.
+C2_CORRECTION_DAYS = ("friday",)
 
 # Nhãn gốc (đã chuẩn hoá bằng `_normalize_raw`) → lớp gộp dùng để đo và huấn luyện
 GROUPS = {
@@ -214,11 +217,16 @@ def _read_csv(path: Path) -> pd.DataFrame:
 
 
 def load_labels(csv_paths: Sequence[Union[str, Path]]) -> LabelIndex:
-    """Đọc các file CSV `TrafficLabelling_` và dựng `LabelIndex`."""
+    """Đọc các file CSV `TrafficLabelling_` và dựng `LabelIndex`.
+
+    Dòng BENIGN có IP máy điều khiển botnet được sửa thành `Bot`, chỉ với file của các ngày trong
+    `C2_CORRECTION_DAYS` (theo tên file, ví dụ `Friday-WorkingHours-Morning.pcap_ISCX.csv`).
+    """
     records: Dict[FlowKey, List[LabelRecord]] = {}
     total = corrected = 0
     for path in (Path(p) for p in csv_paths):
         frame = _read_csv(path)
+        correct_c2 = path.name.lower().startswith(C2_CORRECTION_DAYS)
         # Giờ và nhãn chỉ có ít giá trị khác nhau, nên tính trên giá trị duy nhất rồi map lại cho nhanh
         stamps = {value: parse_cic_timestamp(value) for value in frame["Timestamp"].unique()}
         raws = {value: _normalize_raw(value) for value in frame["Label"].unique()}
@@ -228,7 +236,8 @@ def load_labels(csv_paths: Sequence[Union[str, Path]]) -> LabelIndex:
         for src_ip, src_port, dst_ip, dst_port, protocol, stamp, raw_value in columns:
             raw = raws[raw_value]
             label = GROUPS.get(raw, raw)
-            if C2_IP in (str(src_ip).strip(), str(dst_ip).strip()) and label != "Bot":
+            # chỉ đổi dòng BENIGN: không đè nhãn tấn công khác có cùng IP
+            if correct_c2 and label == BENIGN and C2_IP in (str(src_ip).strip(), str(dst_ip).strip()):
                 label = "Bot"
                 corrected += 1
             key = cic_flow_key(src_ip, src_port, dst_ip, dst_port, protocol)

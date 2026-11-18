@@ -153,6 +153,28 @@ def test_c2_traffic_is_corrected_to_bot(index):
     assert index.lookup(key, t, t) == ("Bot", BENIGN)
 
 
+def test_c2_correction_keeps_other_attack_labels(tmp_path):
+    # Thứ Sáu: dòng tấn công khác (giả định) có IP máy điều khiển không bị đè thành Bot
+    rows = [("x", "205.174.165.73", 4444, "192.168.10.8", 50000, 6, "7/7/2017 2:20", 1, "PortScan")]
+    index = load_labels([write_csv(tmp_path / "Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv", rows)])
+    key = cic_flow_key("205.174.165.73", 4444, "192.168.10.8", 50000, 6)
+    t = utc(2017, 7, 7, 17, 20)
+    assert index.lookup(key, t, t) == ("PortScan", "PortScan")
+
+
+def test_thursday_infiltration_is_not_turned_into_bot(tmp_path):
+    # Thứ Năm, đợt Infiltration dùng chung IP 205.174.165.73 nhưng không có botnet
+    rows = [
+        ("i1", "192.168.10.8", 50000, "205.174.165.73", 444, 6, "6/7/2017 2:20", 1, "Infiltration"),
+        ("i2", "192.168.10.8", 50001, "205.174.165.73", 444, 6, "6/7/2017 3:40", 1, "BENIGN"),
+    ]
+    path = write_csv(tmp_path / "Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv", rows)
+    index = load_labels([path])
+    t1, t2 = utc(2017, 7, 6, 17, 20), utc(2017, 7, 6, 18, 40)
+    assert index.lookup(cic_flow_key("192.168.10.8", 50000, "205.174.165.73", 444, 6), t1, t1) ==         ("Infiltration", "Infiltration")
+    assert index.lookup(cic_flow_key("192.168.10.8", 50001, "205.174.165.73", 444, 6), t2, t2) == (BENIGN, BENIGN)
+
+
 def test_broken_encoding_label_is_grouped(index):
     key = cic_flow_key("172.16.0.1", 41000, "192.168.10.50", 80, 6)
     t = utc(2017, 7, 7, 12, 20)
