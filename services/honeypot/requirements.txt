@@ -1,0 +1,6 @@
+# Honeypot SSH và HTTP
+-r ../../common/core/requirements.txt
+paramiko>=3.4
+flask>=3.0
+waitress>=3.0         # server WSGI của honeypot HTTP: trần kết nối, timeout, giới hạn body
+pydantic-settings>=2.2

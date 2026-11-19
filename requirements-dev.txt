@@ -1,0 +1,9 @@
+# Môi trường phát triển và CI: cài mọi service, công cụ và thư viện kiểm thử
+-r common/core/requirements.txt
+-r services/sensor/requirements.txt
+-r services/honeypot/requirements.txt
+-r services/redirector/requirements.txt
+-r services/dashboard/requirements.txt
+-r common/tools/requirements.txt
+pytest
+httpx>=0.27.0         # TestClient của FastAPI

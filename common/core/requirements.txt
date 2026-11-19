@@ -1,0 +1,6 @@
+# Thư viện lõi dùng chung (cấu hình, log, CSDL, kênh realtime): mọi service đều cần
+SQLAlchemy>=2.0.25
+pymysql>=1.1.0
+cryptography>=42.0.0
+redis>=8.1.0          # pub/sub đẩy tín hiệu cảnh báo mới (tuỳ chọn lúc chạy)
+pyyaml>=6.0.1

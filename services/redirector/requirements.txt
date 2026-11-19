@@ -1,0 +1,2 @@
+# Bộ chuyển hướng IP đáng ngờ sang honeypot (gọi iptables, không cần thư viện riêng)
+-r ../../common/core/requirements.txt
