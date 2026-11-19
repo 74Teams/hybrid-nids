@@ -1,10 +1,10 @@
 ---
 paths:
-  - "nids/honeypot/**"
-  - "tests/honeypot/**"
+  - "services/honeypot/src/nids/honeypot/**"
+  - "services/honeypot/tests/**"
 ---
 
-# Honeypot (`nids/honeypot/`)
+# Honeypot (`services/honeypot/src/nids/honeypot/`)
 
 - Honeypot SSH (`ssh_honeypot.py`, paramiko, nhận mọi mật khẩu, shell giả) và HTTP (`web_honeypot.py`, Flask, trang login WordPress giả), chạy bằng `python -m nids.honeypot ssh|http`.
 - Cấu hình qua biến môi trường `HONEYPY_*` (`settings.py`). Host key SSH tự sinh vào `data/` ở gốc repo (gitignore).

@@ -2,7 +2,7 @@
 
 ## 1. Bộ đo có nhãn
 
-Một danh sách rule dài chưa nói lên điều gì; phải chạy trên traffic thật có nhãn mới biết hệ thống bắt đúng hay báo nhầm. Bộ đo (`tools/eval/`) chạy engine trên pcap CIC-IDS2017 rồi so với nhãn.
+Một danh sách rule dài chưa nói lên điều gì; phải chạy trên traffic thật có nhãn mới biết hệ thống bắt đúng hay báo nhầm. Bộ đo (`common/tools/eval/`) chạy engine trên pcap CIC-IDS2017 rồi so với nhãn.
 
 ### 1.1 Cách hoạt động
 
@@ -13,8 +13,8 @@ Một danh sách rule dài chưa nói lên điều gì; phải chạy trên traf
 Kết quả không phụ thuộc máy chạy:
 
 - biến header là biến mặc định cộng `--set-var`;
-- tham số `stream`, `flow`, `anomaly` lấy từ `config/settings.example.yaml`;
-- `rules/state.yaml` bị bỏ qua.
+- tham số `stream`, `flow`, `anomaly` lấy từ `common/config/settings.example.yaml`;
+- `data/rules/state.yaml` bị bỏ qua.
 
 ### 1.2 Chạy
 
@@ -27,7 +27,7 @@ python -m tools.cic.manifest --split-dir <thư mục split> --labels-dir <thư m
 python -m tools.eval.evaluate --labels-dir <thư mục TrafficLabelling> --set dev --set-var HOME_NET=192.168.10.0/24 --name <tên>
 ```
 
-Báo cáo Markdown được ghi vào `docs/eval/<tên>.md`, số liệu JSON vào `data/eval/<tên>.json` (không commit). Tập test chỉ chạy khi thêm `--allow-test`.
+Báo cáo Markdown được ghi vào `docs/eval/<tên>.md`, số liệu JSON vào `data/work/eval/<tên>.json` (không commit). Tập test chỉ chạy khi thêm `--allow-test`.
 
 ### 1.3 Cách đọc
 

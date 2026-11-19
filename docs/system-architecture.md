@@ -2,7 +2,7 @@
 
 ## 1. Tổng quan
 
-Hệ thống gồm nhiều process chạy độc lập. Các process chỉ giao tiếp qua **cơ sở dữ liệu chung** và các **file trong `rules/`**. Ngoại lệ duy nhất là tín hiệu "có cảnh báo mới" qua Redis. Tín hiệu này chỉ mang id, dữ liệu vẫn đọc từ DB.
+Hệ thống gồm nhiều process chạy độc lập. Các process chỉ giao tiếp qua **cơ sở dữ liệu chung** và các **file trong `data/rules/`**. Ngoại lệ duy nhất là tín hiệu "có cảnh báo mới" qua Redis. Tín hiệu này chỉ mang id, dữ liệu vẫn đọc từ DB.
 
 ```mermaid
 flowchart LR
@@ -25,16 +25,16 @@ flowchart LR
     hpssh -. "id cảnh báo" .-> redis
     db --> api["API + dashboard<br/>172.28.0.20:8000"]
     redis -. WebSocket .-> api
-    rules[["rules/*.rules<br/>state.yaml"]] --> engine
+    rules[["data/rules/*.rules<br/>state.yaml"]] --> engine
     api -->|sửa rule| rules
 ```
 
 | Process | Lệnh | Đọc | Ghi |
 |---|---|---|---|
-| Engine | `python -m nids.engine` | gói mạng, `rules/`, IP honeypot trong `events` | `events`, `flows`, Redis |
+| Engine | `python -m nids.engine` | gói mạng, `data/rules/`, IP honeypot trong `events` | `events`, `flows`, Redis |
 | Honeypot SSH / HTTP | `python -m nids.honeypot ssh\|http` | kết nối của attacker | `events` (`HONEYPOT`), Redis |
 | Redirector | `python -m nids.redirector` | `events` (IP có nhiều cảnh báo) | `redirects`, iptables |
-| API + dashboard | `uvicorn nids.api.main:app` | toàn bộ DB, Redis | xoá `events`, file `rules/` |
+| API + dashboard | `uvicorn nids.api.main:app` | toàn bộ DB, Redis | xoá `events`, file `data/rules/` |
 
 Vì không process nào gọi trực tiếp process khác, khởi động lại dashboard không ảnh hưởng việc phát hiện. Một honeypot chết cũng không làm dừng engine.
 
@@ -115,7 +115,7 @@ Mạng bridge cô lập `nids_isolated_net` (`172.28.0.0/16`):
 | `redis` | `172.28.0.30` | Có mật khẩu, không lưu bền, không publish cổng |
 | `victim_app` | `172.28.0.50` | nginx và các dịch vụ làm mục tiêu |
 | `nids_engine`, `honeypot_ssh`, `honeypot_http`, `nids_redirector` | dùng namespace của `victim_app` | Engine thấy mọi gói tới victim và honeypot |
-| `attacker` | `172.28.0.100` | Kali Linux: nmap, hping3, hydra, sqlmap, nikto |
+| `attacker` | `172.28.0.100` | Kali Linux: nmap, hping3, hydra, sqlmap, nikto. Chỉ chạy khi bật profile `lab` |
 
 **BPF filter phải loại kết nối của chính hệ thống:** `ip and not port 3306 and not (host 172.28.0.30 and port 6379)`.
 
@@ -124,7 +124,7 @@ Mạng bridge cô lập `nids_isolated_net` (`172.28.0.0/16`):
 
 ## 6. Cấu hình
 
-`config/settings.yaml` là file local, bị gitignore. Thiếu file này thì chương trình dùng `config/settings.example.yaml`, vốn cấu hình sẵn cho Docker lab. Biến môi trường ghi đè YAML.
+`common/config/settings.yaml` là file local, bị gitignore. Thiếu file này thì chương trình dùng `common/config/settings.example.yaml`, vốn cấu hình sẵn cho Docker lab. Biến môi trường ghi đè YAML.
 
 | Mục | Nội dung |
 |---|---|
@@ -140,3 +140,19 @@ Mạng bridge cô lập `nids_isolated_net` (`172.28.0.0/16`):
 | `api` | Cấu hình API |
 
 Đổi `detection.variables` thì phải khởi động lại **cả engine lẫn API**, vì API dùng các biến này để kiểm tra `custom.rules`.
+
+## 7. Đóng gói
+
+Mỗi service là một thư mục trong `services/` với mã nguồn, test, Dockerfile và file phụ thuộc riêng. Phần dùng chung nằm trong `common/core` (không import từ service nào).
+
+| Image | Thư viện nặng được cài | Ghi chú |
+|---|---|---|
+| `nids-sensor` | scapy, pyahocorasick, numpy, scikit-learn, joblib | Cần libpcap; chạy với `NET_ADMIN`, `NET_RAW` |
+| `nids-honeypot` | paramiko, flask, waitress | Một image, hai container (`ssh`, `http`) |
+| `nids-redirector` | không | Cài `iptables`; chạy với `NET_ADMIN` |
+| `nids-dashboard` | fastapi, uvicorn, websockets | Chứa cả mã nguồn sensor để kiểm tra `custom.rules`, nhưng không cài scapy |
+
+- Rule, mô hình và cấu hình **không** nằm trong image: compose gắn `data/rules` (sensor chỉ đọc, dashboard được ghi), `data/models` (sensor) và `common/config` (mọi service) lúc chạy. Nhờ đó dashboard sửa rule thì sensor thấy ngay và tự nạp lại.
+- Build từ gốc repo: `docker build -f services/<tên>/Dockerfile .`. Compose chỉ đặt khối `build` cho sensor và một honeypot, các service còn lại dùng lại image đó, vì build nhiều image song song dễ làm Docker Desktop sập.
+- Mã nguồn dùng chung họ tên module `nids.*` (namespace package). Image đặt `PYTHONPATH` trỏ đúng các thư mục `src` của nó; trên máy phát triển dùng `scripts/env.ps1` hoặc `scripts/env.sh`.
+

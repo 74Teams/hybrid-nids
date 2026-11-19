@@ -1,14 +1,14 @@
 ---
 paths:
-  - "nids/api/**"
-  - "tests/api/**"
+  - "services/dashboard/src/nids/api/**"
+  - "services/dashboard/tests/**"
 ---
 
-# API và web console (`nids/api/`)
+# API và web console (`services/dashboard/src/nids/api/`)
 
 ## Process
 
-`nids/api/main.py` là process FastAPI riêng. Khi khởi động, nó chỉ gọi `init_db()` để tạo bảng và thêm cột còn thiếu. DB chỉ lưu cảnh báo và flow log (bảng `events`, `event_payloads`, `flows`), không lưu rule; `flows` chỉ được đọc (`/api/flows`), engine là nơi duy nhất ghi; API chỉ ghi file trong `rules/` (`state.yaml`, `custom.rules`).
+`services/dashboard/src/nids/api/main.py` là process FastAPI riêng. Khi khởi động, nó chỉ gọi `init_db()` để tạo bảng và thêm cột còn thiếu. DB chỉ lưu cảnh báo và flow log (bảng `events`, `event_payloads`, `flows`), không lưu rule; `flows` chỉ được đọc (`/api/flows`), engine là nơi duy nhất ghi; API chỉ ghi file trong `data/rules/` (`state.yaml`, `custom.rules`).
 
 ## Endpoint
 
@@ -27,13 +27,13 @@ paths:
 - `/api/rules/` — danh sách rule kèm category và trạng thái bật/tắt; `categories`, `sids`, `sids/reset`, `categories/{name}/all`, `custom` để bật/tắt category, override SID và sửa `custom.rules`.
 - `/health`.
 
-Thời gian: API trả ISO 8601 UTC kèm `Z` (`2026-10-31T14:00:00Z`, hàm `iso_utc`). `since`/`until` nhận giờ có múi (`+07:00`, `Z`) và được đổi về UTC; giờ không kèm múi coi là UTC. Trang web đổi sang giờ máy người xem bằng `new Date(iso)`; ô `datetime-local` ở bộ lọc phải đổi sang `toISOString()` trước khi gửi. Test múi giờ nằm ở `tests/api/test_timezone_utc.py`.
+Thời gian: API trả ISO 8601 UTC kèm `Z` (`2026-10-31T14:00:00Z`, hàm `iso_utc`). `since`/`until` nhận giờ có múi (`+07:00`, `Z`) và được đổi về UTC; giờ không kèm múi coi là UTC. Trang web đổi sang giờ máy người xem bằng `new Date(iso)`; ô `datetime-local` ở bộ lọc phải đổi sang `toISOString()` trước khi gửi. Test múi giờ nằm ở `services/dashboard/tests/test_timezone_utc.py`.
 
 Thao tác ghi rule cần header `X-API-Key` khớp biến môi trường `NIDS_API_KEY`; chưa đặt biến thì thao tác ghi bị khoá. Không được nới điều kiện này.
 
 ## Web UI
 
-- Giao diện kiểu shadcn/ui (token màu zinc, bo góc 0.5rem, card viền mảnh, tab dạng pill, button/input/badge/alert/dialog) viết bằng CSS thuần trong `nids/api/static/`, CSS chung `style.css` mount tại `/static`. Không dùng thư viện frontend hay font ngoài (lab chạy offline); quy tắc chi tiết (token, ánh xạ component, truy cập, cache) nằm ở `web-design.md`.
+- Giao diện kiểu shadcn/ui (token màu zinc, bo góc 0.5rem, card viền mảnh, tab dạng pill, button/input/badge/alert/dialog) viết bằng CSS thuần trong `services/dashboard/src/nids/api/static/`, CSS chung `style.css` mount tại `/static`. Không dùng thư viện frontend hay font ngoài (lab chạy offline); quy tắc chi tiết (token, ánh xạ component, truy cập, cache) nằm ở `web-design.md`.
 - Dashboard tại `/`; Status › System Logs (`logs.html`) tại `/logs`; Status › Traffic (`traffic.html`) tại `/traffic`: bảng flow với tab Tất cả / Chưa khớp rule / Có cảnh báo, flow có cảnh báo link sang `/logs?src_ip=…&dst_ip=…`, tự làm mới bằng poll 10 giây (flow ghi theo lô nên không có tín hiệu Redis); Services › Rules (`rules.html`) tại `/rules` kiểu Suricata trên pfSense: tab Categories, dropdown category, panel SID overrides (Apply / Reset All / Reset Current / Disable All / Enable All), ô sửa `custom.rules`.
 - Chỉ có giao diện sáng.
 - Trang HTML và file tĩnh trả `Cache-Control: no-cache` (trình duyệt hỏi lại bằng ETag) nên sửa CSS/JS có hiệu lực ngay.

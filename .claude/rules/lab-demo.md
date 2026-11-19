@@ -3,7 +3,7 @@ paths:
   - "lab/**"
   - "tests/lab/**"
   - "docs/demo-flow-explanation.md"
-  - "rules/**/*.rules"
+  - "data/rules/**/*.rules"
 ---
 
 # Docker lab và kịch bản demo

@@ -14,12 +14,12 @@ Kịch bản trình diễn toàn bộ hệ thống trên Docker lab, khoảng 15
 Làm từ hôm trước, không làm sát giờ:
 
 1. Mở Docker Desktop, chờ "Engine running". Build sẵn: `docker compose build`.
-2. `docker compose up -d`, đợi khoảng 30 giây cho MySQL sẵn sàng.
+2. `docker compose --profile lab up -d` (profile `lab` bật máy attacker), đợi khoảng 30 giây cho MySQL sẵn sàng.
 3. `docker logs nids_engine` phải có dòng `Đã nạp ... rule` và `Lắng nghe trực tiếp`.
 4. Mở dashboard, góc trên phải báo "Đã kết nối" (WebSocket qua Redis). Bấm **Xoá dữ liệu**.
 5. Đặt hai cửa sổ cạnh nhau: terminal `docker logs -f nids_engine` và trình duyệt.
 6. Kiểm tra nhanh cả chuỗi: `docker exec -it nids_attacker python lab/attacker/attack_demo.py web --delay 0.2`, thấy cảnh báo hiện lên rồi bấm **Xoá dữ liệu**.
-7. Cho phần AI (không cần Docker): `pip install -r requirements.txt`, chạy thử `python -m tools.ai.demo_ai --scenario scan` một lần (khoảng 10 giây).
+7. Cho phần AI (không cần Docker): `pip install -r requirements-dev.txt`, chạy thử `python -m tools.ai.demo_ai --scenario scan` một lần (khoảng 10 giây).
 
 ## 2. Trình tự
 
@@ -197,7 +197,7 @@ Có. Trên traffic thật của CIC-IDS2017, các rule ngưỡng và lớp ANOMA
 68 rule tự viết chia theo nhóm SID, cộng khoảng 2.800 rule Snort Community được chuyển sang Snort 3 bằng công cụ của nhóm.
 
 **Thêm rule mới thế nào?**
-Rule built-in thêm vào file của nhóm trong `rules/`. Rule tạm viết trong `custom.rules` ngay trên trang Rules. Engine tự nạp lại sau vài giây.
+Rule built-in thêm vào file của nhóm trong `data/rules/`. Rule tạm viết trong `custom.rules` ngay trên trang Rules. Engine tự nạp lại sau vài giây.
 
 **Hiệu năng và rớt gói?**
 Thread capture đẩy gói vào queue có giới hạn, worker xử lý ở thread riêng. Ở chế độ live, queue đầy thì bỏ gói và log tổng số gói bị bỏ. Đọc pcap thì không bỏ gói nào. Tốc độ khoảng 2.700–3.200 gói/giây.

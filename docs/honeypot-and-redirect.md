@@ -7,7 +7,7 @@ Honeypot là **nguồn sự kiện thứ hai**, độc lập với engine. Khôn
 
 ## 1. Honeypot SSH
 
-`nids/honeypot/ssh_honeypot.py` (paramiko), chạy bằng `python -m nids.honeypot ssh`, cổng 2222.
+`services/honeypot/src/nids/honeypot/ssh_honeypot.py` (paramiko), chạy bằng `python -m nids.honeypot ssh`, cổng 2222.
 
 - **Nhận mọi mật khẩu** rồi mở một shell giả có hệ thống file giả, nhớ trạng thái giữa các lệnh (ví dụ `cd` rồi `pwd`).
 - **Không bao giờ thực thi** lệnh của attacker. Shell chỉ trả các chuỗi dựng sẵn.
@@ -23,7 +23,7 @@ Honeypot là **nguồn sự kiện thứ hai**, độc lập với engine. Khôn
 
 ## 2. Honeypot HTTP
 
-`nids/honeypot/web_honeypot.py` (Flask, chạy trên waitress), chạy bằng `python -m nids.honeypot http`, cổng 8080.
+`services/honeypot/src/nids/honeypot/web_honeypot.py` (Flask, chạy trên waitress), chạy bằng `python -m nids.honeypot http`, cổng 8080.
 
 | Sự kiện | Khi nào | Priority |
 |---|---|---|

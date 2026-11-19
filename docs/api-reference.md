@@ -74,7 +74,7 @@ curl -X DELETE http://localhost:8000/api/alerts/          # xoá toàn bộ đ�
 | `GET` | `/api/rules/custom` | | Đọc `custom.rules` (text) |
 | `PUT` | `/api/rules/custom` | có | Thay `custom.rules`; nội dung sai cú pháp bị từ chối kèm số dòng lỗi |
 
-Thay đổi được lưu vào `rules/state.yaml` hoặc `rules/custom.rules`. Engine đang chạy tự nạp lại trong vài giây.
+Thay đổi được lưu vào `data/rules/state.yaml` hoặc `data/rules/custom.rules`. Engine đang chạy tự nạp lại trong vài giây.
 
 ## 7. Hệ thống
 

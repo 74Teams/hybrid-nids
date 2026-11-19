@@ -37,12 +37,12 @@ sed -i "s/^NIDS_REDIS_PASSWORD=.*/NIDS_REDIS_PASSWORD=$(openssl rand -hex 24)/" 
 sed -i "s/^NIDS_API_KEY=.*/NIDS_API_KEY=$(openssl rand -hex 32)/" .env      # tuỳ chọn: cho phép sửa rule trên web
 ```
 
-Trên Windows thì mở `.env` và điền tay. Không cần tạo `config/settings.yaml`: thiếu file này thì chương trình dùng `config/settings.example.yaml`, vốn cấu hình sẵn cho lab.
+Trên Windows thì mở `.env` và điền tay. Không cần tạo `common/config/settings.yaml`: thiếu file này thì chương trình dùng `common/config/settings.example.yaml`, vốn cấu hình sẵn cho lab.
 
 ### 2.2 Khởi động
 
 ```bash
-docker compose up --build -d
+docker compose up --build -d                       # thêm --profile lab nếu cần máy attacker (mục 2.3)
 docker compose ps
 docker logs -f nids_engine            # chờ dòng "Đã nạp ... rule" và "Lắng nghe trực tiếp"
 ```
@@ -57,7 +57,10 @@ docker logs -f nids_engine            # chờ dòng "Đã nạp ... rule" và "L
 
 ### 2.3 Tấn công thử
 
+Máy attacker nằm trong profile `lab` nên chỉ chạy khi bạn bật nó:
+
 ```bash
+docker compose --profile lab up -d
 docker exec -it nids_attacker python lab/attacker/attack_demo.py all       # mọi rule
 docker exec -it nids_attacker python lab/attacker/attack_demo.py web       # hoặc: scan | dos | auth | malware | recon | honeypot
 docker exec -it nids_attacker bash                                         # tự gõ lệnh, ví dụ: nmap -sX -p 80 172.28.0.50
@@ -84,19 +87,24 @@ sudo apt install -y python3 python3-venv python3-pip python3-dev build-essential
 
 python3 -m venv .venv
 source .venv/bin/activate              # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-cp config/settings.example.yaml config/settings.yaml     # Windows: copy
+pip install -r requirements-dev.txt
+cp common/config/settings.example.yaml common/config/settings.yaml     # Windows: copy
+
+# Đặt PYTHONPATH (mã nguồn nằm ở nhiều thư mục src/), mỗi terminal một lần:
+source scripts/env.sh                  # PowerShell: . .\scripts\env.ps1
 ```
+
+Không đặt `PYTHONPATH` thì lệnh `python -m nids...` báo `No module named 'nids'`. `pytest` tự đặt qua `pytest.ini` nên không cần bước này.
 
 ### 3.2 Cấu hình local
 
-Sửa `config/settings.yaml` (file bị gitignore):
+Sửa `common/config/settings.yaml` (file bị gitignore):
 
 ```yaml
 network:
   interface: ""                   # rỗng = card mặc định; Linux xem tên bằng: ip -br link
   capture_mode: "live"            # hoặc "offline" để đọc pcap
-  # pcap_file: "pcap/demo_traffic.pcap"
+  # pcap_file: "data/pcap/demo_traffic.pcap"
   bpf_filter: "ip and not port 3306 and not (host 172.28.0.30 and port 6379)"   # giữ nguyên
 
 database:
@@ -140,10 +148,10 @@ python -m nids.honeypot http                   # cổng 8080
 
 ```bash
 pytest
-pytest tests/engine/test_diverse_rules_engine.py::test_name     # một test
+pytest services/sensor/tests/engine/test_diverse_rules_engine.py::test_name     # một test
 ```
 
-Test đọc rule thật trong `rules/`. Nếu `rules/state.yaml` local (do trang Rules ghi) đang tắt rule tự viết, các test rule sẽ fail. Đổi tên file đó tạm thời khi chạy test.
+Test đọc rule thật trong `data/rules/`. Nếu `data/rules/state.yaml` local (do trang Rules ghi) đang tắt rule tự viết, các test rule sẽ fail. Đổi tên file đó tạm thời khi chạy test.
 
 ## 4. Lỗi thường gặp
 

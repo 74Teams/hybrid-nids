@@ -25,11 +25,11 @@ AI cố ý **không** lo tấn công web: lớp này khác ở nội dung chứ 
 
 | Phần | Trạng thái |
 |---|---|
-| Trích đặc trưng (`nids/ai/features.py`, `nids/ai/context.py`) | Xong, có test |
-| Dựng dataset từ pcap CIC-IDS2017 (`tools/ai/build_dataset.py`) | Xong |
-| Huấn luyện và chấm (`tools/ai/train.py`) | Xong; mô hình `models/flow_model.joblib` (2,9 MB) |
-| Demo ngoài engine (`tools/ai/demo_ai.py`) | Xong |
-| Gắn vào engine (`AITrafficWorker` sinh cảnh báo `AI_ENGINE`) | **Chưa làm**. `nids/ai/worker.py` vẫn là stub |
+| Trích đặc trưng (`services/sensor/src/nids/ai/features.py`, `services/sensor/src/nids/ai/context.py`) | Xong, có test |
+| Dựng dataset từ pcap CIC-IDS2017 (`common/tools/ai/build_dataset.py`) | Xong |
+| Huấn luyện và chấm (`common/tools/ai/train.py`) | Xong; mô hình `data/models/flow_model.joblib` (2,9 MB) |
+| Demo ngoài engine (`common/tools/ai/demo_ai.py`) | Xong |
+| Gắn vào engine (`AITrafficWorker` sinh cảnh báo `AI_ENGINE`) | **Chưa làm**. `services/sensor/src/nids/ai/worker.py` vẫn là stub |
 | Chấm trên tập test (tập thi) | Chưa mở |
 
 ## 3. Cơ sở lý thuyết
@@ -40,7 +40,7 @@ Flow là tập gói của một cuộc hội thoại, xác định bằng 5-tupl
 
 - Chiều **forward** là chiều của bên khởi tạo, chiều **backward** là chiều ngược lại.
 - Flow kết thúc khi TCP đóng (FIN hai chiều hoặc RST), hết idle timeout, hoặc vượt active timeout.
-- Engine đã có sẵn `FlowTracker` (`nids/engine/flow.py`). AI dùng lại đúng module này, nên đặc trưng lúc học và lúc chạy được tính giống nhau.
+- Engine đã có sẵn `FlowTracker` (`services/sensor/src/nids/engine/flow.py`). AI dùng lại đúng module này, nên đặc trưng lúc học và lúc chạy được tính giống nhau.
 
 ### 3.2 Random Forest
 
@@ -78,7 +78,7 @@ Mô hình học trên một mạng rồi chạy trên mạng khác thường ké
 
 ## 4. Đặc trưng (40 cột)
 
-`FEATURE_NAMES` trong `nids/ai/features.py` là nguồn duy nhất của danh sách cột. Mô hình lưu kèm danh sách này và bị từ chối nếu danh sách không khớp. Không dùng IP và giờ tuyệt đối, để mô hình không học thuộc "máy này là xấu".
+`FEATURE_NAMES` trong `services/sensor/src/nids/ai/features.py` là nguồn duy nhất của danh sách cột. Mô hình lưu kèm danh sách này và bị từ chối nếu danh sách không khớp. Không dùng IP và giờ tuyệt đối, để mô hình không học thuộc "máy này là xấu".
 
 | Nhóm | Cột |
 |---|---|
@@ -95,7 +95,7 @@ Mọi đặc trưng tính được tăng dần từ bộ đếm của flow, khô
 
 ### 4.1 Đặc trưng ngữ cảnh
 
-`FlowContext` (`nids/ai/context.py`) nhớ các flow vừa kết thúc theo IP nguồn và IP đích, trong hai cửa sổ:
+`FlowContext` (`services/sensor/src/nids/ai/context.py`) nhớ các flow vừa kết thúc theo IP nguồn và IP đích, trong hai cửa sổ:
 
 - **60 giây:** IP này đã làm gì trong cả phút qua;
 - **5 giây:** tốc độ hiện tại. `src_port_diversity_5s` là số cổng khác nhau chia số flow: gần 1 khi mỗi flow gõ một cổng khác (quét cổng), nhỏ khi nhiều flow cùng tới một cổng (duyệt web).
@@ -123,7 +123,7 @@ Hai cột đếm 60 giây theo IP nguồn (`src_flows_60s`, `src_dst_ports_60s`)
 
 ### 5.2 Gán nhãn
 
-- Mỗi flow được tra nhãn trong CSV theo IP, cổng, protocol và giờ, với dung sai 120 giây (`tools/cic/labels.py`).
+- Mỗi flow được tra nhãn trong CSV theo IP, cổng, protocol và giờ, với dung sai 120 giây (`common/tools/cic/labels.py`).
 - Nhãn gốc được gộp thành lớp: `DoS Hulk/GoldenEye/slowloris/Slowhttptest` → `DoS`; `FTP-Patator`, `SSH-Patator` → `BruteForce`; `Web Attack *` → `WebAttack`.
 - **Sửa lỗi nhãn:** mọi flow có IP `205.174.165.73` (máy điều khiển botnet Ares) vào thứ Sáu là `Bot`, dù CSV ghi `BENIGN`. Bài báo của Engelen và cộng sự (2021) đã chỉ ra lỗi nhãn này.
 - Lớp mà AI học: `BENIGN`, `PortScan`, `DoS`, `DDoS`, `Bot`, `BruteForce`. Bỏ `WebAttack` (để rule lo) và các lớp quá ít mẫu (`Heartbleed`, `Infiltration`).
@@ -134,16 +134,16 @@ Hai cột đếm 60 giây theo IP nguồn (`src_flows_60s`, `src_dst_ports_60s`)
 - Hai máy bot `192.168.10.5` và `192.168.10.8` được **giữ riêng cho tập thi**: flow Bot của chúng không có trong dữ liệu học.
 - Tổng cộng khoảng **1,3 triệu flow** dev dùng để học và chấm.
 
-## 6. Huấn luyện và chấm (`tools/ai/train.py`)
+## 6. Huấn luyện và chấm (`common/tools/ai/train.py`)
 
 | Bước | Cách làm |
 |---|---|
 | Lấy mẫu | Mỗi chunk lấy 5.000 flow BENIGN (cố định, `random_state=42`); flow tấn công lấy hết |
-| Chia | Dữ liệu cắt thành **khối 5 phút**. 4 phần chia cố định bằng `StratifiedGroupKFold`, lưu ở `tools/ai/folds.csv` |
+| Chia | Dữ liệu cắt thành **khối 5 phút**. 4 phần chia cố định bằng `StratifiedGroupKFold`, lưu ở `common/tools/ai/folds.csv` |
 | Chấm out-of-fold | Mỗi phần được đoán bởi mô hình chưa học khối thời gian của nó; gộp 4 phần rồi tính chỉ số một lần |
 | Mô hình | `RandomForestClassifier(n_estimators=100, max_depth=20, min_samples_leaf=2, class_weight="balanced", random_state=42)` |
 | Ngưỡng | Mỗi lớp tấn công một ngưỡng, là ngưỡng nhỏ nhất (0,50–0,95) giữ FPR ≤ 1% chia đều cho các lớp |
-| Lưu | `models/flow_model.joblib` gồm `rf`, `feature_names`, `thresholds.per_class`, `context`, `version`, `folds_version`, `sklearn_version` |
+| Lưu | `data/models/flow_model.joblib` gồm `rf`, `feature_names`, `thresholds.per_class`, `context`, `version`, `folds_version`, `sklearn_version` |
 
 **Vì sao chia theo khối thời gian:** các flow sát nhau trong một đợt tấn công rất giống nhau. Chia ngẫu nhiên thì flow gần như trùng nằm ở cả hai phía, và điểm cao giả.
 
@@ -152,11 +152,11 @@ Hai cột đếm 60 giây theo IP nguồn (`src_flows_60s`, `src_dst_ports_60s`)
 Chạy:
 
 ```bash
-python -m tools.ai.build_dataset --labels-dir <thư mục CSV TrafficLabelling> --jobs 8      # pcap → data/ai/features
-python -m tools.ai.add_context --src data/ai/features-v2 --dst data/ai/features-v3        # tính lại cột ngữ cảnh, không đọc lại pcap
+python -m tools.ai.build_dataset --labels-dir <thư mục CSV TrafficLabelling> --jobs 8      # pcap → data/work/ai/features
+python -m tools.ai.add_context --src data/work/ai/features-v2 --dst data/work/ai/features-v3        # tính lại cột ngữ cảnh, không đọc lại pcap
 python -m tools.ai.train --make-folds                                                     # một lần duy nhất
 python -m tools.ai.train --name thu-nghiem --no-save                                      # chỉ chấm
-python -m tools.ai.train --features-dir data/ai/features-v3 --out models/flow_model.joblib  # học và lưu (khoảng 7 phút)
+python -m tools.ai.train --features-dir data/work/ai/features-v3 --out data/models/flow_model.joblib  # học và lưu (khoảng 7 phút)
 ```
 
 Huấn luyện lại từ cùng dữ liệu cho ra file mô hình giống từng byte.
@@ -196,7 +196,7 @@ Kết luận: mô hình học **hình dạng flow**, không học tên công c�
 
 ## 8. Demo ngoài engine
 
-`tools/ai/demo_ai.py` đưa lưu lượng qua đúng chuỗi của engine (`FlowTracker` → `FlowContext` → `extract_features`) rồi gọi mô hình.
+`common/tools/ai/demo_ai.py` đưa lưu lượng qua đúng chuỗi của engine (`FlowTracker` → `FlowContext` → `extract_features`) rồi gọi mô hình.
 
 ```bash
 python -m tools.ai.demo_ai --scenario scan                 # quét cổng giả lập, trộn người duyệt web và người gõ nhầm cổng

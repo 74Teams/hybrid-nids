@@ -8,7 +8,7 @@ Thư mục này chứa kết quả các lượt đo của bộ đo có nhãn. M�
 | `baseline-5-ngay.md` | Lượt đo gốc trên tập dev của cả 5 ngày, trước khi tinh chỉnh rule và ANOMALY |
 | `<tên>.md` | Các lượt đo sau, sinh bằng `python -m tools.eval.evaluate --name <tên>` |
 
-Số liệu chi tiết dạng JSON nằm ở `data/eval/<tên>.json` (không commit, chạy lại lệnh là có).
+Số liệu chi tiết dạng JSON nằm ở `data/work/eval/<tên>.json` (không commit, chạy lại lệnh là có).
 
 ## Cách chạy
 
@@ -37,8 +37,8 @@ Tập test là tập thi: chỉ chạy khi chốt kết quả, và phải thêm 
 Kết quả không phụ thuộc máy chạy:
 
 - Biến header rule là biến mặc định cộng `--set-var`.
-- Tham số `stream`, `flow`, `anomaly` lấy từ `config/settings.example.yaml`.
-- `rules/state.yaml` bị bỏ qua (thêm `--use-state` nếu muốn dùng).
+- Tham số `stream`, `flow`, `anomaly` lấy từ `common/config/settings.example.yaml`.
+- `data/rules/state.yaml` bị bỏ qua (thêm `--use-state` nếu muốn dùng).
 
 ## Cách đọc số liệu
 
@@ -55,4 +55,4 @@ Kết quả không phụ thuộc máy chạy:
 | EXCLUDED | Flow bị loại theo quy tắc giữ máy Bot cho tập thi, không tính vào số liệu |
 | Khớp trước threshold | Số lần rule khớp, chưa qua bước chặn cảnh báo trùng; không phụ thuộc tốc độ chạy |
 
-Nhãn được sửa ở một chỗ: mọi flow có IP `205.174.165.73` (máy điều khiển botnet Ares) là `Bot`, dù CSV ghi BENIGN. Nguồn và lý do nằm trong `tools/cic/labels.py`.
+Nhãn được sửa ở một chỗ: mọi flow có IP `205.174.165.73` (máy điều khiển botnet Ares) là `Bot`, dù CSV ghi BENIGN. Nguồn và lý do nằm trong `common/tools/cic/labels.py`.

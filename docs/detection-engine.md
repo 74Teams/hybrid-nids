@@ -1,6 +1,6 @@
 # Engine phát hiện
 
-Engine (`nids/engine/`, chạy bằng `python -m nids.engine`) có hai lớp phát hiện:
+Engine (`services/sensor/src/nids/engine/`, chạy bằng `python -m nids.engine`) có hai lớp phát hiện:
 
 - **rule** cú pháp Snort 3, bắt tấn công có nội dung đặc trưng;
 - **phát hiện bất thường theo ngưỡng** (`ANOMALY`), bắt hành vi mà rule bỏ sót.
@@ -43,7 +43,7 @@ alert tcp any any -> any $HTTP_PORTS (msg:"WEB-ATTACK SQL Injection - UNION SELE
 | `content` | modifier sau dấu phẩy: `nocase`, `depth`, `offset`, `distance`, `within`, `fast_pattern` |
 | Option khác | `pcre`, `flags`, `flow`, `dsize`, `itype`/`icode`, `detection_filter`, `classtype`, `priority` |
 
-- Chỉ hiểu **cú pháp Snort 3**. Cú pháp Snort 2 (`nocase;` đứng riêng, `http_method:"POST"`) không được hỗ trợ. Rule community đã được chuyển sang Snort 3 bằng `python -m nids.tools.snort2_convert`.
+- Chỉ hiểu **cú pháp Snort 3**. Cú pháp Snort 2 (`nocase;` đứng riêng, `http_method:"POST"`) không được hỗ trợ. Rule community đã được chuyển sang Snort 3 bằng `python -m tools.rules.snort2_convert`.
 - Header không hiểu được thì rule bị bỏ kèm log `WARNING`. Rule đó không bao giờ bị hiểu thành "khớp tất cả".
 - `flow:established` được xấp xỉ bằng cờ ACK.
 
@@ -53,8 +53,8 @@ Biến khai báo ở `detection.variables` trong `settings.yaml`, chồng lên g
 
 ### 2.4 Quản lý rule
 
-- Rule chỉ đọc từ file trong `rules/`, mỗi file là một category.
-- `rules/state.yaml` (gitignore) lưu các category và SID được bật hoặc tắt trên trang Rules. File này **được dashboard ghi tự động**.
+- Rule chỉ đọc từ file trong `data/rules/`, mỗi file là một category.
+- `data/rules/state.yaml` (gitignore) lưu các category và SID được bật hoặc tắt trên trang Rules. File này **được dashboard ghi tự động**.
 - Engine kiểm tra mỗi 2 giây. File `.rules` hoặc `state.yaml` đổi thì engine nạp lại và dựng lại index, không cần khởi động lại.
 - `custom.rules` là rule viết trên web (SID ≥ 2000000). API kiểm tra cú pháp từng dòng trước khi lưu.
 
@@ -133,7 +133,7 @@ Mỗi rule tự viết có test gói tấn công, test gói lành tính gần gi
 
 ### 7.2 Rule community (2.792 rule)
 
-Bộ Snort Community được chuyển sang Snort 3 bằng `python -m nids.tools.snort2_convert` từ `rules/upstream/community.rules`, rồi chia thành 4 file:
+Bộ Snort Community được chuyển sang Snort 3 bằng `python -m tools.rules.snort2_convert` từ `data/rules/upstream/community.rules`, rồi chia thành 4 file:
 
 | File | Số rule |
 |---|---|

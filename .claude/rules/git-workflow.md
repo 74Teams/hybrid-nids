@@ -67,7 +67,7 @@ Ví dụ sai: `cập nhật rule` (tiếng Việt), `fix bug`, `Update files.`, 
 1. `git status` và `git branch --show-current`. Nếu đang ở `main`: tạo nhánh mới theo quy tắc trên (`git switch -c <loại>/<mô-tả>`) trước khi commit.
 2. Hỏi hoặc xác định số issue liên quan (xem tên nhánh, `gh issue list`). Không đoán.
 3. Chạy `pytest`. Test fail thì báo người dùng, không commit.
-4. `git add` từng file cụ thể (không `git add -A` mù), kiểm tra không có `.env`, `*.db`, `data/`, `rules/state.yaml`, file pcap lớn.
+4. `git add` từng file cụ thể (không `git add -A` mù), kiểm tra không có `.env`, `*.db`, `data/`, `data/rules/state.yaml`, file pcap lớn.
 5. Commit theo định dạng trên.
 6. `git push -u origin <branch>`.
 7. `gh pr create --base main` với tiêu đề tiếng Anh và mô tả tiếng Việt; gửi link PR cho người dùng.
