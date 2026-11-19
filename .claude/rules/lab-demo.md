@@ -2,7 +2,7 @@
 paths:
   - "lab/**"
   - "tests/lab/**"
-  - "docs/demo/**"
+  - "docs/demo-flow-explanation.md"
   - "rules/**/*.rules"
 ---
 
@@ -12,4 +12,4 @@ paths:
 - `tests/lab/test_attack_demo.py` kiểm tra đòn nào cũng trúng đúng rule và rule nào cũng có đòn trình diễn: thêm rule mới thì phải thêm đòn.
 - Nhóm `honeypot` dùng `CommandAttack` (hydra) và `HttpAttack` vào 2222/8080, không có SID kỳ vọng.
 - `lab/victim/` là nginx victim; engine và honeypot dùng chung network namespace với nó.
-- Kịch bản thuyết trình ở `docs/demo/kich-ban-demo.md`. Đổi đòn hoặc rule thì cập nhật kịch bản cho khớp.
+- Kịch bản demo ở `docs/demo-flow-explanation.md`; `tests/lab/test_demo_commands.py` kiểm tra bảng ở mục "Demo gõ lệnh thủ công" chỉ dùng SID có thật. Đổi đòn hoặc rule thì cập nhật kịch bản cho khớp.

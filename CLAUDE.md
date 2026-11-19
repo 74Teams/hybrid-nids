@@ -32,8 +32,8 @@ Lệnh luôn chạy từ thư mục gốc repo (`pytest.ini` đặt `pythonpath 
 - `config/settings.example.yaml` — file mẫu được commit; `config/settings.yaml` — cấu hình local (bị git ignore, thiếu thì dùng file mẫu)
 - `lab/` — Docker lab: `attacker/attack_demo.py`, `victim/`
 - `tests/` — chia theo khu vực: `engine/`, `api/`, `honeypot/`, `redirector/`, `lab/`
-- `docs/` — `demo/kich-ban-demo.md` (kịch bản thuyết trình), `ai/` (thiết kế AI worker), `plans/` (plan và bảng tổng hợp)
-- `.claude/rules/` — quy tắc chi tiết theo khu vực; `.claude/commands/` — slash command (`them-rule`); `.claude/skills/` — skill (`idea-to-plan`); `.claude/agents/` — subagent (`plan-critic`, `git-workflow`)
+- `docs/` — tài liệu dự án, mục lục ở `docs/README.md` (kiến trúc, engine, honeypot, AI, đánh giá, API, cài đặt, `demo-flow-explanation.md`); `docs/eval/` do `tools.eval` sinh ra
+- `.claude/rules/` — quy tắc chi tiết theo khu vực; `.claude/commands/` — slash command (`them-rule`, `ship`, `y-tuong`: lên ý tưởng nhanh theo 10 góc nhìn); `.claude/agents/` — subagent (`git-workflow`)
 
 Các process (engine, API, redirector, mỗi honeypot một process) chạy riêng và chỉ giao tiếp qua database chung cùng các file trong `rules/`. Ngoại lệ duy nhất là tín hiệu "có cảnh báo mới" qua Redis (chỉ chứa id, dữ liệu vẫn lấy từ DB); Redis tắt hoặc chết thì mọi thứ vẫn chạy, dashboard quay về poll.
 
@@ -68,11 +68,11 @@ Các process (engine, API, redirector, mỗi honeypot một process) chạy riê
 ## Current Focus
 
 - Quản lý rule nhiều file (branch `feature/rule-management`): category, override theo SID, sửa `custom.rules` trên trang Rules kiểu pfSense.
-- AI theo flow (PLAN-011, issue #105): đã có mô hình và báo cáo (`docs/ai/ket-qua-danh-gia.md`); còn gắn `AITrafficWorker` vào engine (`docs/ai/07-tutorial-huan-luyen.md` phần 10) mà không phải sửa capture, decoder, DB hay API.
-- Cảnh báo realtime qua Redis pub/sub + WebSocket (branch `feature/30-realtime-alert-push`, PLAN-001, issue #30).
-- Xem traffic và phát hiện bất thường theo ngưỡng (PLAN-004): API flows + trang Traffic (#40, #41, đã merge), cảnh báo `ANOMALY` theo ngưỡng (#42, branch `feature/42-anomaly-detection`).
-- Chuyển hướng IP đáng ngờ sang honeypot (branch `feature/29-redirect-to-honeypot`, PLAN-005, issue #29).
-- Giới hạn tài nguyên honeypot: cap kết nối, timeout idle, honeypot HTTP chạy bằng waitress (PLAN-006, issue #27, branch `feature/27-honeypot-resource-limits`). Honeypot HTTP ghi mọi request (`http.request`, PLAN-007, issue #26, branch `feature/26-http-catch-all`).
+- AI theo flow (issue #105): đã có mô hình và báo cáo (`docs/machine-learning-guide.md`); còn gắn `AITrafficWorker` vào engine (mục 9 của tài liệu đó) mà không phải sửa capture, decoder, DB hay API.
+- Cảnh báo realtime qua Redis pub/sub + WebSocket (branch `feature/30-realtime-alert-push`, issue #30).
+- Xem traffic và phát hiện bất thường theo ngưỡng: API flows + trang Traffic (#40, #41, đã merge), cảnh báo `ANOMALY` theo ngưỡng (#42, branch `feature/42-anomaly-detection`).
+- Chuyển hướng IP đáng ngờ sang honeypot (branch `feature/29-redirect-to-honeypot`, issue #29).
+- Giới hạn tài nguyên honeypot: cap kết nối, timeout idle, honeypot HTTP chạy bằng waitress (issue #27, branch `feature/27-honeypot-resource-limits`). Honeypot HTTP ghi mọi request (`http.request`, issue #26, branch `feature/26-http-catch-all`).
 
 ## Known Issues / Gotchas
 
@@ -87,4 +87,4 @@ Các process (engine, API, redirector, mỗi honeypot một process) chạy riê
 - Honeypot ghi từ process khác, nên cache IP honeypot trong engine có TTL 5 giây và cảnh báo có thể chưa được làm giàu ngay.
 - `nids/ai/worker.py` mới là stub (mô hình đã có nhưng chưa nạp vào engine): đừng viết test hay demo giả định AI worker đã sinh cảnh báo.
 
-Quy tắc chi tiết: `.claude/rules/git-workflow.md`, `planning.md`, `engine.md`, `api-web.md`, `web-design.md`, `honeypot.md`, `redirector.md`, `config-db-docker.md`, `logging.md`, `lab-demo.md`, `snort-rules.md`.
+Quy tắc chi tiết: `.claude/rules/git-workflow.md`, `planning.md` (viết plan bằng tác nhân, không tự tạo file), `engine.md`, `api-web.md`, `web-design.md`, `honeypot.md`, `redirector.md`, `config-db-docker.md`, `logging.md`, `lab-demo.md`, `snort-rules.md`.

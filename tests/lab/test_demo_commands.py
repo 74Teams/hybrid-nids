@@ -1,10 +1,10 @@
-"""Bảng lệnh demo thủ công trong docs/demo/kich-ban-demo.md phải khớp với SID có thật trong rules/."""
+"""Bảng lệnh demo thủ công trong docs/demo-flow-explanation.md phải khớp với SID có thật trong rules/."""
 import re
 from pathlib import Path
 
 from nids.engine.rule_manager import RuleManager
 
-DOC_PATH = Path(__file__).resolve().parents[2] / "docs" / "demo" / "kich-ban-demo.md"
+DOC_PATH = Path(__file__).resolve().parents[2] / "docs" / "demo-flow-explanation.md"
 SECTION_HEADING = "Demo gõ lệnh thủ công"
 SID_PATTERN = re.compile(r"\b(1000\d{3})\b")
 

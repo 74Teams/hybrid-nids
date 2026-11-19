@@ -28,6 +28,7 @@
 - [Installation](#installation)
 - [Usage](#usage)
 - [Docker](#docker)
+- [Documentation](#documentation)
 
 ---
 
@@ -299,3 +300,21 @@ Notes:
 - New alerts reach the dashboard through Redis in well under a second. Redis is optional: if it is stopped, the engine and honeypots keep running and the dashboard falls back to polling every 2 seconds, then switches back by itself once Redis returns.
 - To start a fresh run, use **Xoá dữ liệu** on the dashboard or `curl -X DELETE http://localhost:8000/api/alerts/`.
 - To stop the lab, run `docker compose down`. Add `-v` to also drop the MySQL data.
+
+---
+
+## Documentation
+
+Detailed documentation (in Vietnamese) lives in [`docs/`](docs/README.md):
+
+| Document | Topic |
+|---|---|
+| [quick-start-guide.md](docs/quick-start-guide.md) | Installation, Docker lab, local run, troubleshooting |
+| [system-architecture.md](docs/system-architecture.md) | Processes, data flow, database, Redis, Docker network |
+| [technology-stack.md](docs/technology-stack.md) | Technologies per layer and why they were chosen |
+| [detection-engine.md](docs/detection-engine.md) | Pipeline, Snort 3 rules, matching funnel, TCP reassembly, flows, anomaly detection |
+| [honeypot-and-redirect.md](docs/honeypot-and-redirect.md) | SSH/HTTP honeypots, alert enrichment, iptables redirect |
+| [machine-learning-guide.md](docs/machine-learning-guide.md) | Flow-based Random Forest model: features, data, training, results |
+| [performance-metrics.md](docs/performance-metrics.md) | Labelled CIC-IDS2017 evaluation of rules, engine and AI |
+| [api-reference.md](docs/api-reference.md) | REST API and WebSocket |
+| [demo-flow-explanation.md](docs/demo-flow-explanation.md) | Step-by-step demo script and manual attack commands |
