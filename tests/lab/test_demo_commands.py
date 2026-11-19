@@ -26,7 +26,7 @@ def _manual_command_sids() -> set:
 
 
 def test_manual_command_sids_exist_in_ruleset():
-    manager = RuleManager("rules")
+    manager = RuleManager("data/rules")
     manager.load_all_rules()
     sids = _manual_command_sids()
     missing = sids - set(manager.rules_by_sid)

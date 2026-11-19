@@ -12,7 +12,7 @@ SRC = "192.168.1.77"
 
 @pytest.fixture(scope="module")
 def rule_manager():
-    manager = RuleManager("rules")
+    manager = RuleManager("data/rules")
     manager.load_all_rules()
     return manager
 

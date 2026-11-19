@@ -4,7 +4,7 @@ from pathlib import Path
 
 DOCKERIGNORE_PATH = Path(__file__).resolve().parents[1] / ".dockerignore"
 
-MUST_IGNORE = [".git", ".env", "config/settings.yaml", "data", "*.db"]
+MUST_IGNORE = [".git", ".env", "common/config/settings.yaml", "data", "*.db"]
 
 
 def test_dockerignore_excludes_secrets():
