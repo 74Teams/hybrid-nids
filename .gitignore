@@ -56,3 +56,6 @@ rules/*.tmp
 rules/*.bak
 .env
 config/settings.yaml
+
+# Plan và file nháp tạm của Claude (.claude/rules/planning.md)
+.tmp/
