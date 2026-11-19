@@ -1,5 +1,5 @@
 """
-Huấn luyện và chấm Random Forest cho AITrafficWorker (PLAN-010); chỉ dùng chunk dev.
+Huấn luyện và chấm Random Forest cho AITrafficWorker (PLAN-011); chỉ dùng chunk dev.
 
 Cách chấm: 4 lần chia cố định (`tools/ai/folds.csv`), mỗi flow validation được đoán đúng một lần bởi mô hình
 chưa học khối của nó (out-of-fold), rồi gộp lại tính mọi chỉ số một lần.
@@ -29,7 +29,7 @@ from nids.logger import setup_logging
 
 logger = logging.getLogger("nids.ai")
 
-# WebAttack bị bỏ khỏi dữ liệu học: khác biệt nằm ở nội dung request, rule Snort lo (PLAN-010, quyết định B1)
+# WebAttack bị bỏ khỏi dữ liệu học: khác biệt nằm ở nội dung request, rule Snort lo (PLAN-011, quyết định B1)
 SKIP_LABELS = {"UNLABELED", "EXCLUDED", "Heartbleed", "Infiltration", "WebAttack"}
 # Lớp mà AI chịu trách nhiệm
 AI_LABELS = ["BENIGN", "PortScan", "DoS", "DDoS", "Bot", "BruteForce"]
@@ -475,7 +475,7 @@ def run(args: argparse.Namespace) -> int:
               "thresholds": {"rf": max(thresholds.values()) if thresholds else 0.5, "per_class": thresholds},
               "version": dataset_version(args.features_dir), "folds_version": folds_version(folds_path),
               "sklearn_version": sklearn.__version__,
-              # Tham số FlowContext lúc dựng đặc trưng: worker phải dùng đúng các giá trị này (PLAN-010 mục 6.3)
+              # Tham số FlowContext lúc dựng đặc trưng: worker phải dùng đúng các giá trị này (PLAN-011 mục 6.3)
               "context": {"window": DEFAULT_WINDOW, "short_window": DEFAULT_SHORT_WINDOW,
                           "max_tracked": DEFAULT_MAX_TRACKED, "max_per_ip": DEFAULT_MAX_PER_IP}}
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)

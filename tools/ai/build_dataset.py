@@ -57,7 +57,7 @@ def build_chunk(task: dict) -> dict:
                 flows.extend(tracker.update(packet))
     flows.extend(tracker.flush())
 
-    # Đúng thứ tự FlowTracker xuất flow: thứ tự này là một phần hợp đồng với mô hình (PLAN-010 mục 6.3)
+    # Đúng thứ tự FlowTracker xuất flow: thứ tự này là một phần hợp đồng với mô hình (PLAN-011 mục 6.3)
     context = FlowContext()
     rows = []
     for flow in flows:

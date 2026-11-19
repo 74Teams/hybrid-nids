@@ -1,5 +1,5 @@
 """
-Demo mô hình AI theo flow (PLAN-010), chạy ngoài engine: đưa lưu lượng qua đúng chuỗi xử lý của engine
+Demo mô hình AI theo flow (PLAN-011), chạy ngoài engine: đưa lưu lượng qua đúng chuỗi xử lý của engine
 (gom flow, tính đặc trưng, nạp mô hình) rồi in máy nào bị coi là tấn công và từ lúc nào.
 
     python -m tools.ai.demo_ai --scenario scan             # quét cổng giả lập kiểu nmap, trộn với người dùng thường

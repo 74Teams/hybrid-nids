@@ -13,7 +13,7 @@ from nids.engine.flow import Flow
 
 PROTOCOL_NUMBERS = {"TCP": 6, "UDP": 17, "ICMP": 1}
 
-# Cột ngữ cảnh mà mô hình dùng (PLAN-010, lần 18). `FlowContext` vẫn tính đủ mọi cột, nhưng hai cột đếm 60 giây theo
+# Cột ngữ cảnh mà mô hình dùng (PLAN-011, lần 18). `FlowContext` vẫn tính đủ mọi cột, nhưng hai cột đếm 60 giây theo
 # IP nguồn (`src_flows_60s`, `src_dst_ports_60s`) bị bỏ: chúng chỉ đầy dần sau khoảng 20 giây kể từ lúc đợt quét bắt
 # đầu, nên mô hình học "chưa đầy nghĩa là bình thường" và bỏ lọt 20 giây đầu của mỗi đợt quét. Cột cửa sổ 5 giây
 # (SHORT_CONTEXT_FEATURE_NAMES) đo tốc độ nên không có vùng mù đó.

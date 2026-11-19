@@ -74,7 +74,7 @@ IP đã chạm honeypot trong 1 giờ gần nhất chắc chắn là attacker. `
 
 ## AI worker
 
-`nids/ai/worker.py` (`AITrafficWorker`) mới là stub. Nó được khởi tạo với cùng callback `handle_alert` như rule engine. Mô hình, đặc trưng và cách chấm nằm ở `nids/ai/features.py`, `nids/ai/context.py`, `tools/ai/` và `docs/ai/ket-qua-danh-gia.md` (PLAN-010).
+`nids/ai/worker.py` (`AITrafficWorker`) mới là stub. Nó được khởi tạo với cùng callback `handle_alert` như rule engine. Mô hình, đặc trưng và cách chấm nằm ở `nids/ai/features.py`, `nids/ai/context.py`, `tools/ai/` và `docs/ai/ket-qua-danh-gia.md` (PLAN-011).
 
 Ràng buộc cho bước gắn worker (hợp đồng giữa dataset và lúc chạy):
 

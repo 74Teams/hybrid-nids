@@ -249,4 +249,4 @@ Nó chứng minh mô hình **hoạt động đúng cơ chế** trên chuỗi gó
 
 - Demo: `tools/ai/demo_ai.py` (test ở `tests/tools/test_demo_ai.py`).
 - Mô hình: `models/flow_model.joblib`; đặc trưng: `nids/ai/features.py`, `nids/ai/context.py`.
-- Học và chấm: `tools/ai/train.py`; kết quả đầy đủ: [docs/ai/ket-qua-danh-gia.md](../ai/ket-qua-danh-gia.md); kế hoạch: [PLAN-010](../plans/2026-11-15-ai-flow-model-tuning.md).
+- Học và chấm: `tools/ai/train.py`; kết quả đầy đủ: [docs/ai/ket-qua-danh-gia.md](../ai/ket-qua-danh-gia.md); kế hoạch: [PLAN-011](../plans/2026-11-15-ai-flow-model-tuning.md).

@@ -1,5 +1,5 @@
 """
-Đặc trưng ngữ cảnh nhiều flow cho AI (PLAN-010 mục 6.3).
+Đặc trưng ngữ cảnh nhiều flow cho AI (PLAN-011 mục 6.3).
 
 Một flow quét cổng chỉ có 2 gói (SYN đi, RST về), giống hệt một kết nối nhầm cổng bị từ chối. Dấu hiệu thật là
 "một IP gõ hàng trăm cổng trong vài giây", chỉ thấy được khi nhìn nhiều flow. `FlowContext` nhớ các flow vừa kết

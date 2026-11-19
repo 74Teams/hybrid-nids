@@ -29,7 +29,7 @@ Chỉ dùng các đặc trưng **tính được từ `DecodedPacket` hiện có*
 
 Bỏ `src_ip`, `dst_ip` và timestamp tuyệt đối để mô hình không học thuộc địa chỉ của dataset. Danh sách cuối cùng được chốt khi làm giai đoạn 1 và chỉ được định nghĩa ở một chỗ duy nhất là `FEATURE_NAMES`.
 
-**Cập nhật PLAN-010 (17/11):** danh sách cuối là **40 cột** (32 cột nói trên cộng 8 cột ngữ cảnh nhiều flow từ `nids/ai/context.py`):
+**Cập nhật PLAN-011 (17/11):** danh sách cuối là **40 cột** (32 cột nói trên cộng 8 cột ngữ cảnh nhiều flow từ `nids/ai/context.py`):
 
 - cửa sổ 60 giây: `src_dst_hosts_60s`, `src_short_ratio_60s`, `dst_flows_60s`;
 - cửa sổ 5 giây: `src_flows_5s`, `src_dst_ports_5s`, `src_dst_hosts_5s`, `src_port_diversity_5s`, `dst_flows_5s`.

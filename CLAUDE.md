@@ -68,7 +68,7 @@ Các process (engine, API, redirector, mỗi honeypot một process) chạy riê
 ## Current Focus
 
 - Quản lý rule nhiều file (branch `feature/rule-management`): category, override theo SID, sửa `custom.rules` trên trang Rules kiểu pfSense.
-- AI theo flow (PLAN-010, issue #105): đã có mô hình và báo cáo (`docs/ai/ket-qua-danh-gia.md`); còn gắn `AITrafficWorker` vào engine (`docs/ai/07-tutorial-huan-luyen.md` phần 10) mà không phải sửa capture, decoder, DB hay API.
+- AI theo flow (PLAN-011, issue #105): đã có mô hình và báo cáo (`docs/ai/ket-qua-danh-gia.md`); còn gắn `AITrafficWorker` vào engine (`docs/ai/07-tutorial-huan-luyen.md` phần 10) mà không phải sửa capture, decoder, DB hay API.
 - Cảnh báo realtime qua Redis pub/sub + WebSocket (branch `feature/30-realtime-alert-push`, PLAN-001, issue #30).
 - Xem traffic và phát hiện bất thường theo ngưỡng (PLAN-004): API flows + trang Traffic (#40, #41, đã merge), cảnh báo `ANOMALY` theo ngưỡng (#42, branch `feature/42-anomaly-detection`).
 - Chuyển hướng IP đáng ngờ sang honeypot (branch `feature/29-redirect-to-honeypot`, PLAN-005, issue #29).
