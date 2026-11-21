@@ -103,6 +103,7 @@ class RedirectSettings:
     window_seconds: int = 60
     min_alerts: int = 5
     max_priority: int = 2
+    include_ai: bool = False   # đếm cả cảnh báo AI (một cảnh báo AI là đủ để bị chuyển hướng)
     ttl_seconds: int = 600
     poll_interval: float = 5.0
     ports: Dict[int, int] = field(default_factory=lambda: dict(DEFAULT_REDIRECT_PORTS))
@@ -129,6 +130,7 @@ def get_redirect_settings(cfg: Optional[Dict[str, Any]] = None) -> RedirectSetti
             logger.error("redirect.%s=%r không hợp lệ (cần số dương), dùng mặc định %s",
                          name, cfg[name], getattr(result, name))
     result.enabled = cfg.get("enabled", False) is True
+    result.include_ai = cfg.get("include_ai", False) is True
 
     if "ports" in cfg:
         ports = {}

@@ -69,3 +69,20 @@ def test_list_redirects_is_limited():
     for i in range(5):
         EventRepository.add_redirect(f"10.0.0.{i}", ttl_seconds=60)
     assert len(EventRepository.list_redirects(limit=3)) == 3
+
+
+def test_ai_alert_counts_only_when_included():
+    save(1, ip="2.2.2.2", severity=1, source_type="AI_ENGINE")
+    assert EventRepository.suspicious_ips(60, 5, 2) == []
+    assert EventRepository.suspicious_ips(60, 5, 2, include_ai=True) == [("2.2.2.2", 1)]
+
+
+def test_ai_alert_below_priority_is_ignored_even_when_included():
+    save(1, ip="2.2.2.2", severity=3, source_type="AI_ENGINE")
+    assert EventRepository.suspicious_ips(60, 5, 2, include_ai=True) == []
+
+
+def test_ai_and_rule_alerts_are_summed():
+    save(5, ip="3.3.3.3")
+    save(1, ip="3.3.3.3", source_type="AI_ENGINE")
+    assert EventRepository.suspicious_ips(60, 5, 2, include_ai=True) == [("3.3.3.3", 6)]

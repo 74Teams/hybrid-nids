@@ -65,6 +65,17 @@ anomaly:
   # Cổng thường gặp; TCP SYN tới cổng ngoài danh sách (hoặc UDP < 1024) sinh cảnh báo P3 "Rare port"
   common_ports: [20, 21, 22, 23, 25, 53, 67, 68, 80, 110, 123, 143, 161, 443, 445, 993, 995, 2222, 3000, 3306, 3389, 5000, 6379, 8000, 8080]
 
+ai:
+  # Mô hình AI theo flow (Random Forest, docs/machine-learning-guide.md). Cảnh báo có source_type AI_ENGINE, không có SID.
+  # Thiếu mô hình hoặc mô hình lệch đặc trưng thì AI tự tắt (ghi log), sensor vẫn chạy.
+  enabled: true
+  model_path: data/models/flow_model.joblib
+  batch_size: 256           # chấm theo lô tối đa ngần này flow
+  batch_wait: 1.0           # giây chờ thêm để gom lô khi flow đến thưa
+  queue_max_size: 20000     # hàng đợi flow; đầy thì bỏ flow và ghi log, không chặn sensor
+  suppress_seconds: 60      # mỗi cặp (IP nguồn, loại tấn công) chỉ báo một lần trong ngần này giây
+  ignore_ips: [172.28.0.10, 172.28.0.20, 172.28.0.30]   # MySQL, dashboard, Redis của lab: traffic của chính hệ thống
+
 redis:
   # Kênh đẩy cảnh báo thời gian thực tới dashboard. host rỗng = tắt, dashboard tự quay về poll.
   # Mật khẩu đặt qua biến môi trường NIDS_REDIS_PASSWORD (.env), không ghi vào file này.
@@ -79,6 +90,7 @@ redirect:
   window_seconds: 60      # cửa sổ đếm cảnh báo
   min_alerts: 5           # đủ ngần này cảnh báo trong cửa sổ thì bị chuyển hướng
   max_priority: 2         # chỉ đếm cảnh báo rule engine P1..P2 (số nhỏ = nặng)
+  include_ai: false       # true: IP có cảnh báo AI (P1..P2) cũng bị chuyển hướng, chỉ một cảnh báo là đủ; bật khi demo
   ttl_seconds: 600        # chuyển hướng bao lâu rồi tự gỡ
   poll_interval: 5        # giây giữa hai lần kiểm tra
   ports:                  # cổng gốc của victim: cổng honeypot

@@ -102,8 +102,8 @@ function el(tag, cls, text) {
   if (text !== undefined && text !== null) e.textContent = text;   // textContent: payload tấn công không bao giờ được render thành HTML
   return e;
 }
-// Nhãn nguồn cảnh báo; cảnh báo không có SID của honeypot và anomaly hiện "–", của AI worker hiện "AI"
-const SOURCE_LABELS = { HONEYPOT: "Honeypot", ANOMALY: "Anomaly" };
+// Nhãn nguồn cảnh báo; cảnh báo không có SID của honeypot, anomaly và AI hiện "–", AI_ENGINE hiện nhãn "AI"
+const SOURCE_LABELS = { HONEYPOT: "Honeypot", ANOMALY: "Anomaly", AI_ENGINE: "AI" };
 const sourceLabel = (a) => SOURCE_LABELS[a.source_type] || "NIDS";
 const noSid = (a) => SOURCE_LABELS[a.source_type] ? "–" : "AI";
 const endpoint = (ip, port) => port != null ? ip + ":" + port : ip;

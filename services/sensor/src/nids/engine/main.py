@@ -4,7 +4,7 @@ import threading
 import time
 from collections import Counter
 from datetime import timedelta
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from nids.config import SETTINGS
 from nids.logger import setup_logging
@@ -40,7 +40,7 @@ def format_alert(alert_data: dict) -> str:
     if sid is not None:
         label = f"SID {sid}"
     else:
-        label = "ANOMALY" if alert_data.get("source_type") == "ANOMALY" else "AI-ANOMALY"
+        label = {"ANOMALY": "ANOMALY", "AI_ENGINE": "AI"}.get(alert_data.get("source_type"), "AI-ANOMALY")
     src = _endpoint(alert_data.get("src_ip"), alert_data.get("src_port"))
     dst = _endpoint(alert_data.get("dst_ip"), alert_data.get("dst_port"))
     return f"[P{alert_data.get('severity', 2)}] {label}  {alert_data.get('msg')}  {src} → {dst}"
@@ -166,8 +166,9 @@ class FlowLog:
     CLEANUP_INTERVAL = 3600.0
 
     def __init__(self, tracker: FlowTracker, batch_size: int = 500, flush_interval: float = 5.0,
-                 retention_hours: float = 24.0):
+                 retention_hours: float = 24.0, on_finished: Optional[Callable[[List[Flow]], None]] = None):
         self.tracker = tracker
+        self.on_finished = on_finished   # nhận lô flow vừa kết thúc (bộ phân tích AI); lỗi chỉ được log
         self.batch_size = batch_size
         self.flush_interval = flush_interval
         self.retention_hours = retention_hours
@@ -178,7 +179,7 @@ class FlowLog:
     def on_packet(self, packet, alert_count: int = 0) -> None:
         """Cộng gói vào flow; `alert_count` là số rule vừa khớp gói này."""
         try:
-            self._pending += self.tracker.update(packet, alert_count)
+            self._collect(self.tracker.update(packet, alert_count))
         except Exception as e:
             logger.error("Không gom được flow: %s", e)
         self._maybe_flush()
@@ -186,15 +187,23 @@ class FlowLog:
     def tick(self, now: float) -> None:
         """Cho flow hết hạn khi không có gói mới (mạng yên lặng); `now` là epoch."""
         try:
-            self._pending += self.tracker.expire(now)
+            self._collect(self.tracker.expire(now))
         except Exception as e:
             logger.error("Không xử lý được timeout flow: %s", e)
         self._maybe_flush()
 
     def close(self) -> None:
         """Xuất mọi flow còn mở rồi ghi nốt, gọi khi engine dừng hoặc đọc hết pcap."""
-        self._pending += self.tracker.flush()
+        self._collect(self.tracker.flush())
         self._write()
+
+    def _collect(self, finished: List[Flow]) -> None:
+        self._pending += finished
+        if finished and self.on_finished is not None:
+            try:
+                self.on_finished(finished)
+            except Exception as e:
+                logger.error("Không chuyển flow cho bộ phân tích AI: %s", e)
 
     def _maybe_flush(self) -> None:
         if self._pending and (len(self._pending) >= self.batch_size
@@ -321,7 +330,9 @@ def main():
     rule_manager.load_all_rules()
 
     detection_engine = DetectionEngine(rule_manager, alert_callback=handle_alert)
-    ai_worker = AITrafficWorker(alert_callback=handle_alert)
+    ai_worker = AITrafficWorker.from_settings(SETTINGS.get("ai"), alert_callback=handle_alert)
+    if ai_worker is not None:
+        ai_worker.start()
     anomaly_cfg = SETTINGS.get("anomaly") or {}
     anomaly = AnomalyDetector(anomaly_cfg, alert_callback=handle_alert) if anomaly_cfg.get("enabled", True) else None
 
@@ -340,6 +351,7 @@ def main():
                     closing_timeout=flow_cfg.get("closing_timeout", 2), max_flows=flow_cfg.get("max_flows", 100000)),
         batch_size=flow_cfg.get("batch_size", 500), flush_interval=flow_cfg.get("flush_interval", 5),
         retention_hours=flow_cfg.get("retention_hours", 24),
+        on_finished=ai_worker.submit if ai_worker is not None else None,
     )
 
     # Hàng đợi đệm bất đồng bộ giữa luồng bắt gói và luồng phân tích, chống rớt gói
@@ -374,7 +386,6 @@ def main():
                 continue
             try:
                 matched = evaluate_with_stream(detection_engine, reassembler, packet)
-                ai_worker.analyze_packet(packet)
                 flow_log.on_packet(packet, len(matched))  # sau evaluate_packet để biết gói có khớp rule
                 observe_anomaly(anomaly, packet)
             except Exception as e:
@@ -409,6 +420,8 @@ def main():
             # để ai đọc CSDL ngay sau khi engine dừng cũng thấy đủ dữ liệu
             stop_event.set()
             worker_thread.join(timeout=10)
+            if ai_worker is not None:
+                ai_worker.close()   # chấm nốt flow còn trong hàng đợi trước khi đóng bộ ghi cảnh báo
             alert_writer.close()
             elapsed = time.perf_counter() - started
             if analysis_errors.total:
@@ -428,6 +441,8 @@ def main():
         # sniff có thể nuốt Ctrl+C và trả về bình thường nên phải dừng worker ở đây để flow còn mở được ghi nốt
         stop_event.set()
         worker_thread.join(timeout=10)
+        if ai_worker is not None:
+            ai_worker.close()
         alert_writer.close()   # gọi lần hai (sau nhánh offline) không làm gì
         alert_writer = None
 

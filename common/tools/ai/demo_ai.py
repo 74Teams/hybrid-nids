@@ -7,7 +7,7 @@ Demo mô hình AI theo flow (PLAN-011), chạy ngoài engine: đưa lưu lượn
     python -m tools.ai.demo_ai --pcap D:\\path\\file.pcap --limit 300000
 
 Kịch bản `scan` dựng bằng code (không phải dữ liệu CIC-IDS2017), nên mô hình chưa từng thấy đúng chuỗi gói này.
-Chú ý: `AITrafficWorker` chưa gắn vào engine; script này chỉ gọi mô hình trực tiếp.
+Chú ý: script này gọi mô hình trực tiếp, không qua sensor; sensor chạy cùng mô hình qua `AITrafficWorker`.
 """
 import argparse
 import logging

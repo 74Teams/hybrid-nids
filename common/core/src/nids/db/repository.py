@@ -431,8 +431,11 @@ class EventRepository:
     # ── Chuyển hướng IP đáng ngờ sang honeypot (nids.redirector) ──
 
     @staticmethod
-    def suspicious_ips(window_seconds: int, min_alerts: int, max_priority: int) -> List[Tuple[str, int]]:
-        """IP có ít nhất `min_alerts` cảnh báo rule engine mức `max_priority` trở lên (số nhỏ = nặng) trong cửa sổ; kèm số cảnh báo."""
+    def suspicious_ips(window_seconds: int, min_alerts: int, max_priority: int,
+                       include_ai: bool = False) -> List[Tuple[str, int]]:
+        """IP có ít nhất `min_alerts` cảnh báo rule engine mức `max_priority` trở lên (số nhỏ = nặng) trong cửa sổ; kèm số cảnh báo.
+
+        `include_ai`: IP có cảnh báo AI (mỗi đợt tấn công chỉ một dòng nên một cảnh báo là đủ) mức `max_priority` trở lên cũng bị tính."""
         from nids.db import SessionLocal
         session = SessionLocal()
         try:
@@ -442,7 +445,15 @@ class EventRepository:
                     .filter(EventModel.source_type == "RULE_ENGINE", EventModel.severity <= max_priority,
                             EventModel.timestamp >= since)
                     .group_by(EventModel.src_ip).having(count >= min_alerts).all())
-            return [(ip, n) for ip, n in rows]
+            found = {ip: n for ip, n in rows}
+            if include_ai:
+                ai_rows = (session.query(EventModel.src_ip, count)
+                           .filter(EventModel.source_type == "AI_ENGINE", EventModel.severity <= max_priority,
+                                   EventModel.timestamp >= since)
+                           .group_by(EventModel.src_ip).all())
+                for ip, n in ai_rows:
+                    found[ip] = found.get(ip, 0) + n
+            return list(found.items())
         finally:
             session.close()
 

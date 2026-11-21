@@ -87,7 +87,7 @@ class Redirector:
     def _select_new(self, active: Set[str]) -> None:
         s = self.settings
         try:
-            candidates = EventRepository.suspicious_ips(s.window_seconds, s.min_alerts, s.max_priority)
+            candidates = EventRepository.suspicious_ips(s.window_seconds, s.min_alerts, s.max_priority, s.include_ai)
         except Exception as e:
             logger.error("Không truy vấn được IP đáng ngờ: %s", e)
             return
