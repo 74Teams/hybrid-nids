@@ -9,7 +9,7 @@ paths:
 
 ## Pipeline
 
-`services/sensor/src/nids/engine/main.py` (chạy bằng `python -m nids.engine`): `PacketCapture` (Scapy, live hoặc pcap offline) → `PacketDecoder.decode` (L2–L4 + HTTP L7 qua `http_parser`) → `queue.Queue` có giới hạn → một worker thread duy nhất gọi `DetectionEngine.evaluate_packet` rồi `AITrafficWorker.analyze_packet`. Alert đi qua callback `handle_alert` → `AlertWriter` (`services/sensor/src/nids/engine/alert_writer.py`): thread `alert-writer` gom tối đa 200 cảnh báo hoặc 1 giây rồi gọi `EventRepository.save_alerts` (một `commit` mỗi lô, `publish_alert` sau `commit`). Lỗi CSDL chỉ log và bỏ lô. Khi `main()` chưa chạy (test gọi `handle_alert` trực tiếp) thì vẫn ghi đồng bộ bằng `save_alert`.
+`services/sensor/src/nids/engine/main.py` (chạy bằng `python -m nids.engine`): `PacketCapture` (Scapy, live hoặc pcap offline) → `PacketDecoder.decode` (L2–L4 + HTTP L7 qua `http_parser`) → `queue.Queue` có giới hạn → một worker thread duy nhất gọi `DetectionEngine.evaluate_packet`. Alert đi qua callback `handle_alert` → `AlertWriter` (`services/sensor/src/nids/engine/alert_writer.py`): thread `alert-writer` gom tối đa 200 cảnh báo hoặc 1 giây rồi gọi `EventRepository.save_alerts` (một `commit` mỗi lô, `publish_alert` sau `commit`). Lỗi CSDL chỉ log và bỏ lô. Khi `main()` chưa chạy (test gọi `handle_alert` trực tiếp) thì vẫn ghi đồng bộ bằng `save_alert`.
 
 Hàng đợi gói (`enqueue_packet`): live thì đầy là bỏ gói và đếm (`DropCounter`); offline thì chờ chỗ trống (`put` có timeout 0,5 giây để Ctrl+C trên Windows vẫn ngắt được), không bỏ gói. Worker chết thì việc đọc pcap dừng (`stop_filter`), `wait_until_processed` thay cho `packet_queue.join()` để không treo. Một gói lỗi trong worker chỉ được log (gộp đếm), worker chạy tiếp. Thứ tự kết thúc offline: worker join (ghi nốt flow) → `AlertWriter.close()` (ghi nốt cảnh báo) → in `format_summary` (có thời gian và gói/giây). Test chạy `main.main()` phải dùng SQLite dạng file, không dùng in-memory + `StaticPool`: flow và cảnh báo được ghi từ hai thread, một kết nối chung sẽ làm mất dữ liệu.
 
@@ -74,13 +74,13 @@ IP đã chạm honeypot trong 1 giờ gần nhất chắc chắn là attacker. `
 
 ## AI worker
 
-`services/sensor/src/nids/ai/worker.py` (`AITrafficWorker`) mới là stub. Nó được khởi tạo với cùng callback `handle_alert` như rule engine. Mô hình, đặc trưng và cách chấm nằm ở `services/sensor/src/nids/ai/features.py`, `services/sensor/src/nids/ai/context.py`, `common/tools/ai/` và `docs/machine-learning-guide.md`.
+`services/sensor/src/nids/ai/worker.py` (`AITrafficWorker`) chạy ở luồng nền riêng. `main.py` dựng nó bằng `AITrafficWorker.from_settings(SETTINGS["ai"], handle_alert)` (trả `None` khi tắt, thiếu mô hình hoặc lệch đặc trưng: chỉ log, engine chạy tiếp) và truyền `ai_worker.submit` cho `FlowLog(on_finished=...)`. `FlowLog` gọi `on_finished` với mọi lô flow vừa kết thúc (kể cả khi hết hạn và khi `close()`); worker thread gói chỉ `put_nowait` vào hàng đợi, đầy thì bỏ flow và log.
 
-Ràng buộc cho bước gắn worker (hợp đồng giữa dataset và lúc chạy):
-
-- Giữ một `FlowContext` và gọi `update(flow)` cho **mọi** flow kết thúc, theo đúng thứ tự `FlowLog` nhận (thứ tự `FlowTracker` xuất flow), rồi truyền kết quả vào `extract_features(flow, context)`. Tham số `FlowContext` phải bằng `bundle["context"]`; `bundle["feature_names"]` phải bằng `FEATURE_NAMES` (khác thì tắt AI và log lỗi).
-- Thứ tự `FlowTracker` xuất flow là một phần hợp đồng với mô hình: ai viết lại `FlowTracker.expire` phải giữ nguyên (có test khoá ở `services/sensor/tests/ai/test_context.py`).
-- Ngưỡng theo lớp ở `bundle["thresholds"]["per_class"]`; cảnh báo nếu `bundle["sklearn_version"]` khác bản đang cài.
+- Luồng nền giữ một `FlowContext` và gọi `update(flow)` cho **mọi** flow, theo đúng thứ tự `FlowTracker` xuất, rồi `extract_features`. Tham số `FlowContext` bằng `bundle["context"]`; `bundle["feature_names"]` phải bằng `FEATURE_NAMES`. Thứ tự `FlowTracker` xuất flow là một phần hợp đồng với mô hình: ai viết lại `FlowTracker.expire` phải giữ nguyên (có test khoá ở `services/sensor/tests/ai/test_context.py`).
+- Chấm theo lô, áp `bundle["thresholds"]["per_class"]`, gộp theo `(src_ip, nhãn)` với cửa sổ `ai.suppress_seconds` tính theo giờ của flow. Lỗi khi chấm một lô hoặc khi gọi callback chỉ log, luồng chạy tiếp.
+- `ai.ignore_ips`: flow có IP nguồn trong danh sách không bị chấm (traffic của chính hệ thống trong lab).
+- Thứ tự dừng: worker gói join → `ai_worker.close()` (chấm nốt hàng đợi) → `AlertWriter.close()`.
+- Cảnh báo có `source_type="AI_ENGINE"`, `sid=None`; dashboard gán nhãn "AI". Mô hình, đặc trưng và cách chấm: `services/sensor/src/nids/ai/features.py`, `context.py`, `common/tools/ai/`, `docs/machine-learning-guide.md`.
 
 ## Test
 

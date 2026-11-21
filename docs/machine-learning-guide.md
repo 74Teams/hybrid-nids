@@ -29,7 +29,8 @@ AI cố ý **không** lo tấn công web: lớp này khác ở nội dung chứ 
 | Dựng dataset từ pcap CIC-IDS2017 (`common/tools/ai/build_dataset.py`) | Xong |
 | Huấn luyện và chấm (`common/tools/ai/train.py`) | Xong; mô hình `data/models/flow_model.joblib` (2,9 MB) |
 | Demo ngoài engine (`common/tools/ai/demo_ai.py`) | Xong |
-| Gắn vào engine (`AITrafficWorker` sinh cảnh báo `AI_ENGINE`) | **Chưa làm**. `services/sensor/src/nids/ai/worker.py` vẫn là stub |
+| Gắn vào engine (`AITrafficWorker` sinh cảnh báo `AI_ENGINE`) | Xong, có test (`services/sensor/src/nids/ai/worker.py`, mục 9) |
+| Đo báo nhầm trên traffic của lab Docker | Chưa làm |
 | Chấm trên tập test (tập thi) | Chưa mở |
 
 ## 3. Cơ sở lý thuyết
@@ -222,15 +223,29 @@ Quét rất chậm là điểm yếu. Khi đó lớp ngưỡng bất thường v
 
 **Lưu ý khi đọc kết quả demo trên pcap nhỏ:** đặc trưng ngữ cảnh cần vài chục flow mới có tín hiệu. Một pcap chỉ vài chục gói (ví dụ đợt quét 16 cổng) không phải bài thử phù hợp: kẻ quét dễ bị bỏ sót, và máy chỉ có 1–4 flow có thể bị gán nhãn sai.
 
-## 9. Gắn vào engine (việc còn lại)
+## 9. Gắn vào engine
 
-Phần capture, decoder, DB và API không phải sửa:
+Phần capture, decoder, DB và API không phải sửa. Luồng chạy trong sensor:
 
-1. Nạp bundle. Kiểm tra `feature_names == FEATURE_NAMES` và tham số `context`; lệch thì tắt AI và log lỗi, engine vẫn chạy. Bản sklearn khác thì chỉ cảnh báo.
-2. Nhận flow kết thúc từ `FlowLog`, đúng thứ tự `FlowTracker` xuất, rồi gọi `FlowContext.update` và `extract_features`.
-3. Gọi `predict_proba` theo lô, áp ngưỡng `bundle["thresholds"]["per_class"]`.
-4. Gộp cảnh báo theo `(src_ip, label)` trong một cửa sổ thời gian, để một đợt quét hàng nghìn flow chỉ ra một dòng.
-5. Gửi qua `handle_alert` với `source_type="AI_ENGINE"`, `sid=None`, `classtype` là nhãn.
+1. Lúc khởi động, sensor nạp bundle. Kiểm tra `feature_names == FEATURE_NAMES`; lệch, thiếu file hoặc thiếu thư viện thì tắt AI và log lỗi, engine vẫn chạy. Bản sklearn khác bản đã học thì chỉ cảnh báo.
+2. Mỗi flow kết thúc (do `FlowLog` nhận từ `FlowTracker`, đúng thứ tự xuất) được đẩy vào hàng đợi của worker AI, không chờ. Hàng đợi đầy thì bỏ flow và log.
+3. Luồng nền của worker gọi `FlowContext.update` rồi `extract_features`, chấm theo lô bằng `predict_proba` và áp ngưỡng `bundle["thresholds"]["per_class"]`.
+4. Flow bị chấm là tấn công được gộp theo `(src_ip, nhãn)`: mỗi cặp báo một lần trong `ai.suppress_seconds` (tính theo giờ của flow), nên một đợt quét hàng nghìn flow chỉ ra một dòng.
+5. Cảnh báo đi qua `handle_alert` với `source_type="AI_ENGINE"`, `sid=None`, nhãn ở `classtype`; mô tả ghi số flow, xác suất cao nhất và vài đích tiêu biểu. Mức nặng: DDoS, DoS, Bot là P1; PortScan, BruteForce là P2.
+6. Dừng sensor hoặc hết pcap thì worker chấm nốt flow còn trong hàng đợi trước khi `AlertWriter` đóng.
+
+**Kết quả replay qua sensor** (pcap CIC-IDS2017 trong lúc tắt AI cho cùng số cảnh báo rule, ngưỡng và số flow như khi bật AI):
+
+| Pcap | Cảnh báo AI |
+|---|---|
+| `portscan_1450` (148.017 flow) | 4 cảnh báo PortScan từ kẻ quét 172.16.0.1; 30 cảnh báo Bot từ 5 máy 192.168.10.x gọi về 205.174.165.73:8080 |
+| `ddos_1556` (20.463 flow) | 4 cảnh báo DDoS từ 172.16.0.1; 15 cảnh báo Bot từ cùng 5 máy |
+
+Các máy 192.168.10.x gọi về cùng một địa chỉ cổng 8080 đều đặn là botnet trong dữ liệu CIC-IDS2017 (nhãn Bot). Mỗi đợt kéo dài thì được nhắc lại sau mỗi cửa sổ `suppress_seconds` (nên có nhiều hơn một cảnh báo cho mỗi máy). Chưa đo pcap traffic bình thường qua sensor: file `benign_0900.pcap` nặng 1,3 GB.
+
+Cấu hình ở mục `ai` trong `settings.yaml` (`enabled`, `model_path`, `batch_size`, `batch_wait`, `queue_max_size`, `suppress_seconds`, `ignore_ips`). Bộ chuyển hướng chỉ đếm cảnh báo AI khi `redirect.include_ai: true` (mặc định tắt).
+
+**Độ trễ:** flow chỉ được chấm khi kết thúc (FIN/RST, im lặng 30 giây hoặc kéo dài 120 giây). Quét cổng kết thúc ngay nên báo trong vài giây; flow DoS không đóng phải chờ idle hoặc active timeout. Lớp ngưỡng bất thường lo phản ứng tức thì, AI lo phân loại và quét chậm.
 
 ## 10. Giới hạn
 

@@ -15,7 +15,7 @@ Hybrid NIDS + honeypot (đồ án PBL4): hệ thống phát hiện xâm nhập m
 - FastAPI + Uvicorn (API, dashboard); HTML/CSS/JS thuần, biểu đồ SVG tự vẽ, không dùng thư viện frontend
 - Redis ≥ 7 (Docker) + redis-py ≥ 8.1: pub/sub đẩy tín hiệu cảnh báo mới tới WebSocket của dashboard (tuỳ chọn, tắt được)
 - paramiko ≥ 3.4 (honeypot SSH), Flask ≥ 3.0 (honeypot HTTP), pydantic-settings
-- numpy, pandas, scikit-learn, joblib (mô hình AI theo flow: đã huấn luyện bằng `common/tools/ai/`, `AITrafficWorker` chưa gắn vào engine)
+- numpy, pandas, scikit-learn, joblib (mô hình AI theo flow: đã huấn luyện bằng `common/tools/ai/`, `AITrafficWorker` đã gắn vào sensor, sinh cảnh báo `AI_ENGINE`)
 - pytest; Docker Compose; GitHub Actions chạy pytest cho mỗi PR vào `main`
 
 ## Project Structure
@@ -24,7 +24,7 @@ Mã nguồn chia theo service. Mọi module vẫn nằm chung họ tên `nids.*`
 
 ```
 services/                      mỗi service một thư mục: src/, tests/, Dockerfile, requirements.txt, README.md
-├── sensor/        nids.engine (bắt gói, rule, tái hợp TCP, flow, ANOMALY), nids.ai (đặc trưng, mô hình; worker còn là stub)
+├── sensor/        nids.engine (bắt gói, rule, tái hợp TCP, flow, ANOMALY), nids.ai (đặc trưng, mô hình, worker chấm flow ở luồng nền)
 ├── honeypot/      nids.honeypot (SSH paramiko, HTTP Flask + waitress)
 ├── redirector/    nids.redirector (chuyển hướng IP đáng ngờ sang honeypot bằng iptables, chỉ chạy trong Docker lab)
 └── dashboard/     nids.api (FastAPI: routes alerts/flows/rules/redirects; static: dashboard, logs, traffic, rules)
@@ -102,6 +102,6 @@ Các process (sensor, dashboard, redirector, mỗi honeypot một process) chạ
 - Honeypot ghi từ process khác, nên cache IP honeypot trong engine có TTL 5 giây và cảnh báo có thể chưa được làm giàu ngay.
 - `data/rules/state.yaml` (do trang Rules ghi, gitignore) có thể tắt rule tự viết trên máy bạn và làm hỏng test rule/lab. Chạy `pytest` mà thấy lỗi SID không tồn tại thì đổi tên file đó tạm thời.
 - Chạy lệnh Python từ gốc repo mà báo `No module named 'nids'` nghĩa là chưa đặt `PYTHONPATH`: chạy `scripts/env.ps1` hoặc `scripts/env.sh`.
-- `services/sensor/src/nids/ai/worker.py` mới là stub (mô hình đã có nhưng chưa nạp vào engine): đừng viết test hay demo giả định AI worker đã sinh cảnh báo.
+- AI worker tự tắt (chỉ ghi log) khi thiếu `data/models/flow_model.joblib` hoặc mô hình lệch đặc trưng; sensor vẫn chạy bình thường. Mô hình học bằng scikit-learn 1.9.1 (cần Python 3.11+, image sensor dùng 3.12); chạy bằng Python 3.10 thì nạp được nhưng có cảnh báo lệch bản. Mỗi đợt tấn công chỉ một cảnh báo AI (gộp theo IP nguồn và nhãn trong `ai.suppress_seconds`).
 
 Quy tắc chi tiết: `.claude/rules/git-workflow.md`, `planning.md` (viết plan bằng tác nhân, không tự tạo file), `engine.md`, `api-web.md`, `web-design.md`, `honeypot.md`, `redirector.md`, `config-db-docker.md`, `logging.md`, `lab-demo.md`, `snort-rules.md`.

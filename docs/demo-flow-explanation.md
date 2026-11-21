@@ -212,4 +212,4 @@ Dữ liệu chia theo khối 5 phút: khối dùng để chấm không có trong
 Dữ liệu dạng bảng; Random Forest nhẹ (2,9 MB), nhanh và giải thích được bằng feature importance.
 
 **AI đã chạy trong engine chưa?**
-Chưa. Mô hình đã huấn luyện và đánh giá xong; demo chạy script ngoài engine. Bước còn lại là cho `AITrafficWorker` nạp mô hình và sinh cảnh báo `AI_ENGINE`.
+Rồi. Sensor nạp mô hình lúc khởi động, chấm mọi flow vừa kết thúc ở một luồng nền và sinh một cảnh báo `AI_ENGINE` cho mỗi đợt tấn công (xem tab AI ở trang Logs). Thiếu mô hình hoặc mô hình lệch đặc trưng thì AI tự tắt, sensor vẫn chạy. Script `tools.ai.demo_ai` vẫn dùng được để thử mô hình ngoài engine.

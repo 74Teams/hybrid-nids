@@ -39,4 +39,4 @@ Hệ thống có thêm honeypot SSH/HTTP để xác nhận kẻ tấn công và 
 | Honeypot SSH/HTTP, làm giàu cảnh báo, chuyển hướng iptables | Hoàn chỉnh |
 | Dashboard, cảnh báo realtime qua Redis + WebSocket | Hoàn chỉnh |
 | Bộ đo có nhãn CIC-IDS2017 | Hoàn chỉnh |
-| Mô hình AI theo flow (Random Forest) | Đã huấn luyện và đánh giá. **Chưa gắn vào engine** (`AITrafficWorker` vẫn là stub) |
+| Mô hình AI theo flow (Random Forest) | Đã huấn luyện, đánh giá và gắn vào sensor (cảnh báo `AI_ENGINE`); chưa đo trên traffic của lab |

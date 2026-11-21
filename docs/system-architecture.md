@@ -48,9 +48,11 @@ flowchart LR
     w --> rule["DetectionEngine<br/>+ tái hợp TCP"]
     w --> flow["FlowLog<br/>gom flow"]
     w --> anom["AnomalyDetector"]
-    w --> ai["AITrafficWorker<br/>(stub)"]
+    flow -- "flow kết thúc" --> aiq[["Hàng đợi flow"]]
+    aiq --> ai["AITrafficWorker<br/>luồng nền, chấm theo lô"]
     rule --> ha["handle_alert<br/>làm giàu honeypot"]
     anom --> ha
+    ai --> ha
     ha --> aw["AlertWriter<br/>ghi theo lô"]
     aw --> db[("events")]
     aw -. publish_alert .-> redis[("Redis")]
@@ -82,7 +84,7 @@ DB chỉ lưu **dữ liệu quan sát được** và **nhật ký hành động*
 | `RULE_ENGINE` | Rule Snort khớp |
 | `ANOMALY` | Phát hiện bất thường theo ngưỡng (`sid` NULL) |
 | `HONEYPOT` | Honeypot SSH hoặc HTTP |
-| `AI_ENGINE` | Dành cho mô hình AI, chưa dùng |
+| `AI_ENGINE` | Mô hình AI theo flow (`sid` NULL); mỗi đợt tấn công một cảnh báo, nhãn ở `attack_type` |
 
 Quy ước:
 

@@ -35,5 +35,5 @@
 ## 3. Phiên bản cần lưu ý
 
 - `data/models/flow_model.joblib` được huấn luyện bằng **scikit-learn 1.9.1**. Nạp bằng bản khác sẽ có `InconsistentVersionWarning` và có thể cho kết quả sai. Mô hình lưu bản sklearn ở `bundle["sklearn_version"]`.
-- Image Docker dùng `python:3.10-slim`.
+- Image sensor dùng `python:3.12-slim` (scikit-learn 1.9.1 cần Python 3.11+); các image còn lại dùng `python:3.10-slim`.
 - Redis yêu cầu mật khẩu (`NIDS_REDIS_PASSWORD` trong `.env`), không publish cổng ra máy host.
