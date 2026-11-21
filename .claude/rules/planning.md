@@ -1,55 +1,30 @@
-# Quy trình lên plan
+# Viết plan và lên ý tưởng
 
-File này không có `paths:` nên luôn được nạp. Plan chính thức nằm trong `docs/plans/`, bảng tổng hợp ở `docs/plans/README.md`. Cách làm chi tiết từng bước nằm trong skill `idea-to-plan` (`/idea-to-plan <ý tưởng>`).
+File này không có `paths:` nên luôn được nạp. Áp dụng cho mọi plan: plan trong hội thoại, plan mode của Claude Code và lệnh `/y-tuong`.
 
-## Khi nào cần plan
+## Quy tắc viết
 
-Cần plan khi có ít nhất một điều sau:
+- **Nói bằng tác nhân và vai trò, không nói bằng code.** Hạn chế tên biến, tên hàm, class, đường dẫn file và đoạn code. Ví dụ, viết "sensor gom gói thành flow rồi gửi cho bộ phân tích AI", không viết tên hàm hay tên class.
+- **Tác nhân thường dùng:** sensor (engine bắt và phân tích gói), honeypot SSH/HTTP, bộ chuyển hướng, dashboard, cơ sở dữ liệu, kênh realtime, người quản trị, kẻ tấn công, giảng viên xem demo.
+- **Được nêu tên kỹ thuật khi không có cách gọi khác** và người đọc cần nó để quyết định, ví dụ tên công nghệ (Redis, iptables, Random Forest) hoặc tên bảng dữ liệu. Vẫn gọi theo vai trò trước. Nếu thật sự cần danh sách file thì để ở một phụ lục ngắn cuối plan.
+- **Đi từ ý tưởng thô:** vấn đề trước, giải pháp sau, chi tiết hiện thực để lúc code.
+- **Gọn:** mỗi quyết định cần người dùng chốt phải kèm phương án đề xuất. Không liệt kê phương án mà không định chọn.
 
-- Người dùng yêu cầu lên plan hoặc gọi `/idea-to-plan`.
-- Thay đổi chạm từ hai khu vực trở lên trong số: engine, api/web, honeypot, db, docker/config, lab.
-- Thêm service, dependency, bảng hoặc cột CSDL, hay biến môi trường bắt buộc.
+## Nơi viết plan
 
-Trường hợp còn lại làm thẳng theo quy trình thường. Thêm rule phát hiện dùng `/them-rule`.
+- **Mọi plan viết vào file md tạm** `.tmp/plans/<tên-ngắn>.md` (thư mục bị gitignore). `tên-ngắn` là tiếng Anh, chữ thường, nối bằng `-`, ví dụ `microservice-restructure.md`.
+- **Không dán nội dung plan vào chat.** Trong chat chỉ gửi: đường dẫn file, tóm tắt 2–3 dòng, và các quyết định cần chốt (kèm đề xuất).
+- **Một plan, một file.** Khi người dùng góp ý hoặc chốt quyết định thì sửa ngay trong file đó. Không tạo file mới, bản v2 hay bản sao. Plan khác chủ đề thì mới tạo file khác.
+- **Ghi lại quyết định đã chốt** ngay trong file (đánh dấu "đã chốt"), để file luôn là bản mới nhất.
+- **Xuất lưu chính thức chỉ khi người dùng yêu cầu:** chép vào `docs/` (theo cấu trúc ở `docs/README.md`), hoặc tạo issue GitHub. Ngoài thư mục tạm, không tự tạo file plan, đặc tả hay manifest nào khác.
+- **Plan mode của Claude Code:** viết vào file plan do harness chỉ định như bình thường, theo đúng quy tắc viết ở trên. Thoát plan mode thì chép sang `.tmp/plans/` nếu người dùng muốn giữ.
 
-## Quy trình 7 bước
+Quy tắc này ghi đè thói quen liệt kê file, hàm và dòng code trong plan, kể cả hướng dẫn mặc định của plan mode.
 
-| # | Bước | Xong khi |
-|---|------|----------|
-| 1 | Làm rõ ý tưởng | Đã biết vấn đề cần giải quyết, kết quả mong muốn và phần không làm |
-| 2 | Khảo sát | Đã đọc code liên quan, issue, plan cũ và `.claude/rules/` của khu vực bị chạm |
-| 3 | Chọn phương án | Người dùng đã chốt các quyết định chỉ họ mới quyết được |
-| 4 | Viết plan | File plan có đủ 12 mục, trạng thái `DRAFT`, đã có dòng trong bảng tổng hợp |
-| 5 | Phản biện | `plan-critic` đã đọc plan, mọi lỗi `BLOCKER` đã sửa, trạng thái `REVIEW` |
-| 6 | Duyệt | Người dùng duyệt rõ ràng, trạng thái `APPROVED` |
-| 7 | Thực hiện và đóng | Code xong theo plan, kiểm thử đạt, PR đã merge, trạng thái `DONE` |
+## Lên ý tưởng mới
 
-Chưa tới `APPROVED` thì không sửa code, trừ file plan và bảng tổng hợp.
+Ý tưởng hoặc tính năng mới cần nhìn bao quát thì dùng `/y-tuong <ý tưởng thô>`. Lệnh này có 3 bước:
 
-## Vòng đời plan
-
-```
-DRAFT → REVIEW → APPROVED → IN_PROGRESS → DONE
-          │                      │
-          └── cần sửa → DRAFT    └── đổi thiết kế → REVIEW
-
-Plan chưa DONE có thể chuyển sang DROPPED hoặc SUPERSEDED.
-```
-
-| Trạng thái | Ý nghĩa |
-|------------|---------|
-| `DRAFT` | Đang viết hoặc đang sửa |
-| `REVIEW` | Đã qua `plan-critic`, chờ người dùng duyệt |
-| `APPROVED` | Người dùng đã duyệt, chưa bắt đầu code |
-| `IN_PROGRESS` | Đang code trên nhánh riêng |
-| `DONE` | PR đã merge và đã xác minh theo mục 9 của plan |
-| `DROPPED` | Bỏ không làm; ghi lý do ở mục 12 |
-| `SUPERSEDED` | Bị plan khác thay thế; ghi ID plan mới ở mục 12 |
-
-Mỗi lần đổi trạng thái, cập nhật cùng lúc `status` và `updated` trong frontmatter, và dòng tương ứng ở `docs/plans/README.md`. Không xoá plan cũ.
-
-## Quy tắc đi kèm
-
-- Đang ở plan mode thì chỉ sửa được file plan tạm của harness. Viết plan vào đó trước, khi thoát plan mode mới chép sang `docs/plans/`.
-- Commit file plan tuân theo `.claude/rules/git-workflow.md`, không tự commit.
-- Issue đang assign cho người khác thì báo người dùng ở bước 2, trước khi viết plan.
+1. hỏi tối đa một lượt;
+2. viết bản phác thảo theo 10 góc nhìn vào file tạm;
+3. chốt một lần, rồi hỏi có xuất lưu chính thức hay không.

@@ -1,14 +1,14 @@
 # Kết quả đo trên CIC-IDS2017
 
-Thư mục này chứa kết quả các lượt đo của PLAN-009. Mọi file `.md` ở đây do công cụ sinh ra, đừng sửa tay.
+Thư mục này chứa kết quả các lượt đo của bộ đo có nhãn. Mọi file `.md` ở đây do công cụ sinh ra, đừng sửa tay. Tổng hợp và nhận xét: [../performance-metrics.md](../performance-metrics.md).
 
 | File | Nội dung |
 | :--- | :--- |
 | `manifest.md` | Danh sách 49 chunk pcap 10 phút của thứ Sáu, chunk nào là dev (luyện), chunk nào là test (thi) |
-| `baseline.md` | Số liệu gốc trên tập dev, đo bằng code `main` **trước** mọi thay đổi của PLAN-009 |
-| `<tên>.md` | Các lượt đo sau (ví dụ `sau-sua-engine.md`) |
+| `baseline-5-ngay.md` | Lượt đo gốc trên tập dev của cả 5 ngày, trước khi tinh chỉnh rule và ANOMALY |
+| `<tên>.md` | Các lượt đo sau, sinh bằng `python -m tools.eval.evaluate --name <tên>` |
 
-Số liệu chi tiết dạng JSON nằm ở `data/eval/<tên>.json` (không commit, chạy lại lệnh là có).
+Số liệu chi tiết dạng JSON nằm ở `data/work/eval/<tên>.json` (không commit, chạy lại lệnh là có).
 
 ## Cách chạy
 
@@ -26,7 +26,7 @@ python -m tools.eval.evaluate --labels-dir D:\Temp\Temp\TrafficLabelling_ --set 
 python -m tools.eval.evaluate --labels-dir D:\Temp\Temp\TrafficLabelling_ --chunks 14:09,15:59 --set-var HOME_NET=192.168.10.0/24 --name thu
 ```
 
-Tập test chỉ chạy ở hai mốc của plan (cuối tuần 2 và cuối tuần 3), và phải thêm `--allow-test`.
+Tập test là tập thi: chỉ chạy khi chốt kết quả, và phải thêm `--allow-test`.
 
 ## Bộ đo làm gì
 
@@ -37,8 +37,8 @@ Tập test chỉ chạy ở hai mốc của plan (cuối tuần 2 và cuối tu�
 Kết quả không phụ thuộc máy chạy:
 
 - Biến header rule là biến mặc định cộng `--set-var`.
-- Tham số `stream`, `flow`, `anomaly` lấy từ `config/settings.example.yaml`.
-- `rules/state.yaml` bị bỏ qua (thêm `--use-state` nếu muốn dùng).
+- Tham số `stream`, `flow`, `anomaly` lấy từ `common/config/settings.example.yaml`.
+- `data/rules/state.yaml` bị bỏ qua (thêm `--use-state` nếu muốn dùng).
 
 ## Cách đọc số liệu
 
@@ -52,7 +52,7 @@ Kết quả không phụ thuộc máy chạy:
 | Tỉ lệ ở BENIGN | Tỉ lệ báo nhầm (FPR): trong số flow bình thường, bao nhiêu phần bị rule báo |
 | Đợt | PortScan, DDoS: một khoảng giờ liên tục trong CSV. Bot: một máy nhiễm |
 | UNLABELED | Flow không có dòng CSV tương ứng, không tính vào số liệu |
-| EXCLUDED | Flow bị loại theo quy tắc chia máy Bot (PLAN-009 mục 6.3), không tính vào số liệu |
+| EXCLUDED | Flow bị loại theo quy tắc giữ máy Bot cho tập thi, không tính vào số liệu |
 | Khớp trước threshold | Số lần rule khớp, chưa qua bước chặn cảnh báo trùng; không phụ thuộc tốc độ chạy |
 
-Nhãn được sửa ở một chỗ: mọi flow có IP `205.174.165.73` (máy điều khiển botnet Ares) là `Bot`, dù CSV ghi BENIGN. Nguồn và lý do nằm trong `tools/cic/labels.py`.
+Nhãn được sửa ở một chỗ: mọi flow có IP `205.174.165.73` (máy điều khiển botnet Ares) là `Bot`, dù CSV ghi BENIGN. Nguồn và lý do nằm trong `common/tools/cic/labels.py`.

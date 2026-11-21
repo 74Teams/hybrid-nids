@@ -1,21 +1,21 @@
-# Dockerfile dùng COPY . . nên mọi thứ dưới đây sẽ lọt vào image (và registry) nếu không loại
+# Mỗi Dockerfile chỉ COPY đúng thư mục nó cần; các mục dưới đây không bao giờ được lọt vào image (hay registry)
 .git
 .env
 .env.*
-config/settings.yaml
-data
+common/config/settings.yaml
+data/work
+data/pcap
+data/rules/state.yaml
 *.db
 *.sqlite3
 
 # Không cần trong image
 .github
 .claude
+.tmp
 .superpowers
 .pytest_cache
 __pycache__
 *.py[cod]
-
-# File pcap lớn (dữ liệu CIC, bản bắt tay); chỉ giữ pcap nhỏ dùng trong test
-pcap/*.pcap
-pcap/*.pcapng
-!pcap/ipv4frags.pcap
+docs
+tests

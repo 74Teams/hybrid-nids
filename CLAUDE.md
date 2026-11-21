@@ -15,27 +15,40 @@ Hybrid NIDS + honeypot (đồ án PBL4): hệ thống phát hiện xâm nhập m
 - FastAPI + Uvicorn (API, dashboard); HTML/CSS/JS thuần, biểu đồ SVG tự vẽ, không dùng thư viện frontend
 - Redis ≥ 7 (Docker) + redis-py ≥ 8.1: pub/sub đẩy tín hiệu cảnh báo mới tới WebSocket của dashboard (tuỳ chọn, tắt được)
 - paramiko ≥ 3.4 (honeypot SSH), Flask ≥ 3.0 (honeypot HTTP), pydantic-settings
-- numpy, pandas, scikit-learn, joblib (dành cho AI worker, chưa dùng)
+- numpy, pandas, scikit-learn, joblib (mô hình AI theo flow: đã huấn luyện bằng `common/tools/ai/`, `AITrafficWorker` đã gắn vào sensor, sinh cảnh báo `AI_ENGINE`)
 - pytest; Docker Compose; GitHub Actions chạy pytest cho mỗi PR vào `main`
 
 ## Project Structure
 
-Lệnh luôn chạy từ thư mục gốc repo (`pytest.ini` đặt `pythonpath = .`).
+Mã nguồn chia theo service. Mọi module vẫn nằm chung họ tên `nids.*` (namespace package, không có `nids/__init__.py`), mỗi thư mục `src/` đóng góp một phần. Chạy lệnh từ gốc repo sau khi đặt `PYTHONPATH` bằng `. .\scripts\env.ps1` (PowerShell) hoặc `source scripts/env.sh` (bash); `pytest` tự đặt qua `pytest.ini`.
 
-- `nids/engine/` — process engine (`python -m nids.engine`): capture, decode, rule parser, Aho-Corasick, detection, threshold, `flow.py` (gom flow), `stream.py` (tái hợp TCP), `anomaly.py` (phát hiện bất thường theo ngưỡng, cảnh báo `ANOMALY`)
-- `nids/api/` — process FastAPI: `routes/` (alerts, flows, rules), `static/` (dashboard, logs, traffic, rules page)
-- `nids/honeypot/` — honeypot SSH và HTTP (`python -m nids.honeypot ssh|http`), `store.py` ghi sự kiện
-- `nids/redirector/` — process chuyển hướng IP đáng ngờ sang honeypot bằng iptables (`python -m nids.redirector`, chỉ chạy trong Docker lab)
-- `nids/db/` — `models.py` (`events`, `event_payloads`, `flows`), `repository.py` (`EventRepository`)
-- `nids/ai.py` — `AITrafficWorker` (stub); `nids/config.py` — `SETTINGS`, `get_db_url()`, `get_redis_settings()`, `get_redirect_settings()`; `nids/logger.py` — `setup_logging`; `nids/realtime.py` — `publish_alert` (đẩy id cảnh báo mới lên Redis)
-- `rules/` — file `.rules` theo category, `custom.rules`, `community-*.rules` (sinh tự động từ `upstream/community.rules` bằng `python -m nids.tools.snort2_convert`), `vendor/`, `state.yaml` (gitignore)
-- `config/settings.example.yaml` — file mẫu được commit; `config/settings.yaml` — cấu hình local (bị git ignore, thiếu thì dùng file mẫu)
-- `lab/` — Docker lab: `attacker/attack_demo.py`, `victim/`
-- `tests/` — chia theo khu vực: `engine/`, `api/`, `honeypot/`, `redirector/`, `lab/`
-- `docs/` — `demo/kich-ban-demo.md` (kịch bản thuyết trình), `ai/` (thiết kế AI worker), `plans/` (plan và bảng tổng hợp)
-- `.claude/rules/` — quy tắc chi tiết theo khu vực; `.claude/commands/` — slash command (`them-rule`); `.claude/skills/` — skill (`idea-to-plan`); `.claude/agents/` — subagent (`plan-critic`, `git-workflow`)
+```
+services/                      mỗi service một thư mục: src/, tests/, Dockerfile, requirements.txt, README.md
+├── sensor/        nids.engine (bắt gói, rule, tái hợp TCP, flow, ANOMALY), nids.ai (đặc trưng, mô hình, worker chấm flow ở luồng nền)
+├── honeypot/      nids.honeypot (SSH paramiko, HTTP Flask + waitress)
+├── redirector/    nids.redirector (chuyển hướng IP đáng ngờ sang honeypot bằng iptables, chỉ chạy trong Docker lab)
+└── dashboard/     nids.api (FastAPI: routes alerts/flows/rules/redirects; static: dashboard, logs, traffic, rules)
+common/
+├── core/          nids.config (SETTINGS), nids.logger, nids.realtime (publish_alert), nids.db (models, EventRepository)
+├── config/        settings.example.yaml (commit); settings.yaml (local, gitignore)
+└── tools/         ai/ (dựng dataset, huấn luyện, demo), eval/ (bộ đo CIC-IDS2017), cic/ (nhãn), rules/ (chuyển rule Snort 2 → 3)
+data/
+├── rules/         file .rules theo category, custom.rules, community-*.rules (sinh bằng tools.rules.snort2_convert), upstream/, vendor/; state.yaml (gitignore)
+├── models/        flow_model.joblib (Random Forest)
+├── pcap/          pcap nhỏ dùng cho test và demo (pcap lớn gitignore)
+└── work/          dữ liệu sinh ra khi làm việc: manifest CIC, đặc trưng AI, kết quả đo, khoá SSH honeypot, DB SQLite local (gitignore)
+lab/               attacker/ (attack_demo.py), victim/
+tests/             test xuyên service: lab/ (kịch bản tấn công, compose, Dockerfile), kiểm tra ngôn ngữ, .dockerignore
+docs/              tài liệu dự án, mục lục ở docs/README.md; docs/eval/ do tools.eval sinh ra
+scripts/           env.ps1, env.sh (đặt PYTHONPATH)
+.claude/           rules/ (quy tắc theo khu vực), commands/ (them-rule, ship, y-tuong), agents/ (git-workflow)
+```
 
-Các process (engine, API, redirector, mỗi honeypot một process) chạy riêng và chỉ giao tiếp qua database chung cùng các file trong `rules/`. Ngoại lệ duy nhất là tín hiệu "có cảnh báo mới" qua Redis (chỉ chứa id, dữ liệu vẫn lấy từ DB); Redis tắt hoặc chết thì mọi thứ vẫn chạy, dashboard quay về poll.
+- Test của từng service nằm trong `services/<tên>/tests/` (và `common/*/tests/`); `pytest.ini` gom tất cả, một lệnh `pytest` chạy hết.
+- `common/core` không được import từ service nào (chỉ chú thích kiểu qua `TYPE_CHECKING`). Dashboard cần bộ phân tích rule của sensor để kiểm tra `custom.rules`, nên image dashboard có cả mã nguồn sensor; `common/tools` cũng dùng lại mã sensor.
+- Cấu hình, rule, mô hình đọc theo đường dẫn từ gốc repo (`data/rules`, `data/models`, `common/config`); trong Docker chúng được bind mount lúc chạy.
+
+Các process (sensor, dashboard, redirector, mỗi honeypot một process) chạy riêng và chỉ giao tiếp qua database chung cùng các file trong `data/rules/`. Ngoại lệ duy nhất là tín hiệu "có cảnh báo mới" qua Redis (chỉ chứa id, dữ liệu vẫn lấy từ DB); Redis tắt hoặc chết thì mọi thứ vẫn chạy, dashboard quay về poll.
 
 ## Coding Conventions
 
@@ -49,7 +62,7 @@ Các process (engine, API, redirector, mỗi honeypot một process) chạy riê
 
 - KHÔNG chạy `git commit`/`git push` khi chưa được người dùng cho phép rõ ràng. Không bao giờ commit, push hay merge thẳng vào `main`: tạo nhánh mới, push nhánh đó và mở pull request (xem `.claude/rules/git-workflow.md`).
 - Honeypot không bao giờ thực thi input của attacker. Lỗi ghi CSDL không được làm sập sensor.
-- DB chỉ lưu dữ liệu quan sát được và nhật ký hành động của hệ thống: sự kiện cảnh báo (`events`), flow log (`flows`, một dòng cho mỗi flow, không ghi từng gói) và lượt chuyển hướng IP sang honeypot (`redirects`). Rule chỉ nằm trong file `rules/`, không nạp rule từ DB.
+- DB chỉ lưu dữ liệu quan sát được và nhật ký hành động của hệ thống: sự kiện cảnh báo (`events`), flow log (`flows`, một dòng cho mỗi flow, không ghi từng gói) và lượt chuyển hướng IP sang honeypot (`redirects`). Rule chỉ nằm trong file `data/rules/`, không nạp rule từ DB.
 - Thao tác ghi rule qua API phải kiểm tra header `X-API-Key` khớp `NIDS_API_KEY`. Chưa đặt biến môi trường thì thao tác ghi bị khoá.
 - Thêm rule tự viết mới (không phải `community-*`) thì phải thêm đòn tương ứng trong `lab/attacker/attack_demo.py`, nếu không `tests/lab/test_attack_demo.py` sẽ fail. Trước khi thêm hoặc sửa rule, đọc `.claude/rules/snort-rules.md`.
 - Không bỏ port 3306 và `172.28.0.30:6379` (Redis của lab) khỏi `network.bpf_filter` (lý do ở mục Known Issues).
@@ -57,22 +70,24 @@ Các process (engine, API, redirector, mỗi honeypot một process) chạy riê
 
 ## Common Commands
 
-- Cài đặt: `pip install -r requirements.txt`
-- Engine: `python -m nids.engine` (live hoặc offline, theo `settings.yaml`)
+- Cài đặt: `pip install -r requirements-dev.txt`; mỗi service có file riêng `services/<tên>/requirements.txt` (kèm `common/core/requirements.txt`)
+- Đặt đường dẫn module (một lần mỗi terminal): `. .\scripts\env.ps1` hoặc `source scripts/env.sh`
+- Sensor: `python -m nids.engine` (live hoặc offline, theo `settings.yaml`)
 - Honeypot: `python -m nids.honeypot ssh` (cổng 2222), `python -m nids.honeypot http` (cổng 8080)
-- API + dashboard: `uvicorn nids.api.main:app --host 0.0.0.0 --port 8000 --reload` (Swagger tại `/docs`)
-- Test: `pytest`; một test: `pytest tests/engine/test_diverse_rules_engine.py::test_name`
-- Docker lab: `docker compose up --build` (MySQL, Redis, victim nginx, engine, honeypot, redirector, API, attacker trên mạng 172.28.0.0/16)
-- Build: không có bước build riêng; chưa cấu hình linter.
+- Dashboard + API: `uvicorn nids.api.main:app --host 0.0.0.0 --port 8000 --reload` (Swagger tại `/docs`)
+- Công cụ: `python -m tools.ai.train`, `python -m tools.eval.evaluate`, `python -m tools.rules.snort2_convert`
+- Test: `pytest`; một test: `pytest services/sensor/tests/engine/test_diverse_rules_engine.py::test_name`
+- Docker lab: `docker compose up --build` (MySQL, Redis, victim, sensor, honeypot, redirector, dashboard trên mạng 172.28.0.0/16); thêm máy tấn công: `docker compose --profile lab up --build`
+- Build: mỗi service build từ Dockerfile riêng (`services/<tên>/Dockerfile`, context là gốc repo); chưa cấu hình linter.
 
 ## Current Focus
 
 - Quản lý rule nhiều file (branch `feature/rule-management`): category, override theo SID, sửa `custom.rules` trên trang Rules kiểu pfSense.
-- Thiết kế AI worker theo flow (`docs/ai/`) để thay stub trong `nids/ai.py` mà không phải sửa capture, decoder, DB hay API.
-- Cảnh báo realtime qua Redis pub/sub + WebSocket (branch `feature/30-realtime-alert-push`, PLAN-001, issue #30).
-- Xem traffic và phát hiện bất thường theo ngưỡng (PLAN-004): API flows + trang Traffic (#40, #41, đã merge), cảnh báo `ANOMALY` theo ngưỡng (#42, branch `feature/42-anomaly-detection`).
-- Chuyển hướng IP đáng ngờ sang honeypot (branch `feature/29-redirect-to-honeypot`, PLAN-005, issue #29).
-- Giới hạn tài nguyên honeypot: cap kết nối, timeout idle, honeypot HTTP chạy bằng waitress (PLAN-006, issue #27, branch `feature/27-honeypot-resource-limits`). Honeypot HTTP ghi mọi request (`http.request`, PLAN-007, issue #26, branch `feature/26-http-catch-all`).
+- AI theo flow (issue #105): đã có mô hình và báo cáo (`docs/machine-learning-guide.md`); còn gắn `AITrafficWorker` vào engine (mục 9 của tài liệu đó) mà không phải sửa capture, decoder, DB hay API.
+- Cảnh báo realtime qua Redis pub/sub + WebSocket (branch `feature/30-realtime-alert-push`, issue #30).
+- Xem traffic và phát hiện bất thường theo ngưỡng: API flows + trang Traffic (#40, #41, đã merge), cảnh báo `ANOMALY` theo ngưỡng (#42, branch `feature/42-anomaly-detection`).
+- Chuyển hướng IP đáng ngờ sang honeypot (branch `feature/29-redirect-to-honeypot`, issue #29).
+- Giới hạn tài nguyên honeypot: cap kết nối, timeout idle, honeypot HTTP chạy bằng waitress (issue #27, branch `feature/27-honeypot-resource-limits`). Honeypot HTTP ghi mọi request (`http.request`, issue #26, branch `feature/26-http-catch-all`).
 
 ## Known Issues / Gotchas
 
@@ -85,6 +100,8 @@ Các process (engine, API, redirector, mỗi honeypot một process) chạy riê
 - `nids_api` cố ý chạy ở network riêng để request của dashboard (poll dự phòng, WebSocket) không bị engine sniff nhầm.
 - `init_db()` thử lại 15 lần × 2s vì MySQL khởi động chậm. Đừng coi lần kết nối thất bại đầu tiên là lỗi.
 - Honeypot ghi từ process khác, nên cache IP honeypot trong engine có TTL 5 giây và cảnh báo có thể chưa được làm giàu ngay.
-- `nids/ai.py` mới là stub: đừng viết test hay demo giả định AI worker đã sinh cảnh báo.
+- `data/rules/state.yaml` (do trang Rules ghi, gitignore) có thể tắt rule tự viết trên máy bạn và làm hỏng test rule/lab. Chạy `pytest` mà thấy lỗi SID không tồn tại thì đổi tên file đó tạm thời.
+- Chạy lệnh Python từ gốc repo mà báo `No module named 'nids'` nghĩa là chưa đặt `PYTHONPATH`: chạy `scripts/env.ps1` hoặc `scripts/env.sh`.
+- AI worker tự tắt (chỉ ghi log) khi thiếu `data/models/flow_model.joblib` hoặc mô hình lệch đặc trưng; sensor vẫn chạy bình thường. Mô hình học bằng scikit-learn 1.9.1 (cần Python 3.11+, image sensor dùng 3.12); chạy bằng Python 3.10 thì nạp được nhưng có cảnh báo lệch bản. Mỗi đợt tấn công chỉ một cảnh báo AI (gộp theo IP nguồn và nhãn trong `ai.suppress_seconds`).
 
-Quy tắc chi tiết: `.claude/rules/git-workflow.md`, `planning.md`, `engine.md`, `api-web.md`, `web-design.md`, `honeypot.md`, `redirector.md`, `config-db-docker.md`, `logging.md`, `lab-demo.md`, `snort-rules.md`.
+Quy tắc chi tiết: `.claude/rules/git-workflow.md`, `planning.md` (viết plan bằng tác nhân, không tự tạo file), `engine.md`, `api-web.md`, `web-design.md`, `honeypot.md`, `redirector.md`, `config-db-docker.md`, `logging.md`, `lab-demo.md`, `snort-rules.md`.

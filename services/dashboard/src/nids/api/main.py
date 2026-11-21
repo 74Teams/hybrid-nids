@@ -1,0 +1,116 @@
+"""
+Điểm khởi chạy ứng dụng FastAPI – Hybrid NIDS API Server.
+
+Luồng khởi động (startup lifespan): init_db() tạo bảng trong CSDL nếu chưa có và thêm cột còn thiếu.
+Rule nằm trong các file data/rules/*.rules (mỗi file một category). API chỉ ghi trạng thái bật/tắt
+(data/rules/state.yaml) và data/rules/custom.rules; process engine tự nạp lại khi thấy file đổi.
+"""
+import logging
+from contextlib import asynccontextmanager
+from pathlib import Path
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+from nids.api.routes import alerts, redirects, rules, flows
+from nids.logger import setup_logging
+
+logger = logging.getLogger("nids.api")
+
+
+# ─────────────────────────────────────────────────────────────
+# LIFESPAN – Startup & Shutdown
+# ─────────────────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Thực hiện các tác vụ khởi tạo khi server bắt đầu."""
+    from nids.config import SETTINGS
+    from nids.db import init_db
+
+    setup_logging(SETTINGS.get("system", {}).get("log_level", "INFO"))
+    logger.info("Khởi động NIDS API Server")
+    init_db()
+    logger.info("NIDS API Server sẵn sàng, Swagger UI: http://localhost:8000/docs")
+
+    yield  # Server đang chạy
+
+    logger.info("Đóng NIDS API Server")
+
+
+# ─────────────────────────────────────────────────────────────
+# APP INSTANCE
+# ─────────────────────────────────────────────────────────────
+
+app = FastAPI(
+    title="Hybrid NIDS – Management API",
+    description=(
+        "Backend API phục vụ quan sát lưu lượng mạng và xem cảnh báo theo thời gian thực."
+    ),
+    version="1.1.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ─────────────────────────────────────────────────────────────
+# ROUTERS
+# ─────────────────────────────────────────────────────────────
+
+app.include_router(alerts.router)
+app.include_router(flows.router)
+app.include_router(rules.router)
+app.include_router(redirects.router)
+
+class RevalidatingStaticFiles(StaticFiles):
+    """File tĩnh luôn được trình duyệt hỏi lại (ETag), để sửa CSS/JS có hiệu lực ngay mà không cần xoá cache."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/static", RevalidatingStaticFiles(directory=STATIC_DIR), name="static")
+
+
+def _page(name: str) -> FileResponse:
+    return FileResponse(STATIC_DIR / name, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/", include_in_schema=False)
+def dashboard():
+    """Trang dashboard theo dõi cảnh báo theo thời gian thực."""
+    return _page("dashboard.html")
+
+
+@app.get("/logs", include_in_schema=False)
+def logs_page():
+    """Trang Status › Logs: lọc, xem chi tiết, xoá và xuất CSV sự kiện."""
+    return _page("logs.html")
+
+
+@app.get("/traffic", include_in_schema=False)
+def traffic_page():
+    """Trang Status › Traffic: mọi flow, kể cả traffic chưa khớp rule nào."""
+    return _page("traffic.html")
+
+
+@app.get("/health", tags=["System"])
+def health_check():
+    """Kiểm tra trạng thái server."""
+    return {"status": "ok", "service": "NIDS_API"}
+
+
+@app.get("/rules", include_in_schema=False)
+def rules_page():
+    """Trang Services › Rules: bật/tắt category và SID, sửa custom.rules."""
+    return _page("rules.html")

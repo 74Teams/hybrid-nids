@@ -1,3 +1,6 @@
+# Hybrid NIDS: mỗi tầng một nhóm service. Build từ gốc repo, mỗi service một Dockerfile trong services/<tên>/.
+#   docker compose up --build                  # hệ thống (hạ tầng, thu thập, xử lý, dashboard, victim)
+#   docker compose --profile lab up --build    # thêm máy tấn công để demo
 networks:
   nids_isolated_net:
     driver: bridge
@@ -5,9 +8,28 @@ networks:
       config:
         - subnet: 172.28.0.0/16
 
+# Biến kết nối CSDL và Redis dùng chung cho mọi service Python
+x-nids-env: &nids_env
+  NIDS_DB_HOST: "172.28.0.10"
+  NIDS_DB_PORT: "3306"
+  NIDS_DB_NAME: "nids_db"
+  NIDS_DB_USER: "nids_app"
+  NIDS_DB_PASSWORD: "${NIDS_DB_PASSWORD:?đặt trong .env}"
+  NIDS_REDIS_HOST: "172.28.0.30"
+  NIDS_REDIS_PASSWORD: "${NIDS_REDIS_PASSWORD:?đặt trong .env}"
+
+# Service thu thập dùng chung network namespace với victim để sniff được traffic tới victim và honeypot
+x-after-victim: &after_victim
+  depends_on:
+    mysql_db:
+      condition: service_healthy
+    victim_app:
+      condition: service_started
+
 services:
+  # ── Hạ tầng ──────────────────────────────────────────────────────────────
   mysql_db:
-    image: mysql:8.0
+    image: mysql:8.0-debian
     container_name: nids_mysql
     environment:
       MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?đặt trong .env}"
@@ -27,7 +49,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Kênh đẩy tín hiệu "có cảnh báo mới" từ engine/honeypot sang API. Chỉ nằm trong mạng lab (không publish cổng ra host),
+  # Kênh đẩy tín hiệu "có cảnh báo mới" từ sensor/honeypot sang dashboard. Chỉ nằm trong mạng lab (không publish cổng ra host),
   # không lưu bền. Sensor vẫn chạy khi Redis chết nên các service không depends_on nó.
   redis:
     image: redis:7-alpine
@@ -38,6 +60,7 @@ services:
         ipv4_address: 172.28.0.30
     restart: unless-stopped
 
+  # ── Máy được bảo vệ ──────────────────────────────────────────────────────
   victim_app:
     build: ./lab/victim
     container_name: nids_victim
@@ -45,101 +68,84 @@ services:
       nids_isolated_net:
         ipv4_address: 172.28.0.50
 
-  # Image Python dùng chung: chỉ nids_engine build, honeypot và API dùng lại (build 4 lần song song dễ làm Docker Desktop sập).
-  nids_engine:
-    build: .
-    image: hybrid-nids-app
+  # ── Thu thập (chung network namespace với victim) ─────────────────────────
+  # Chỉ nids_sensor và honeypot_ssh có khối build; service khác dùng lại image (build song song dễ làm Docker Desktop sập).
+  nids_sensor:
+    build:
+      context: .
+      dockerfile: services/sensor/Dockerfile
+    image: nids-sensor
     pull_policy: never
     container_name: nids_engine
     network_mode: "service:victim_app"
     cap_add:
       - NET_ADMIN
       - NET_RAW
-    depends_on:
-      mysql_db:
-        condition: service_healthy
-      victim_app:
-        condition: service_started
+    <<: *after_victim
     volumes:
-      - .:/app
-    environment:
-      NIDS_DB_HOST: "172.28.0.10"
-      NIDS_DB_PORT: "3306"
-      NIDS_DB_NAME: "nids_db"
-      NIDS_DB_USER: "nids_app"
-      NIDS_DB_PASSWORD: "${NIDS_DB_PASSWORD:?đặt trong .env}"
-      NIDS_REDIS_HOST: "172.28.0.30"
-      NIDS_REDIS_PASSWORD: "${NIDS_REDIS_PASSWORD:?đặt trong .env}"
+      - ./data/rules:/app/data/rules:ro
+      - ./data/models:/app/data/models:ro
+      - ./common/config:/app/common/config:ro
+    environment: *nids_env
     restart: unless-stopped
 
-  # Honeypot chạy chung network với victim: NIDS sniff được cả traffic tới honeypot,
-  # nên cùng một đòn vừa sinh cảnh báo rule vừa sinh sự kiện HONEYPOT.
+  # Honeypot chạy chung network với victim: cùng một đòn vừa sinh cảnh báo rule vừa sinh sự kiện HONEYPOT.
   honeypot_ssh:
-    image: hybrid-nids-app
+    build:
+      context: .
+      dockerfile: services/honeypot/Dockerfile
+    image: nids-honeypot
     pull_policy: never
     container_name: nids_honeypot_ssh
     command: python -m nids.honeypot ssh
     network_mode: "service:victim_app"
-    depends_on:
-      mysql_db:
-        condition: service_healthy
-      victim_app:
-        condition: service_started
+    <<: *after_victim
     volumes:
-      - .:/app
-    environment: &nids_db_env
-      NIDS_DB_HOST: "172.28.0.10"
-      NIDS_DB_PORT: "3306"
-      NIDS_DB_NAME: "nids_db"
-      NIDS_DB_USER: "nids_app"
-      NIDS_DB_PASSWORD: "${NIDS_DB_PASSWORD:?đặt trong .env}"
-      NIDS_REDIS_HOST: "172.28.0.30"
-      NIDS_REDIS_PASSWORD: "${NIDS_REDIS_PASSWORD:?đặt trong .env}"
+      - ./common/config:/app/common/config:ro
+      - ./data/work:/app/data/work          # giữ host key SSH giữa các lần chạy
+    environment: *nids_env
     restart: unless-stopped
 
   honeypot_http:
-    image: hybrid-nids-app
+    image: nids-honeypot
     pull_policy: never
     container_name: nids_honeypot_http
     command: python -m nids.honeypot http
     network_mode: "service:victim_app"
-    depends_on:
-      mysql_db:
-        condition: service_healthy
-      victim_app:
-        condition: service_started
+    <<: *after_victim
     volumes:
-      - .:/app
-    environment: *nids_db_env
+      - ./common/config:/app/common/config:ro
+    environment: *nids_env
     restart: unless-stopped
 
   # Chuyển hướng IP đáng ngờ (nhiều cảnh báo P1/P2) sang honeypot bằng iptables REDIRECT trong network của victim.
   # Không đặt restart: iptables không dùng được thì thoát mã 1; redirect.enabled: false thoát mã 0 (bình thường).
   nids_redirector:
-    image: hybrid-nids-app
+    build:
+      context: .
+      dockerfile: services/redirector/Dockerfile
+    image: nids-redirector
     pull_policy: never
     container_name: nids_redirector
-    command: python -m nids.redirector
     network_mode: "service:victim_app"
     cap_add:
       - NET_ADMIN
     stop_grace_period: 10s
-    depends_on:
-      mysql_db:
-        condition: service_healthy
-      victim_app:
-        condition: service_started
+    <<: *after_victim
     volumes:
-      - .:/app
-    environment: *nids_db_env
+      - ./common/config:/app/common/config:ro
+    environment: *nids_env
 
-  # API + dashboard chạy ở network namespace riêng (không chung với victim) để các request
-  # của dashboard (poll dự phòng, WebSocket) không bị engine sniff nhầm thành lưu lượng cần phân tích.
+  # ── Trình bày ────────────────────────────────────────────────────────────
+  # Dashboard chạy ở network namespace riêng (không chung với victim) để các request của dashboard
+  # (poll dự phòng, WebSocket) không bị sensor sniff nhầm thành lưu lượng cần phân tích.
   nids_api:
-    image: hybrid-nids-app
+    build:
+      context: .
+      dockerfile: services/dashboard/Dockerfile
+    image: nids-dashboard
     pull_policy: never
     container_name: nids_api
-    command: uvicorn nids.api.main:app --host 0.0.0.0 --port 8000
     networks:
       nids_isolated_net:
         ipv4_address: 172.28.0.20
@@ -149,22 +155,19 @@ services:
       mysql_db:
         condition: service_healthy
     volumes:
-      - .:/app
+      - ./data/rules:/app/data/rules          # trang Rules ghi trạng thái bật/tắt và custom.rules; sensor tự nạp lại
+      - ./common/config:/app/common/config:ro
     environment:
-      NIDS_DB_HOST: "172.28.0.10"
-      NIDS_DB_PORT: "3306"
-      NIDS_DB_NAME: "nids_db"
-      NIDS_DB_USER: "nids_app"
-      NIDS_DB_PASSWORD: "${NIDS_DB_PASSWORD:?đặt trong .env}"
-      NIDS_REDIS_HOST: "172.28.0.30"
-      NIDS_REDIS_PASSWORD: "${NIDS_REDIS_PASSWORD:?đặt trong .env}"
+      <<: *nids_env
       # Khoá cho thao tác sửa rule trên web; đặt trong shell hoặc file .env, để trống thì trang Rules chỉ xem
       NIDS_API_KEY: "${NIDS_API_KEY:-}"
     restart: unless-stopped
 
+  # ── Lab (chỉ chạy khi demo: docker compose --profile lab up) ─────────────
   # Máy tấn công: image Kali riêng (nmap, hping3, hydra, ...), chạy
   #   docker exec -it nids_attacker python lab/attacker/attack_demo.py all
   attacker:
+    profiles: ["lab"]
     build: ./lab/attacker
     container_name: nids_attacker
     networks:
@@ -174,7 +177,8 @@ services:
       - NET_RAW
       - NET_ADMIN
     volumes:
-      - .:/app
+      - ./lab:/app/lab
+      - ./common/core/src:/app/common/core/src:ro      # attack_demo.py dùng nids.logger
     stdin_open: true
     tty: true
     command: sleep infinity

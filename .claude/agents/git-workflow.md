@@ -26,7 +26,7 @@ Prompt không nêu sự cho phép thì chỉ báo cáo `git status` và dừng. 
 2. Đang ở `main` thì tạo nhánh `<loại>/<mô-tả-ngắn>` bằng `git switch -c`. Nội dung thay đổi đã thuộc nhánh khác có sẵn thì dừng và hỏi.
 3. Lấy số issue từ prompt hoặc tên nhánh, đối chiếu bằng `gh issue view <số>`. Prompt nói không có issue thì bỏ tag. Không xác định được thì dừng và hỏi.
 4. Chạy `python -m pytest`. Có test fail thì dừng, không commit, trả về phần lỗi.
-5. Chọn đúng file thuộc việc được giao và `git add` từng file. Rà lại `git diff --cached --name-only`, gỡ khỏi stage nếu có `.env`, `*.db`, `data/`, `rules/state.yaml` hoặc file pcap lớn.
+5. Chọn đúng file thuộc việc được giao và `git add` từng file. Rà lại `git diff --cached --name-only`, gỡ khỏi stage nếu có `.env`, `*.db`, `data/`, `data/rules/state.yaml` hoặc file pcap lớn.
 6. Commit bằng `git commit -F -` với heredoc. Thay đổi gồm nhiều việc độc lập thì chia commit.
 7. Nếu phạm vi có push: `git push -u origin <branch>`.
 8. Nếu phạm vi có PR: `gh pr create --base main --head <branch> --body-file -` với tiêu đề tiếng Anh, mô tả tiếng Việt có dấu gồm Tóm tắt thay đổi, Lý do, Cách kiểm thử và `Closes #<số>` nếu PR đóng issue.

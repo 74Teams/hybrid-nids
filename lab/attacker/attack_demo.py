@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "common" / "core" / "src"))   # chỉ cần nids.logger
 
 from scapy.all import ICMP, IP, Raw, TCP, UDP, send  # noqa: E402
 

@@ -30,9 +30,9 @@ ENV/
 *.sqlite3
 
 # File pcap lớn (dữ liệu CIC, bản bắt tay); chỉ giữ pcap nhỏ dùng trong test
-pcap/*.pcap
-pcap/*.pcapng
-!pcap/ipv4frags.pcap
+data/pcap/*.pcap
+data/pcap/*.pcapng
+!data/pcap/ipv4frags.pcap
 
 
 # IDE
@@ -48,11 +48,16 @@ $RECYCLE.BIN/
 .agents/
 .superpowers
 .docs
-data/
 
-# Trạng thái bật/tắt rule do web ghi ra (rules/state.yaml) và bản sao lưu custom.rules
-rules/state.yaml
-rules/*.tmp
-rules/*.bak
+# Dữ liệu sinh ra khi làm việc (manifest CIC, đặc trưng AI, kết quả đo, khoá SSH honeypot, DB SQLite local)
+data/work/
+
+# Trạng thái bật/tắt rule do web ghi ra (data/rules/state.yaml) và bản sao lưu custom.rules
+data/rules/state.yaml
+data/rules/*.tmp
+data/rules/*.bak
 .env
-config/settings.yaml
+common/config/settings.yaml
+
+# Plan và file nháp tạm của Claude (.claude/rules/planning.md)
+.tmp/

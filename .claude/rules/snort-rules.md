@@ -1,20 +1,20 @@
 ---
 paths:
-  - "rules/**/*.rules"
-  - "nids/engine/**"
-  - "nids/db/repository.py"
+  - "data/rules/**/*.rules"
+  - "services/sensor/src/nids/engine/**"
+  - "common/core/src/nids/db/repository.py"
 ---
 
 # Quy tắc viết rule (Snort 3)
 
-Rule built-in chia theo nhóm, mỗi nhóm một file: `rules/web-attack.rules`, `scan.rules`, `dos.rules`, `auth.rules`, `malware-c2.rules`, `recon.rules` (xem bảng SID). Rule tự viết qua web nằm trong `rules/custom.rules`. Cú pháp là **Snort 3**, nhưng engine chỉ hiểu một tập con: chỉ dùng các option liệt kê ở mục "Option được hỗ trợ". Rule viết đúng theo tài liệu này cũng chạy được trên Snort 3 thật.
+Rule built-in chia theo nhóm, mỗi nhóm một file: `data/rules/web-attack.rules`, `scan.rules`, `dos.rules`, `auth.rules`, `malware-c2.rules`, `recon.rules` (xem bảng SID). Rule tự viết qua web nằm trong `data/rules/custom.rules`. Cú pháp là **Snort 3**, nhưng engine chỉ hiểu một tập con: chỉ dùng các option liệt kê ở mục "Option được hỗ trợ". Rule viết đúng theo tài liệu này cũng chạy được trên Snort 3 thật.
 
 ## Quy trình thêm hoặc sửa rule
 
 1. Chọn SID còn trống trong dải của nhóm (bảng SID bên dưới). Đặt rule vào đúng file của nhóm đó, giữ thứ tự SID tăng dần.
 2. Viết rule theo **thứ tự option chuẩn**.
 3. Rule mới: `rev:1`. Sửa rule đã có: **tăng `rev` thêm 1**. Việc tăng `rev` chỉ để ghi nhận rule đã đổi. Engine đang chạy tự nạp lại trong vài giây sau khi file đổi.
-4. Thêm test trong `tests/engine/test_diverse_rules_engine.py`: một gói tấn công làm rule bắn, và một gói hợp lệ gần giống mà rule **không** bắn.
+4. Thêm test trong `services/sensor/tests/engine/test_diverse_rules_engine.py`: một gói tấn công làm rule bắn, và một gói hợp lệ gần giống mà rule **không** bắn.
 5. Xong khi: `pytest` xanh, và khi nạp file không có dòng `WARNING rules` nào (dòng này nghĩa là lỗi cú pháp, SID trùng hoặc có option bị bỏ qua; đặt `system.log_level: DEBUG` để xem chi tiết từng rule).
 
 ## Header
@@ -34,7 +34,7 @@ alert <proto> <src_ip> <src_port> -> <dst_ip> <dst_port> (<options>)
 
 Header không hiểu được (thiếu `]`, cổng ngoài 0–65535, dải ngược, IP sai, biến chưa khai báo, `!any`, hướng khác `->` và `<>`) làm rule bị bỏ kèm `WARNING rules`; không bao giờ khớp tất cả. Trang Rules báo lỗi theo dòng khi lưu `custom.rules`.
 
-Biến khai báo ở `detection.variables` trong `settings.yaml` (giá trị mặc định xem `DEFAULT_RULE_VARIABLES` trong `nids/engine/rule_header.py`). `$HTTP_PORTS` cũng quyết định cổng nào được parse thành HTTP (`decoder.HTTP_PORTS`), nên thêm cổng HTTP chỉ cần sửa cấu hình rồi khởi động lại engine và API. `$HOME_NET` mặc định là `any`; đặt giá trị cụ thể trước khi dùng `!$HOME_NET`. Cổng 443 không nằm trong `$HTTP_PORTS` mặc định.
+Biến khai báo ở `detection.variables` trong `settings.yaml` (giá trị mặc định xem `DEFAULT_RULE_VARIABLES` trong `services/sensor/src/nids/engine/rule_header.py`). `$HTTP_PORTS` cũng quyết định cổng nào được parse thành HTTP (`decoder.HTTP_PORTS`), nên thêm cổng HTTP chỉ cần sửa cấu hình rồi khởi động lại engine và API. `$HOME_NET` mặc định là `any`; đặt giá trị cụ thể trước khi dùng `!$HOME_NET`. Cổng 443 không nằm trong `$HTTP_PORTS` mặc định.
 
 ## Thứ tự option chuẩn
 
@@ -63,7 +63,7 @@ Buffer là **sticky**: viết tên buffer **trước** các content/pcre, và m�
 | `http_client_body` | body của request |
 | `http_method` | method (`GET`, `POST`...) |
 
-Rule có buffer `http_*` thêm `service:http;`. Buffer `http_*` chỉ có khi gói tin tới cổng trong `$HTTP_PORTS` (`nids/engine/decoder.py::HTTP_PORTS`). Vì `http_uri` chưa được URL-decode, pcre trên URI phải tự bao cả dạng encode, ví dụ `[\s+]` cho khoảng trắng và `(=|%3d)` cho dấu bằng.
+Rule có buffer `http_*` thêm `service:http;`. Buffer `http_*` chỉ có khi gói tin tới cổng trong `$HTTP_PORTS` (`services/sensor/src/nids/engine/decoder.py::HTTP_PORTS`). Vì `http_uri` chưa được URL-decode, pcre trên URI phải tự bao cả dạng encode, ví dụ `[\s+]` cho khoảng trắng và `(=|%3d)` cho dấu bằng.
 
 ## Option được hỗ trợ
 
@@ -104,15 +104,15 @@ Dùng `priority` để đặt mức độ. Cú pháp Snort 2 không được h�
 
 | Dải | Nhóm | File |
 |---|---|---|
-| `10000xx` | WEB-ATTACK | `rules/web-attack.rules` |
-| `10001xx` | SCAN | `rules/scan.rules` |
-| `10002xx` | DOS | `rules/dos.rules` |
-| `10003xx` | AUTH | `rules/auth.rules` |
-| `10004xx` | MALWARE, C2 | `rules/malware-c2.rules` |
-| `10005xx` | RECON (UDP / ICMP) | `rules/recon.rules` |
-| `≥ 2000000` | Rule tự viết trên web | `rules/custom.rules` |
+| `10000xx` | WEB-ATTACK | `data/rules/web-attack.rules` |
+| `10001xx` | SCAN | `data/rules/scan.rules` |
+| `10002xx` | DOS | `data/rules/dos.rules` |
+| `10003xx` | AUTH | `data/rules/auth.rules` |
+| `10004xx` | MALWARE, C2 | `data/rules/malware-c2.rules` |
+| `10005xx` | RECON (UDP / ICMP) | `data/rules/recon.rules` |
+| `≥ 2000000` | Rule tự viết trên web | `data/rules/custom.rules` |
 
-Rule community (`rules/community-{web,malware,server,protocol}.rules`, SID < 1000000) được **sinh tự động** từ `rules/upstream/community.rules` (Snort 2, GPLv2) bằng `python -m nids.tools.snort2_convert`; không sửa tay các file này (test `test_committed_community_files_match_the_converter` sẽ fail). Muốn loại một rule báo nhầm thì thêm SID vào `DENY_SIDS` trong `nids/tools/snort2_convert.py` rồi sinh lại. Rule community không cần đòn trong `attack_demo.py`; bật/tắt từng file trên trang Rules.
+Rule community (`data/rules/community-{web,malware,server,protocol}.rules`, SID < 1000000) được **sinh tự động** từ `data/rules/upstream/community.rules` (Snort 2, GPLv2) bằng `python -m tools.rules.snort2_convert`; không sửa tay các file này (test `test_committed_community_files_match_the_converter` sẽ fail). Muốn loại một rule báo nhầm thì thêm SID vào `DENY_SIDS` trong `common/tools/rules/snort2_convert.py` rồi sinh lại. Rule community không cần đòn trong `attack_demo.py`; bật/tắt từng file trên trang Rules.
 
 Mỗi SID chỉ xuất hiện một lần trong mọi file. Nếu trùng, parser giữ rule nạp trước (file xếp theo tên) và bỏ rule sau.
 

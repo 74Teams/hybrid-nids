@@ -1,9 +1,9 @@
 ---
 paths:
-  - "nids/api/static/**"
+  - "services/dashboard/src/nids/api/static/**"
 ---
 
-# Thiết kế giao diện kiểu shadcn/ui (`nids/api/static/`)
+# Thiết kế giao diện kiểu shadcn/ui (`services/dashboard/src/nids/api/static/`)
 
 Web console dùng phong cách shadcn/ui (bảng màu zinc, card viền mảnh, bo góc `0.5rem`, tab dạng pill) nhưng viết bằng **CSS thuần**. Nguồn duy nhất của style là `style.css`; các trang `dashboard.html`, `logs.html`, `traffic.html`, `rules.html` chỉ dùng lại class có sẵn. Rule về endpoint và hành vi trang nằm ở `api-web.md`.
 
