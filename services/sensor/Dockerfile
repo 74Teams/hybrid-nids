@@ -1,7 +1,8 @@
 # Sensor: bắt gói, rule, flow, ngưỡng bất thường.
 # Rule, mô hình và cấu hình được gắn vào lúc chạy (xem docker-compose.yml).
 # Build từ gốc repo: docker build -f services/sensor/Dockerfile .
-FROM python:3.10-slim
+# scikit-learn 1.9.1 (bản đã học mô hình) cần Python 3.11+
+FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpcap-dev \

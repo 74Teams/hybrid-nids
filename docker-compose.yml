@@ -29,7 +29,7 @@ x-after-victim: &after_victim
 services:
   # ── Hạ tầng ──────────────────────────────────────────────────────────────
   mysql_db:
-    image: mysql:8.0
+    image: mysql:8.0-debian
     container_name: nids_mysql
     environment:
       MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?đặt trong .env}"
